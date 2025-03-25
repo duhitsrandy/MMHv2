@@ -112,12 +112,17 @@ export default function ResultsMap({
   const [isClient, setIsClient] = useState(false)
   const [mainRoute, setMainRoute] = useState<RouteData | null>(null)
   const [alternateRoute, setAlternateRoute] = useState<RouteData | null>(null)
-  const [showAlternateRoute, setShowAlternateRoute] = useState(false)
   const [showPois, setShowPois] = useState(true)
   const [isLoadingPois, setIsLoadingPois] = useState(false)
-  const [currentPois, setCurrentPois] = useState<any[]>([])
+  const [mainRoutePois, setMainRoutePois] = useState<any[]>([])
+  const [alternateRoutePois, setAlternateRoutePois] = useState<any[]>([])
   const [currentMidpoint, setCurrentMidpoint] = useState<{ lat: number; lng: number } | null>(null)
   const [alternateMidpoint, setAlternateMidpoint] = useState<{ lat: number; lng: number } | null>(null)
+
+  // Compute current POIs based on selected route
+  const currentPois = useMemo(() => {
+    return selectedRoute === 'main' ? mainRoutePois : alternateRoutePois;
+  }, [selectedRoute, mainRoutePois, alternateRoutePois]);
 
   // Set isClient to true on mount
   useEffect(() => {
@@ -138,25 +143,20 @@ export default function ResultsMap({
 
         if (mainRouteRes.isSuccess) {
           setMainRoute(mainRouteRes.data)
-          // Set initial midpoint from main route
-          const mainCoords = mainRouteRes.data.geometry.coordinates
-          const mainMidIndex = Math.floor(mainCoords.length / 2)
-          setCurrentMidpoint({
-            lat: mainCoords[mainMidIndex][1],
-            lng: mainCoords[mainMidIndex][0]
-          })
+          const mainMidpoint = getMidpoint(mainRouteRes.data);
+          if (mainMidpoint) {
+            console.log('Setting main route midpoint:', mainMidpoint);
+            setCurrentMidpoint(mainMidpoint);
+          }
         }
 
         if (alternateRouteRes.isSuccess) {
           setAlternateRoute(alternateRouteRes.data)
-          setShowAlternateRoute(true)
-          // Set alternate midpoint
-          const altCoords = alternateRouteRes.data.geometry.coordinates
-          const altMidIndex = Math.floor(altCoords.length / 2)
-          setAlternateMidpoint({
-            lat: altCoords[altMidIndex][1],
-            lng: altCoords[altMidIndex][0]
-          })
+          const altMidpoint = getMidpoint(alternateRouteRes.data);
+          if (altMidpoint) {
+            console.log('Setting alternate route midpoint:', altMidpoint);
+            setAlternateMidpoint(altMidpoint);
+          }
         }
       } catch (error) {
         console.error("Error fetching routes:", error)
@@ -168,14 +168,21 @@ export default function ResultsMap({
 
   // Fetch POIs when route or midpoint changes
   useEffect(() => {
-    const fetchPois = async () => {
-      if (!currentMidpoint || !showPois) return
-      setIsLoadingPois(true)
+    const fetchPoisForRoute = async (
+      midpoint: { lat: number; lng: number } | null,
+      isMainRoute: boolean
+    ) => {
+      if (!midpoint || !showPois) return;
+
+      console.log(`Fetching POIs for ${isMainRoute ? 'main' : 'alternate'} route:`, {
+        lat: midpoint.lat.toString(),
+        lng: midpoint.lng.toString()
+      });
 
       try {
         const result = await searchPoisAction(
-          currentMidpoint.lat.toString(),
-          currentMidpoint.lng.toString(),
+          midpoint.lat.toString(),
+          midpoint.lng.toString(),
           1500,
           [
             "restaurant",
@@ -190,43 +197,62 @@ export default function ResultsMap({
             "supermarket",
             "shopping_mall"
           ]
-        )
+        );
+
+        console.log(`${isMainRoute ? 'Main' : 'Alternate'} route POI search result:`, result);
 
         if (result.isSuccess) {
           const poisWithRouteInfo = result.data.map((poi: any) => ({
             ...poi,
-            selectedRoute
-          }))
-          setCurrentPois(poisWithRouteInfo)
+            selectedRoute: isMainRoute ? 'main' : 'alternate'
+          }));
+          
+          if (isMainRoute) {
+            console.log('Setting main route POIs:', poisWithRouteInfo);
+            setMainRoutePois(poisWithRouteInfo);
+          } else {
+            console.log('Setting alternate route POIs:', poisWithRouteInfo);
+            setAlternateRoutePois(poisWithRouteInfo);
+          }
         }
       } catch (error) {
-        console.error("Error fetching POIs:", error)
-      } finally {
-        setIsLoadingPois(false)
+        console.error(`Error fetching ${isMainRoute ? 'main' : 'alternate'} route POIs:`, error);
       }
+    };
+
+    // Fetch POIs for both routes independently
+    if (currentMidpoint) {
+      setIsLoadingPois(true);
+      fetchPoisForRoute(currentMidpoint, true);
     }
 
-    // Debounce POI fetching to prevent rapid API calls
+    if (alternateMidpoint) {
+      setIsLoadingPois(true);
+      fetchPoisForRoute(alternateMidpoint, false);
+    }
+
+    // Set loading to false after both fetches complete
     const timeoutId = setTimeout(() => {
-      fetchPois()
-    }, 500)
+      setIsLoadingPois(false);
+    }, 1000);
 
-    return () => clearTimeout(timeoutId)
-  }, [currentMidpoint?.lat, currentMidpoint?.lng, showPois])
+    return () => clearTimeout(timeoutId);
+  }, [currentMidpoint?.lat, currentMidpoint?.lng, alternateMidpoint?.lat, alternateMidpoint?.lng, showPois, selectedRoute]);
 
-  // Update current midpoint when route selection changes
+  // Debug logging for state changes
   useEffect(() => {
-    if (!mainRoute || !alternateRoute) return
-
-    const route = selectedRoute === "main" ? mainRoute : alternateRoute
-    const coords = route.geometry.coordinates
-    const midIndex = Math.floor(coords.length / 2)
-    
-    setCurrentMidpoint({
-      lat: coords[midIndex][1],
-      lng: coords[midIndex][0]
-    })
-  }, [selectedRoute, mainRoute, alternateRoute])
+    console.log('State update:', {
+      hasMainRoute: !!mainRoute,
+      hasAlternateRoute: !!alternateRoute,
+      selectedRoute,
+      currentMidpoint,
+      alternateMidpoint,
+      showPois,
+      mainRoutePoisCount: mainRoutePois.length,
+      alternateRoutePoisCount: alternateRoutePois.length,
+      currentPoisCount: currentPois.length
+    });
+  }, [mainRoute, alternateRoute, selectedRoute, currentMidpoint, alternateMidpoint, showPois, mainRoutePois, alternateRoutePois, currentPois]);
 
   if (!isClient) {
     return (
@@ -261,17 +287,6 @@ export default function ResultsMap({
                     ? "Hide POIs"
                     : "Show POIs"}
               </Button>
-
-              {alternateRoute && (
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="show-alternate">Show Alternate Route</Label>
-                  <Switch
-                    id="show-alternate"
-                    checked={showAlternateRoute}
-                    onCheckedChange={setShowAlternateRoute}
-                  />
-                </div>
-              )}
             </div>
           </div>
         </CardHeader>
@@ -299,7 +314,7 @@ export default function ResultsMap({
             }
             mainRoute={mainRoute}
             alternateRoute={alternateRoute}
-            showAlternateRoute={showAlternateRoute}
+            showAlternateRoute={true}
             selectedRoute={selectedRoute}
             onRouteSelect={onRouteSelect}
             pois={currentPois}
@@ -323,7 +338,7 @@ export default function ResultsMap({
               </Card>
             )}
 
-            {alternateRoute && showAlternateRoute && (
+            {alternateRoute && (
               <Card
                 className={`cursor-pointer p-2 transition-all ${
                   selectedRoute === "alternate"

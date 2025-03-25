@@ -27,56 +27,47 @@ async function rateLimitedFetch(url: string, maxRetries = 3): Promise<Response> 
   let retries = 0;
   let lastError: Error | null = null;
 
-  while (retries <= maxRetries) {
+  while (retries < maxRetries) {
     try {
+      // Enforce rate limiting
       const now = Date.now();
       const timeSinceLastRequest = now - lastRequestTime;
-      
       if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-        const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+        await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
       }
-      
-      lastRequestTime = Date.now();
+
+      // Make the request
       const response = await fetch(url, {
         headers: {
-          'Accept': 'application/json',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'User-Agent': 'Meet-Me-Halfway/1.0'
+          'User-Agent': 'Meet-Me-Halfway/1.0',
+          'Accept-Language': 'en-US,en;q=0.9'
         }
       });
-      
-      if (response.status === 429) {
-        const waitTime = 1000 * Math.pow(2, retries);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        retries++;
-        continue;
-      }
-      
+
+      // Update last request time
+      lastRequestTime = Date.now();
+
       // Cache successful responses
       if (response.ok) {
-        const clonedResponse = response.clone();
-        try {
-          const data = await clonedResponse.json();
-          apiCache[url] = { data, timestamp: Date.now() };
-        } catch (e) {
-          console.error('Error caching response:', e);
-        }
+        const data = await response.clone().json();
+        apiCache[url] = {
+          data,
+          timestamp: Date.now()
+        };
       }
-      
+
       return response;
     } catch (error) {
       lastError = error as Error;
-      if (retries === maxRetries) {
-        throw lastError;
-      }
-      const waitTime = 1000 * Math.pow(2, retries);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
       retries++;
+      if (retries < maxRetries) {
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retries) * 1000));
+      }
     }
   }
 
-  throw lastError || new Error('Maximum retries exceeded');
+  throw lastError || new Error('Failed to fetch after retries');
 }
 
 interface GeocodingResult {
@@ -135,31 +126,35 @@ export async function geocodeLocationAction(
   address: string
 ): Promise<ActionState<GeocodingResult>> {
   try {
-    const apiKey = process.env.NEXT_PUBLIC_LOCATIONIQ_KEY
+    console.log('Geocoding address:', address);
+    const apiKey = process.env.NEXT_PUBLIC_LOCATIONIQ_KEY;
     if (!apiKey) {
+      console.error('LocationIQ API key is missing');
       return {
         isSuccess: false,
         message: "LocationIQ API key is not configured"
-      }
+      };
     }
 
     const url = `https://us1.locationiq.com/v1/search.php?key=${apiKey}&q=${encodeURIComponent(
       address
-    )}&format=json`
+    )}&format=json&limit=1`;
 
     try {
-      const response = await rateLimitedFetch(url)
+      const response = await rateLimitedFetch(url);
+      console.log('LocationIQ API response status:', response.status);
+
       if (!response.ok) {
         console.warn(`LocationIQ API error: ${response.statusText}. Trying fallback.`);
         return fallbackGeocodeAction(address);
       }
 
-      const data = await response.json()
+      const data = await response.json();
+      console.log('LocationIQ API response:', data);
+
       if (!data || data.length === 0) {
-        return {
-          isSuccess: false,
-          message: "No results found for the provided address"
-        }
+        console.warn('No results from LocationIQ. Trying fallback.');
+        return fallbackGeocodeAction(address);
       }
 
       return {
@@ -170,14 +165,14 @@ export async function geocodeLocationAction(
           lon: data[0].lon,
           display_name: data[0].display_name
         }
-      }
+      };
     } catch (error) {
       console.warn("Error with primary geocoding service:", error);
       return fallbackGeocodeAction(address);
     }
   } catch (error) {
-    console.error("Error geocoding location:", error)
-    return { isSuccess: false, message: "Failed to geocode location" }
+    console.error("Error geocoding location:", error);
+    return { isSuccess: false, message: "Failed to geocode location" };
   }
 }
 
@@ -189,159 +184,123 @@ export async function searchPoisAction(
   types: string[] = ["restaurant", "cafe", "bar", "park", "library", "cinema", "theatre", "museum", "hotel"]
 ): Promise<ActionState<PoiResponse[]>> {
   try {
-    console.log('Searching POIs with Overpass API');
-    
-    // Build the Overpass query
-    let overpassQuery = `
-      [out:json][timeout:25];
+    // Simple, direct Overpass query
+    const query = `
+      [out:json][timeout:60];
       (
-    `;
-    
-    // Add each type to the query
-    types.forEach(type => {
-      overpassQuery += `
-        node["amenity"="${type}"](around:${radius},${lat},${lon});
-        way["amenity"="${type}"](around:${radius},${lat},${lon});
-      `;
-    });
-    
-    overpassQuery += `
+        nwr["amenity"~"restaurant|cafe|bar|library|cinema|theatre"](around:${radius},${lat},${lon});
+        nwr["leisure"="park"](around:${radius},${lat},${lon});
+        nwr["tourism"~"museum|hotel"](around:${radius},${lat},${lon});
       );
-      out body;
-      >;
-      out skel qt;
+      out body center;
     `;
-    
-    const response = await fetch("https://overpass-api.de/api/interpreter", {
+
+    const response = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Meet-Me-Halfway/1.0'
       },
-      body: `data=${encodeURIComponent(overpassQuery)}`
+      body: `data=${encodeURIComponent(query)}`
     });
-    
+
     if (!response.ok) {
-      console.warn(`Overpass API error: ${response.statusText}. Trying fallback.`);
-      return fallbackSearchPoisAction(lat, lon, radius, types);
+      throw new Error(`Overpass API error: ${response.status} ${response.statusText}`);
     }
-    
+
     const data = await response.json();
     
-    if (data && data.elements && data.elements.length > 0) {
-      const pois = data.elements
-        .filter((element: any) => element.tags && element.tags.name) // Only include POIs with names
-        .map((element: any) => ({
-          name: element.tags.name || 'Unnamed Location',
-          type: element.tags.amenity || element.tags.shop || element.tags.leisure || 'place',
-          lat: element.lat?.toString() || "0",
-          lon: element.lon?.toString() || "0",
-          address: {
-            road: element.tags['addr:street'] || '',
-            house_number: element.tags['addr:housenumber'] || '',
-            city: element.tags['addr:city'] || '',
-            state: element.tags['addr:state'] || '',
-            country: element.tags['addr:country'] || ''
-          }
-        }));
-      
-      if (pois.length === 0) {
-        console.warn('No named POIs found with Overpass API. Trying fallback.');
-        return fallbackSearchPoisAction(lat, lon, radius, types);
-      }
-      
+    if (!data.elements || data.elements.length === 0) {
       return {
         isSuccess: true,
-        message: "Points of interest found successfully",
-        data: pois
+        message: "No POIs found in the area",
+        data: []
       };
-    } else {
-      console.warn('No POIs found with Overpass API. Trying fallback.');
-      return fallbackSearchPoisAction(lat, lon, radius, types);
-    }
-  } catch (error) {
-    console.error("Error searching POIs with Overpass API:", error);
-    return fallbackSearchPoisAction(lat, lon, radius, types);
-  }
-}
-
-// Add a fallback POI search using LocationIQ
-async function fallbackSearchPoisAction(
-  lat: string,
-  lon: string,
-  radius: number = 1500,
-  types: string[] = ["restaurant", "cafe", "bar", "park", "library", "cinema", "theatre", "museum", "hotel"]
-): Promise<ActionState<PoiResponse[]>> {
-  try {
-    console.log('Using fallback POI search (LocationIQ)');
-    
-    const apiKey = process.env.NEXT_PUBLIC_LOCATIONIQ_KEY
-    if (!apiKey) {
-      return {
-        isSuccess: false,
-        message: "LocationIQ API key is not configured"
-      }
     }
 
-    const poiPromises = types.map(async (type) => {
-      // Use the correct endpoint for POI search
-      const url = `https://us1.locationiq.com/v1/nearby/amenities?key=${apiKey}&lat=${lat}&lon=${lon}&tag=${type}&radius=${radius}&format=json`
-
-      try {
-        const response = await rateLimitedFetch(url)
-        if (!response.ok) {
-          console.warn(`LocationIQ API error for type ${type}: ${response.statusText}`)
-          return []
-        }
-
-        const data = await response.json()
-        return Array.isArray(data) ? data : []
-      } catch (error) {
-        console.warn(`Error fetching POIs for type ${type}:`, error)
-        return []
-      }
-    })
-
-    const results = await Promise.all(poiPromises)
-    const flattenedResults = results.flat().filter(Boolean)
-
-    if (!flattenedResults || flattenedResults.length === 0) {
-      return {
-        isSuccess: false,
-        message: "No points of interest found in the area"
-      }
+    interface OverpassElement {
+      id: number;
+      lat?: number;
+      lon?: number;
+      center?: { lat: number; lon: number };
+      tags?: {
+        name?: string;
+        'addr:housename'?: string;
+        'addr:street'?: string;
+        'addr:housenumber'?: string;
+        'addr:city'?: string;
+        'addr:state'?: string;
+        'addr:country'?: string;
+        amenity?: string;
+        leisure?: string;
+        tourism?: string;
+      };
     }
 
-    // Format the results to match the PoiResponse interface
-    const formattedPois = flattenedResults
-      .filter(poi => poi.name || poi.display_name) // Only include POIs with names
-      .map(poi => ({
-        osm_id: poi.osm_id || poi.place_id || String(poi.osm_type + poi.osm_id),
-        name: poi.name || poi.display_name || 'Unnamed Location',
-        type: poi.type || poi.amenity || 'place',
-        lat: poi.lat?.toString() || "0",
-        lon: poi.lon?.toString() || "0",
-        address: {
-          road: poi.address?.road || poi.address?.street || '',
-          house_number: poi.address?.house_number || '',
-          city: poi.address?.city || poi.address?.town || poi.address?.village || '',
-          state: poi.address?.state || '',
-          country: poi.address?.country || ''
-        }
-      }))
+    // Simple processing of POIs
+    const pois = data.elements
+      .filter((poi: OverpassElement) => {
+        const lat = poi.lat || poi.center?.lat;
+        const lon = poi.lon || poi.center?.lon;
+        return lat && lon && (poi.tags?.name || poi.tags?.['addr:housename']);
+      })
+      .map((poi: OverpassElement) => {
+        const poiLat = poi.lat || poi.center?.lat || 0;
+        const poiLon = poi.lon || poi.center?.lon || 0;
+        
+        return {
+          id: poi.id.toString(),
+          name: poi.tags?.name || poi.tags?.['addr:housename'] || 'Unnamed Location',
+          type: poi.tags?.amenity || poi.tags?.leisure || poi.tags?.tourism || 'place',
+          lat: poiLat.toString(),
+          lon: poiLon.toString(),
+          address: {
+            road: poi.tags?.['addr:street'] || '',
+            house_number: poi.tags?.['addr:housenumber'] || '',
+            city: poi.tags?.['addr:city'] || '',
+            state: poi.tags?.['addr:state'] || '',
+            country: poi.tags?.['addr:country'] || ''
+          }
+        } as PoiResponse;
+      })
+      .sort((a: PoiResponse, b: PoiResponse) => {
+        const distanceA = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(a.lat), parseFloat(a.lon));
+        const distanceB = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(b.lat), parseFloat(b.lon));
+        return distanceA - distanceB;
+      })
+      .slice(0, 10);
 
     return {
       isSuccess: true,
-      message: "Points of interest found successfully",
-      data: formattedPois
-    }
+      message: "Successfully found points of interest",
+      data: pois
+    };
+
   } catch (error) {
-    console.error("Error in fallback POI search:", error)
+    console.error("Error in searchPoisAction:", error);
     return {
       isSuccess: false,
-      message: "Failed to search for points of interest"
-    }
+      message: error instanceof Error ? error.message : "Failed to search for points of interest",
+      data: undefined
+    };
   }
+}
+
+// Helper function to calculate viewbox for LocationIQ search
+function calculateViewbox(lat: string, lon: string, radiusKm: number): string {
+  const latNum = parseFloat(lat);
+  const lonNum = parseFloat(lon);
+  
+  // Convert radius from km to degrees (approximately)
+  // 1 degree of latitude = 111 km
+  const latDelta = radiusKm / 111;
+  const lonDelta = radiusKm / (111 * Math.cos(latNum * Math.PI / 180));
+  
+  const minLon = lonNum - lonDelta;
+  const minLat = latNum - latDelta;
+  const maxLon = lonNum + lonDelta;
+  const maxLat = latNum + latDelta;
+  
+  return `${minLon},${minLat},${maxLon},${maxLat}`;
 }
 
 export async function getRouteAction(
@@ -567,134 +526,195 @@ export async function getAlternateRouteAction(
         message: "Invalid coordinates for alternate route calculation"
       }
     }
-    
-    // Using OSRM for routing with alternatives=true to get alternate routes
-    const url = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson&alternatives=true`
 
-    const response = await rateLimitedFetch(url)
-    if (!response.ok) {
-      console.warn(`OSRM API error for alternate route: ${response.statusText}. Using fallback route data.`);
-      
-      // Return a fallback route with estimated data
-      // Create a slightly offset route from the direct line
-      const directDistance = calculateDistance(
-        parseFloat(startLat), parseFloat(startLon),
-        parseFloat(endLat), parseFloat(endLon)
-      );
-      
-      // Estimate duration based on distance (assuming average speed of 45 km/h for alternate route)
-      // 45 km/h = 12.5 m/s
-      const estimatedDuration = directDistance / 12.5;
-      
-      // Add a slight offset to create a visually different route
-      const midLat = (parseFloat(startLat) + parseFloat(endLat)) / 2;
-      const midLon = (parseFloat(startLon) + parseFloat(endLon)) / 2;
-      
-      // Offset the midpoint slightly
-      const offsetMidLat = midLat + 0.01;
-      const offsetMidLon = midLon + 0.01;
-      
-      return {
-        isSuccess: true,
-        message: "Alternate route estimated (API error)",
-        data: {
-          distance: directDistance * 1.1, // Slightly longer than direct route
-          duration: estimatedDuration * 1.1, // Slightly longer duration
-          geometry: {
-            coordinates: [
-              [parseFloat(startLon), parseFloat(startLat)],
-              [offsetMidLon, offsetMidLat], // Add a waypoint to create a different path
-              [parseFloat(endLon), parseFloat(endLat)]
-            ],
-            type: "LineString"
-          }
+    // Calculate a point perpendicular to the direct route to use as a waypoint
+    const midLat = (parseFloat(startLat) + parseFloat(endLat)) / 2;
+    const midLon = (parseFloat(startLon) + parseFloat(endLon)) / 2;
+    
+    // Calculate vector perpendicular to the route
+    const routeVectorLat = parseFloat(endLat) - parseFloat(startLat);
+    const routeVectorLon = parseFloat(endLon) - parseFloat(startLon);
+    const perpVectorLat = -routeVectorLon;  // Perpendicular vector is (-y, x)
+    const perpVectorLon = routeVectorLat;
+    
+    // Normalize and scale the perpendicular vector
+    const vectorLength = Math.sqrt(perpVectorLat * perpVectorLat + perpVectorLon * perpVectorLon);
+    const normalizedPerpLat = perpVectorLat / vectorLength;
+    const normalizedPerpLon = perpVectorLon / vectorLength;
+    
+    // Calculate route distance for scaling
+    const routeDistance = calculateDistance(
+      parseFloat(startLat), parseFloat(startLon),
+      parseFloat(endLat), parseFloat(endLon)
+    );
+    
+    // Scale the offset based on route distance (15% of route distance)
+    const offsetDistance = Math.min(routeDistance * 0.15, 5000); // max 5km offset
+    
+    // Calculate waypoint with offset (convert meters to degrees)
+    const waypointLat = midLat + (normalizedPerpLat * offsetDistance / 111000);
+    const waypointLon = midLon + (normalizedPerpLon * offsetDistance / (111000 * Math.cos(midLat * Math.PI / 180)));
+    
+    // First try to get a route through the waypoint
+    const waypointUrl = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${waypointLon},${waypointLat};${endLon},${endLat}?overview=full&geometries=geojson`;
+    
+    try {
+      const waypointResponse = await rateLimitedFetch(waypointUrl);
+      if (waypointResponse.ok) {
+        const waypointData = await waypointResponse.json();
+        if (waypointData && waypointData.routes && waypointData.routes.length > 0) {
+          return {
+            isSuccess: true,
+            message: "Alternate route calculated successfully using waypoint",
+            data: waypointData.routes[0]
+          };
         }
       }
+    } catch (waypointError) {
+      console.warn("Failed to get route with waypoint, trying alternatives");
+    }
+    
+    // If waypoint route fails, try getting alternatives from OSRM
+    const alternativesUrl = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson&alternatives=3`;
+    
+    const response = await rateLimitedFetch(alternativesUrl);
+    if (!response.ok) {
+      return createFallbackRoute(startLat, startLon, endLat, endLon);
     }
 
-    const data = await response.json()
+    const data = await response.json();
     if (!data || !data.routes || data.routes.length === 0) {
-      return {
-        isSuccess: false,
-        message: "No alternate route found between the provided locations"
-      }
+      return createFallbackRoute(startLat, startLon, endLat, endLon);
     }
 
-    // If there's an alternative route available, return the second route
-    if (data.routes.length > 1) {
-      return {
-        isSuccess: true,
-        message: "Alternate route calculated successfully",
-        data: data.routes[1]
-      }
-    }
-    
-    // If no alternative route is available, return a modified version of the main route
-    // This is a fallback to ensure we always return something
-    const mainRoute = data.routes[0]
-    
-    // Create a slightly modified version of the main route
-    // by adding a small offset to the coordinates
-    const modifiedRoute = {
-      ...mainRoute,
+    // Add type definitions
+    interface RouteData {
+      distance: number;
+      duration: number;
       geometry: {
-        ...mainRoute.geometry,
-        coordinates: mainRoute.geometry.coordinates.map((coord: [number, number]) => {
-          // Add a small offset to create a visually different route
-          return [coord[0] + 0.001, coord[1] + 0.001]
-        })
+        coordinates: [number, number][];
+        type: string;
+      };
+    }
+
+    interface ScoredRoute {
+      route: RouteData;
+      score: number;
+    }
+
+    // If we have alternatives, find the most different one
+    if (data.routes.length > 1) {
+      const mainRoute = data.routes[0] as RouteData;
+      const alternatives = data.routes.slice(1) as RouteData[];
+      
+      // Score each alternative based on how different it is from the main route
+      const scoredAlternatives = alternatives.map(route => ({
+        route,
+        score: calculateRouteDifference(mainRoute, route)
+      }));
+      
+      // Sort by score (higher score = more different)
+      scoredAlternatives.sort((a: ScoredRoute, b: ScoredRoute) => b.score - a.score);
+      
+      // Use the most different route that isn't too much longer
+      const suitableAlternative = scoredAlternatives.find((alt: ScoredRoute) => 
+        alt.route.distance <= mainRoute.distance * 1.4 // Max 40% longer
+      );
+      
+      if (suitableAlternative) {
+        return {
+          isSuccess: true,
+          message: "Alternate route calculated successfully",
+          data: suitableAlternative.route
+        };
       }
     }
+    
+    // If no suitable alternative found, use the waypoint-based fallback
+    return createFallbackRoute(startLat, startLon, endLat, endLon);
+  } catch (error) {
+    console.error("Error calculating alternate route:", error);
+    return createFallbackRoute(startLat, startLon, endLat, endLon);
+  }
+}
+
+// Helper function to calculate how different two routes are
+function calculateRouteDifference(routeA: any, routeB: any): number {
+  const coordsA = routeA.geometry.coordinates;
+  const coordsB = routeB.geometry.coordinates;
+  
+  // Sample points along both routes
+  const numSamples = 10;
+  let totalDifference = 0;
+  
+  for (let i = 0; i < numSamples; i++) {
+    const indexA = Math.floor((i / numSamples) * (coordsA.length - 1));
+    const indexB = Math.floor((i / numSamples) * (coordsB.length - 1));
+    
+    const pointA = coordsA[indexA];
+    const pointB = coordsB[indexB];
+    
+    // Calculate distance between corresponding points
+    const distance = Math.sqrt(
+      Math.pow(pointA[0] - pointB[0], 2) +
+      Math.pow(pointA[1] - pointB[1], 2)
+    );
+    
+    totalDifference += distance;
+  }
+  
+  // Also consider the difference in total distance and duration
+  const distanceDiff = Math.abs(routeA.distance - routeB.distance) / routeA.distance;
+  const durationDiff = Math.abs(routeA.duration - routeB.duration) / routeA.duration;
+  
+  // Combine the scores (weighted)
+  return (totalDifference * 0.6) + (distanceDiff * 0.2) + (durationDiff * 0.2);
+}
+
+// Helper function to create a fallback route
+function createFallbackRoute(startLat: string, startLon: string, endLat: string, endLon: string): ActionState<any> {
+  try {
+    const directDistance = calculateDistance(
+      parseFloat(startLat), parseFloat(startLon),
+      parseFloat(endLat), parseFloat(endLon)
+    );
+    
+    // Calculate a point perpendicular to the route for the detour
+    const midLat = (parseFloat(startLat) + parseFloat(endLat)) / 2;
+    const midLon = (parseFloat(startLon) + parseFloat(endLon)) / 2;
+    
+    // Calculate perpendicular vector
+    const dx = parseFloat(endLon) - parseFloat(startLon);
+    const dy = parseFloat(endLat) - parseFloat(startLat);
+    const angle = Math.atan2(dy, dx) + Math.PI / 2;
+    
+    // Make the offset proportional to the route distance
+    const offset = directDistance * 0.15 / 111000; // Convert to degrees (roughly)
+    
+    const detourLat = midLat + Math.sin(angle) * offset;
+    const detourLon = midLon + Math.cos(angle) * offset;
     
     return {
       isSuccess: true,
-      message: "Modified alternate route calculated successfully",
-      data: modifiedRoute
-    }
-  } catch (error) {
-    console.error("Error calculating alternate route:", error)
-    
-    // Return a fallback route with estimated data
-    try {
-      const directDistance = calculateDistance(
-        parseFloat(startLat), parseFloat(startLon),
-        parseFloat(endLat), parseFloat(endLon)
-      );
-      
-      // Estimate duration based on distance (assuming average speed of 45 km/h for alternate route)
-      // 45 km/h = 12.5 m/s
-      const estimatedDuration = directDistance / 12.5;
-      
-      // Add a slight offset to create a visually different route
-      const midLat = (parseFloat(startLat) + parseFloat(endLat)) / 2;
-      const midLon = (parseFloat(startLon) + parseFloat(endLon)) / 2;
-      
-      // Offset the midpoint slightly
-      const offsetMidLat = midLat + 0.01;
-      const offsetMidLon = midLon + 0.01;
-      
-      return {
-        isSuccess: true,
-        message: "Alternate route estimated (error fallback)",
-        data: {
-          distance: directDistance * 1.1, // Slightly longer than direct route
-          duration: estimatedDuration * 1.1, // Slightly longer duration
-          geometry: {
-            coordinates: [
-              [parseFloat(startLon), parseFloat(startLat)],
-              [offsetMidLon, offsetMidLat], // Add a waypoint to create a different path
-              [parseFloat(endLon), parseFloat(endLat)]
-            ],
-            type: "LineString"
-          }
+      message: "Alternate route estimated (fallback)",
+      data: {
+        distance: directDistance * 1.2,
+        duration: (directDistance / 13.89) * 1.2, // Assuming ~50 km/h average speed
+        geometry: {
+          coordinates: [
+            [parseFloat(startLon), parseFloat(startLat)],
+            [detourLon, detourLat],
+            [parseFloat(endLon), parseFloat(endLat)]
+          ],
+          type: "LineString"
         }
       }
-    } catch (fallbackError) {
-      return { 
-        isSuccess: false, 
-        message: "Failed to calculate alternate route and fallback also failed" 
-      }
-    }
+    };
+  } catch (fallbackError) {
+    return { 
+      isSuccess: false, 
+      message: "Failed to calculate alternate route and fallback also failed" 
+    };
   }
 }
 
