@@ -1,7 +1,283 @@
-# Meet-Me-Halfway App Structure Documentation
+# Meet Me Halfway App Structure
 
 ## Overview
-Meet-Me-Halfway is a web application that calculates optimal meeting points between two locations, ensuring balanced travel times for all parties. The app provides nearby points of interest and integrates mapping features for a seamless user experience.
+Meet Me Halfway is a Next.js application that helps users find a convenient meeting point between two locations. The app calculates two routes between the locations and finds points of interest (POIs) around the midpoints of both routes.
+
+## Core Components
+
+### 1. Main App Component (`app/meet-me-halfway/page.tsx`)
+- Entry point for the application
+- Handles the main layout and routing
+- Manages the overall application state
+- Renders the main search interface and results view
+
+### 2. Search Interface (`app/meet-me-halfway/_components/search-interface.tsx`)
+- Provides the main search form for two locations
+- Features:
+  - Address input fields with autocomplete
+  - Geocoding using LocationIQ API
+  - Form validation and error handling
+  - Loading states and user feedback
+  - Responsive design for mobile and desktop
+
+### 3. Results Map (`app/meet-me-halfway/_components/results-map.tsx`)
+- Displays the calculated routes and meeting points
+- Features:
+  - Interactive map using react-leaflet
+  - Display of both main and alternate routes
+  - Markers for start points, end points, and midpoints
+  - Points of Interest (POIs) display around both midpoints
+  - Route information cards showing duration and distance
+  - Responsive layout with collapsible POI panel
+
+### 4. Map Component (`app/meet-me-halfway/_components/map-component.tsx`)
+- Handles the map rendering and interaction
+- Features:
+  - Dynamic map bounds adjustment
+  - Route polyline rendering
+  - Custom markers for locations
+  - POI markers with popups
+  - Map controls and zoom functionality
+
+### 5. Points of Interest (`app/meet-me-halfway/_components/points-of-interest.tsx`)
+- Displays and manages POIs around both midpoints
+- Features:
+  - List of POIs with categories
+  - Distance and rating information
+  - Filtering by POI type
+  - Interactive POI selection
+  - Responsive design for mobile and desktop
+
+## API Integration
+
+### 1. LocationIQ API (`actions/locationiq-actions.ts`)
+- Handles all LocationIQ API interactions
+- Key functions:
+  - `geocodeAddress`: Converts addresses to coordinates
+  - `getRouteAction`: Calculates the main route
+  - `getAlternateRouteAction`: Calculates an alternative route
+  - `searchPoisAction`: Finds POIs around a location
+  - `reverseGeocodeAction`: Converts coordinates to addresses
+
+### 2. Overpass API Integration
+- Used for POI search through LocationIQ
+- Queries for various POI types:
+  - Amenities (restaurants, cafes, etc.)
+  - Leisure facilities
+  - Tourist attractions
+  - Shopping locations
+- Implements deduplication and distance-based sorting
+
+## State Management
+
+### 1. Route State
+- Manages both main and alternate routes
+- Stores:
+  - Route geometry
+  - Duration and distance
+  - Midpoint coordinates
+  - Route metadata
+
+### 2. POI State
+- Manages POIs for both midpoints
+- Features:
+  - Deduplication based on OSM ID
+  - Distance-based sorting
+  - Category-based filtering
+  - Combined display of POIs from both midpoints
+
+## Key Features
+
+### 1. Route Calculation
+- Calculates two routes between locations
+- Main route: Direct route between points
+- Alternate route: Different path with similar duration
+- Both routes are displayed simultaneously
+
+### 2. Midpoint Calculation
+- Calculates midpoints along both routes
+- Considers actual route geometry
+- Provides meeting points at equal travel time
+
+### 3. POI Discovery
+- Finds POIs around both midpoints
+- Implements radius-based search
+- Categorizes POIs by type
+- Sorts by distance from midpoint
+- Limits to 8 POIs per route for clarity
+
+### 4. User Interface
+- Responsive design for all screen sizes
+- Interactive map with route visualization
+- Collapsible POI panel
+- Loading states and error handling
+- Clear feedback for user actions
+
+## Recent Changes
+
+### 1. Route Display Updates
+- Removed route selection/toggle functionality
+- Both routes now displayed simultaneously
+- Improved route visualization
+- Example implementation:
+```typescript
+// In results-map.tsx
+const ResultsMap: React.FC<ResultsMapProps> = ({
+  startLat,
+  startLng,
+  endLat,
+  endLng,
+  startAddress,
+  endAddress
+}) => {
+  // Both routes are now always displayed
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr,350px] gap-4">
+      <MapComponent
+        startLat={startLat}
+        startLng={startLng}
+        endLat={endLat}
+        endLng={endLng}
+        startAddress={startAddress}
+        endAddress={endAddress}
+        mainRoute={mainRoute}
+        alternateRoute={alternateRoute}
+        showAlternateRoute={true}
+        pois={currentPois}
+        showPois={true}
+      />
+      <PointsOfInterest
+        pois={currentPois}
+        onPoiSelect={handlePoiSelect}
+      />
+    </div>
+  );
+};
+```
+
+### 2. POI Handling Improvements
+- POIs now fetched for both midpoints
+- Implemented deduplication based on OSM ID
+- Combined display of POIs from both routes
+- Limited to 8 POIs per route for clarity
+- Example implementation:
+```typescript
+// In locationiq-actions.ts
+export async function searchPoisAction(
+  lat: string,
+  lon: string,
+  radius: number = 1000,
+  types: string[] = ["amenity", "leisure", "tourism", "shop"]
+): Promise<ActionState<PoiResponse[]>> {
+  console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
+  
+  try {
+    // ... existing query construction ...
+    
+    const pois = data.elements
+      .filter((poi: OverpassElement) => {
+        const lat = poi.lat || poi.center?.lat;
+        const lon = poi.lon || poi.center?.lon;
+        return lat && lon;
+      })
+      .map((poi: OverpassElement) => ({
+        id: poi.id.toString(),
+        osm_id: poi.id.toString(),
+        name: poi.tags?.name || poi.tags?.['addr:housename'] || 'Unnamed Location',
+        type: poi.tags?.amenity || poi.tags?.leisure || poi.tags?.tourism || poi.tags?.shop || 'place',
+        lat: (poi.lat || poi.center?.lat).toString(),
+        lon: (poi.lon || poi.center?.lon).toString(),
+        tags: poi.tags || {}
+      }))
+      .slice(0, 8); // Limited to 8 POIs per route
+
+    return {
+      isSuccess: true,
+      data: pois
+    };
+  } catch (error) {
+    // ... error handling ...
+  }
+}
+```
+
+### 3. UI Improvements
+- Enhanced responsive design
+- Improved POI card layout
+- Better error handling and loading states
+- Example implementation:
+```typescript
+// In points-of-interest.tsx
+const PointsOfInterest: React.FC<PointsOfInterestProps> = ({
+  pois,
+  onPoiSelect
+}) => {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Points of Interest</h2>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            Filters
+          </Button>
+        </div>
+      </div>
+      
+      {showFilters && (
+        <div className="space-y-2">
+          <Select
+            value={selectedCategory}
+            onValueChange={setSelectedCategory}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All Categories</SelectItem>
+              {categories.map(category => (
+                <SelectItem key={category} value={category}>
+                  {category}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {filteredPois.map(poi => (
+          <Card
+            key={poi.osm_id}
+            className="cursor-pointer hover:bg-accent"
+            onClick={() => onPoiSelect(poi)}
+          >
+            <CardHeader>
+              <CardTitle>{poi.name}</CardTitle>
+              <CardDescription>{poi.type}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                {formatDistance(poi.distance)}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+};
+```
+
+## Future Improvements
+1. Add more POI categories
+2. Implement POI filtering by distance
+3. Add route comparison features
+4. Enhance mobile responsiveness
+5. Add more detailed POI information
 
 ## Tech Stack Breakdown
 
@@ -29,372 +305,6 @@ Meet-Me-Halfway is a web application that calculates optimal meeting points betw
 - **TypeScript**: Type safety
 - **ESLint & Prettier**: Code formatting
 - **Husky**: Git hooks
-
-## Core Features & Implementation
-
-### 1. Location Search & Midpoint Calculation
-
-#### Search Form Component
-```typescript
-"use client";
-
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-
-const searchSchema = z.object({
-  startLocation: z.string().min(1, "Start location is required"),
-  endLocation: z.string().min(1, "End location is required"),
-  radius: z.number().min(100).max(5000).default(1000)
-});
-
-export function SearchForm({ onSearch }: { onSearch: (data: SearchFormData) => Promise<void> }) {
-  const form = useForm<z.infer<typeof searchSchema>>({
-    resolver: zodResolver(searchSchema),
-    defaultValues: {
-      radius: 1000
-    }
-  });
-
-  const handleSubmit = async (data: z.infer<typeof searchSchema>) => {
-    try {
-      await onSearch(data);
-    } catch (error) {
-      form.setError("root", {
-        message: "Failed to process search"
-      });
-    }
-  };
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="startLocation"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Start Location</FormLabel>
-              <FormControl>
-                <Input placeholder="Enter start location" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        {/* Similar field for endLocation */}
-        <Button type="submit" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting ? "Searching..." : "Find Midpoint"}
-        </Button>
-      </form>
-    </Form>
-  );
-}
-```
-
-#### Midpoint Calculation Logic
-```typescript
-"use server";
-
-import { calculateDistance, calculateBearing } from "@/lib/utils";
-
-interface Point {
-  lat: number;
-  lng: number;
-}
-
-export async function calculateMidpoint(start: Point, end: Point): Promise<MidpointResult> {
-  // Convert to radians
-  const lat1 = toRadians(start.lat);
-  const lon1 = toRadians(start.lng);
-  const lat2 = toRadians(end.lat);
-  const lon2 = toRadians(end.lng);
-
-  // Calculate midpoint
-  const Bx = Math.cos(lat2) * Math.cos(lon2 - lon1);
-  const By = Math.cos(lat2) * Math.sin(lon2 - lon1);
-  const midLat = Math.atan2(
-    Math.sin(lat1) + Math.sin(lat2),
-    Math.sqrt((Math.cos(lat1) + Bx) * (Math.cos(lat1) + Bx) + By * By)
-  );
-  const midLng = lon1 + Math.atan2(By, Math.cos(lat1) + Bx);
-
-  // Get travel times using LocationIQ
-  const [timeA, timeB] = await Promise.all([
-    getTravelTime(start, { lat: toDegrees(midLat), lng: toDegrees(midLng) }),
-    getTravelTime(end, { lat: toDegrees(midLat), lng: toDegrees(midLng) })
-  ]);
-
-  return {
-    midpoint: {
-      lat: toDegrees(midLat),
-      lng: toDegrees(midLng)
-    },
-    travelTimeA: timeA,
-    travelTimeB: timeB
-  };
-}
-
-async function getTravelTime(from: Point, to: Point): Promise<number> {
-  const response = await fetch(
-    `https://us1.locationiq.com/v1/directions/driving/${from.lng},${from.lat};${to.lng},${to.lat}?key=${process.env.LOCATIONIQ_API_KEY}&overview=false`
-  );
-  const data = await response.json();
-  return data.routes[0].duration;
-}
-```
-
-### 2. Map Implementation
-
-#### Map Component with Leaflet
-```typescript
-"use client";
-
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import { Icon } from "leaflet";
-import { useState, useEffect } from "react";
-
-// Custom marker icons
-const startIcon = new Icon({
-  iconUrl: "/markers/start.svg",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41]
-});
-
-// Similar definitions for endIcon and poiIcon
-
-export function Map({ center, markers, routes }: MapProps) {
-  const [map, setMap] = useState<L.Map | null>(null);
-
-  useEffect(() => {
-    if (map && center) {
-      map.setView([center.lat, center.lng], 13);
-    }
-  }, [map, center]);
-
-  return (
-    <MapContainer
-      center={[center.lat, center.lng]}
-      zoom={13}
-      className="h-[600px] w-full rounded-lg"
-      whenCreated={setMap}
-    >
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-      />
-      
-      {markers.map((marker, idx) => (
-        <Marker
-          key={idx}
-          position={[marker.position.lat, marker.position.lng]}
-          icon={getMarkerIcon(marker.type)}
-        >
-          {marker.info && <Popup>{marker.info}</Popup>}
-        </Marker>
-      ))}
-
-      {routes?.map((route, idx) => (
-        <Polyline
-          key={idx}
-          positions={route.points.map(p => [p.lat, p.lng])}
-          color={route.color}
-          weight={3}
-          opacity={0.7}
-        />
-      ))}
-    </MapContainer>
-  );
-}
-```
-
-### 3. Points of Interest Implementation
-
-#### POI Search and Display
-```typescript
-"use server";
-
-export async function searchPoisAction(lat: string, lon: string, radius: number, types: string[]) {
-  console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
-  
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000); // Increased to 60s
-  
-  try {
-    // Log the query being sent
-    console.log('[POI Search] Sending Overpass query:', query);
-    
-    const response = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      body: `data=${encodeURIComponent(query)}`,
-      signal: controller.signal
-    });
-    
-    const data = await response.json();
-    console.log('[POI Search] Raw response:', {
-      totalElements: data.elements?.length || 0,
-      types: data.elements?.map(e => e.tags?.amenity || e.tags?.leisure || e.tags?.tourism || e.tags?.shop)
-        .filter(Boolean)
-        .reduce((acc, type) => {
-          acc[type] = (acc[type] || 0) + 1;
-          return acc;
-        }, {})
-    });
-
-    // Process POIs with relaxed filtering
-    const pois = data.elements
-      .filter((poi: OverpassElement) => {
-        const lat = poi.lat || poi.center?.lat;
-        const lon = poi.lon || poi.center?.lon;
-        // Removed name requirement
-        return lat && lon;
-      })
-      .map((poi: OverpassElement) => ({
-        id: poi.id.toString(),
-        name: poi.tags?.name || poi.tags?.['addr:housename'] || 'Unnamed Location',
-        type: poi.tags?.amenity || poi.tags?.leisure || poi.tags?.tourism || poi.tags?.shop || 'place',
-        lat: (poi.lat || poi.center?.lat).toString(),
-        lon: (poi.lon || poi.center?.lon).toString(),
-        tags: poi.tags || {}
-      }))
-      .slice(0, 50); // Increased from 15 to 50
-
-    console.log('[POI Search] Processed POIs:', {
-      total: pois.length,
-      types: pois.reduce((acc, poi) => {
-        acc[poi.type] = (acc[poi.type] || 0) + 1;
-        return acc;
-      }, {})
-    });
-
-    return {
-      isSuccess: true,
-      data: pois
-    };
-  } catch (error) {
-    console.error('[POI Search] Error:', error);
-    return {
-      isSuccess: false,
-      error: error.toString(),
-      data: undefined
-    };
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-// POI Display Component
-export function POIList({ pois, onSelect }: { pois: POI[]; onSelect: (poi: POI) => void }) {
-  const [sortBy, setSortBy] = useState<"distance" | "rating">("distance");
-  const [filter, setFilter] = useState<string>("");
-
-  const filteredAndSortedPOIs = useMemo(() => {
-    return pois
-      .filter(poi => 
-        poi.name.toLowerCase().includes(filter.toLowerCase()) ||
-        poi.type.toLowerCase().includes(filter.toLowerCase())
-      )
-      .sort((a, b) => {
-        if (sortBy === "distance") {
-          return a.distance - b.distance;
-        }
-        return (b.rating || 0) - (a.rating || 0);
-      });
-  }, [pois, sortBy, filter]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-4">
-        <Input
-          placeholder="Filter POIs..."
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <Select value={sortBy} onValueChange={(value: "distance" | "rating") => setSortBy(value)}>
-          <SelectTrigger>
-            <SelectValue placeholder="Sort by..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="distance">Distance</SelectItem>
-            <SelectItem value="rating">Rating</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredAndSortedPOIs.map(poi => (
-          <Card key={poi.id} className="cursor-pointer" onClick={() => onSelect(poi)}>
-            <CardHeader>
-              <CardTitle>{poi.name}</CardTitle>
-              <CardDescription>{poi.type}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p>{poi.address}</p>
-              <p>Distance: {(poi.distance / 1000).toFixed(2)}km</p>
-              {poi.rating && <p>Rating: {poi.rating}</p>}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-```
-
-### 4. State Management and Data Flow
-
-#### Custom Hooks
-```typescript
-// hooks/use-search-state.ts
-import { create } from "zustand";
-
-interface SearchState {
-  startLocation: Coordinates | null;
-  endLocation: Coordinates | null;
-  midpoint: Coordinates | null;
-  selectedPOI: POI | null;
-  setLocations: (start: Coordinates, end: Coordinates) => void;
-  setMidpoint: (point: Coordinates) => void;
-  setSelectedPOI: (poi: POI | null) => void;
-  reset: () => void;
-}
-
-export const useSearchState = create<SearchState>((set) => ({
-  startLocation: null,
-  endLocation: null,
-  midpoint: null,
-  selectedPOI: null,
-  setLocations: (start, end) => set({ startLocation: start, endLocation: end }),
-  setMidpoint: (point) => set({ midpoint: point }),
-  setSelectedPOI: (poi) => set({ selectedPOI: poi }),
-  reset: () => set({ startLocation: null, endLocation: null, midpoint: null, selectedPOI: null })
-}));
-
-// hooks/use-search-history.ts
-export function useSearchHistory(userId: string) {
-  const [searches, setSearches] = useState<Search[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function loadSearches() {
-      try {
-        const response = await fetch(`/api/searches?userId=${userId}`);
-        const data = await response.json();
-        setSearches(data);
-      } catch (error) {
-        console.error("Failed to load searches:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadSearches();
-  }, [userId]);
-
-  return { searches, loading };
-}
-```
 
 ## Directory Structure
 
