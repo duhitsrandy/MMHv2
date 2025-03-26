@@ -34,8 +34,6 @@ interface ResultsMapProps {
   endLng: string
   startAddress: string
   endAddress: string
-  selectedRoute: "main" | "alternate"
-  onRouteSelect: (route: "main" | "alternate") => void
 }
 
 interface RouteData {
@@ -105,9 +103,7 @@ export default function ResultsMap({
   endLat,
   endLng,
   startAddress,
-  endAddress,
-  selectedRoute,
-  onRouteSelect
+  endAddress
 }: ResultsMapProps) {
   const [isClient, setIsClient] = useState(false)
   const [mainRoute, setMainRoute] = useState<RouteData | null>(null)
@@ -122,16 +118,37 @@ export default function ResultsMap({
   // Compute current POIs based on selected route
   const currentPois = useMemo(() => {
     console.log('[POI Switch] Computing current POIs:', {
-      selectedRoute,
       mainRoutePoisCount: mainRoutePois.length,
       alternateRoutePoisCount: alternateRoutePois.length,
-      showPois
+      showPois,
+      mainRoutePoisTypes: mainRoutePois.reduce((acc: any, poi: any) => {
+        acc[poi.type] = (acc[poi.type] || 0) + 1;
+        return acc;
+      }, {}),
+      alternateRoutePoisTypes: alternateRoutePois.reduce((acc: any, poi: any) => {
+        acc[poi.type] = (acc[poi.type] || 0) + 1;
+        return acc;
+      }, {})
     });
     
     if (!showPois) return [];
     
-    // Combine POIs from both routes
-    const allPois = [...mainRoutePois, ...alternateRoutePois];
+    // Combine POIs from both routes, removing duplicates based on osm_id
+    const uniquePois = new Map<string, any>();
+    
+    // Add main route POIs first
+    mainRoutePois.forEach(poi => {
+      uniquePois.set(poi.osm_id, poi);
+    });
+    
+    // Add alternate route POIs, only if they don't exist
+    alternateRoutePois.forEach(poi => {
+      if (!uniquePois.has(poi.osm_id)) {
+        uniquePois.set(poi.osm_id, poi);
+      }
+    });
+    
+    const allPois = Array.from(uniquePois.values());
     
     console.log('[POI Switch] Combined POIs:', {
       total: allPois.length,
@@ -144,19 +161,7 @@ export default function ResultsMap({
     });
     
     return allPois;
-  }, [selectedRoute, mainRoutePois, alternateRoutePois, showPois]);
-
-  // Add logging for route selection
-  const handleRouteSelect = (route: "main" | "alternate") => {
-    console.log('[Route Switch] Switching to route:', {
-      from: selectedRoute,
-      to: route,
-      mainRoutePoisCount: mainRoutePois.length,
-      alternateRoutePoisCount: alternateRoutePois.length,
-      totalPois: currentPois.length
-    });
-    onRouteSelect(route);
-  };
+  }, [showPois, mainRoutePois, alternateRoutePois]);
 
   // Set isClient to true on mount
   useEffect(() => {
@@ -205,7 +210,6 @@ export default function ResultsMap({
     console.log('State update:', {
       hasMainRoute: !!mainRoute,
       hasAlternateRoute: !!alternateRoute,
-      selectedRoute,
       currentMidpoint: currentMidpoint ? `${currentMidpoint.lat},${currentMidpoint.lng}` : null,
       alternateMidpoint: alternateMidpoint ? `${alternateMidpoint.lat},${alternateMidpoint.lng}` : null,
       showPois,
@@ -213,7 +217,7 @@ export default function ResultsMap({
       alternateRoutePoisCount: alternateRoutePois.length,
       currentPoisCount: currentPois.length
     });
-  }, [mainRoute, alternateRoute, selectedRoute, currentMidpoint, alternateMidpoint, showPois, mainRoutePois, alternateRoutePois, currentPois]);
+  }, [mainRoute, alternateRoute, currentMidpoint, alternateMidpoint, showPois, mainRoutePois, alternateRoutePois, currentPois]);
 
   // Fetch POIs when midpoints change
   useEffect(() => {
@@ -222,60 +226,63 @@ export default function ResultsMap({
     console.log('[POI Fetch] Midpoints changed:', {
       current: currentMidpoint,
       alternate: alternateMidpoint,
-      showPois
+      showPois,
+      mainRoutePoisCount: mainRoutePois.length,
+      alternateRoutePoisCount: alternateRoutePois.length
     });
 
     const controller = new AbortController();
 
-    const fetchPois = async (lat: string, lng: string, routeType: 'main' | 'alternate') => {
+    const fetchPois = async (lat: string, lng: string, isAlternate: boolean = false) => {
       try {
-        console.log(`[POI Fetch] Starting ${routeType} route POI fetch:`, { lat, lng });
+        console.log(`[POI Fetch] Starting POI fetch for ${isAlternate ? 'alternate' : 'main'} midpoint:`, { lat, lng });
         const result = await searchPoisAction(lat, lng);
         
+        console.log(`[POI Fetch] ${isAlternate ? 'Alternate' : 'Main'} midpoint POI search result:`, {
+          success: result.isSuccess,
+          count: result.data?.length || 0,
+          message: result.message
+        });
+
         if (result.isSuccess && result.data) {
-          console.log(`[POI Fetch] ${routeType} route POI search result:`, {
-            isSuccess: result.isSuccess,
-            message: result.message,
-            poiCount: result.data.length
-          });
-
-          // Add route type to each POI
-          const poisWithRoute = result.data.map(poi => ({
-            ...poi,
-            routeType
-          }));
-
-          if (routeType === 'main') {
-            setMainRoutePois(poisWithRoute);
-            console.log('[POI Fetch] Setting main route POIs:', {
-              count: poisWithRoute.length,
-              types: poisWithRoute.reduce((acc, poi) => {
-                acc[poi.type] = (acc[poi.type] || 0) + 1;
-                return acc;
-              }, {} as Record<string, number>)
+          // Merge new POIs with existing ones, removing duplicates based on osm_id
+          if (isAlternate) {
+            setAlternateRoutePois(prev => {
+              const newPois = result.data || [];
+              const existingIds = new Set(prev.map(p => p.osm_id));
+              const uniqueNewPois = newPois.filter(p => !existingIds.has(p.osm_id));
+              console.log(`[POI Fetch] Updated alternate route POIs:`, {
+                previousCount: prev.length,
+                newCount: uniqueNewPois.length,
+                totalCount: prev.length + uniqueNewPois.length
+              });
+              return [...prev, ...uniqueNewPois];
             });
           } else {
-            setAlternateRoutePois(poisWithRoute);
-            console.log('[POI Fetch] Setting alternate route POIs:', {
-              count: poisWithRoute.length,
-              types: poisWithRoute.reduce((acc, poi) => {
-                acc[poi.type] = (acc[poi.type] || 0) + 1;
-                return acc;
-              }, {} as Record<string, number>)
+            setMainRoutePois(prev => {
+              const newPois = result.data || [];
+              const existingIds = new Set(prev.map(p => p.osm_id));
+              const uniqueNewPois = newPois.filter(p => !existingIds.has(p.osm_id));
+              console.log(`[POI Fetch] Updated main route POIs:`, {
+                previousCount: prev.length,
+                newCount: uniqueNewPois.length,
+                totalCount: prev.length + uniqueNewPois.length
+              });
+              return [...prev, ...uniqueNewPois];
             });
           }
         }
       } catch (error) {
-        console.error(`[POI Fetch] Error fetching ${routeType} route POIs:`, error);
+        console.error(`[POI Fetch] Error fetching POIs for ${isAlternate ? 'alternate' : 'main'} midpoint:`, error);
       }
     };
 
-    if (currentMidpoint) {
-      fetchPois(currentMidpoint.lat.toString(), currentMidpoint.lng.toString(), 'main');
+    // Fetch POIs for both midpoints
+    if (currentMidpoint?.lat && currentMidpoint?.lng) {
+      fetchPois(currentMidpoint.lat.toString(), currentMidpoint.lng.toString(), false);
     }
-
-    if (alternateMidpoint) {
-      fetchPois(alternateMidpoint.lat.toString(), alternateMidpoint.lng.toString(), 'alternate');
+    if (alternateMidpoint?.lat && alternateMidpoint?.lng) {
+      fetchPois(alternateMidpoint.lat.toString(), alternateMidpoint.lng.toString(), true);
     }
 
     return () => controller.abort();
@@ -294,99 +301,58 @@ export default function ResultsMap({
   }
 
   return (
-    <div className="mx-auto grid max-w-[1400px] grid-cols-[1fr,400px] gap-4">
-      <Card className="h-[600px]">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle>Route Map</CardTitle>
-            <div className="flex items-center gap-4">
-              <Button
-                variant={showPois ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowPois(!showPois)}
-                className="flex items-center gap-2"
-                disabled={isLoadingPois}
-              >
-                <MapPin className="size-4" />
-                {isLoadingPois
-                  ? "Loading..."
-                  : showPois
-                    ? "Hide POIs"
-                    : "Show POIs"}
-              </Button>
-            </div>
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr,350px] gap-4">
+      <div className="space-y-4">
+        <MapComponent
+          startLat={startLat}
+          startLng={startLng}
+          endLat={endLat}
+          endLng={endLng}
+          startAddress={startAddress}
+          endAddress={endAddress}
+          midpointLat={currentMidpoint?.lat || parseFloat(startLat)}
+          midpointLng={currentMidpoint?.lng || parseFloat(startLng)}
+          alternateMidpointLat={alternateMidpoint?.lat || parseFloat(startLat)}
+          alternateMidpointLng={alternateMidpoint?.lng || parseFloat(startLng)}
+          mainRoute={mainRoute}
+          alternateRoute={alternateRoute}
+          showAlternateRoute={true}
+          pois={currentPois}
+          showPois={showPois}
+        />
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="show-pois"
+              checked={showPois}
+              onCheckedChange={setShowPois}
+            />
+            <Label htmlFor="show-pois">Show Points of Interest</Label>
           </div>
-        </CardHeader>
-        <CardContent className="relative p-0">
-          <MapComponent
-            startLat={parseFloat(startLat) || 0}
-            startLng={parseFloat(startLng) || 0}
-            endLat={parseFloat(endLat) || 0}
-            endLng={parseFloat(endLng) || 0}
-            startAddress={startAddress}
-            endAddress={endAddress}
-            midpointLat={(currentMidpoint?.lat ?? parseFloat(startLat)) || 0}
-            midpointLng={(currentMidpoint?.lng ?? parseFloat(startLng)) || 0}
-            alternateMidpointLat={
-              (alternateMidpoint?.lat ??
-                currentMidpoint?.lat ??
-                parseFloat(startLat)) ||
-              0
-            }
-            alternateMidpointLng={
-              (alternateMidpoint?.lng ??
-                currentMidpoint?.lng ??
-                parseFloat(startLng)) ||
-              0
-            }
-            mainRoute={mainRoute}
-            alternateRoute={alternateRoute}
-            showAlternateRoute={true}
-            selectedRoute={selectedRoute}
-            onRouteSelect={handleRouteSelect}
-            pois={currentPois}
-            showPois={showPois}
-          />
+        </div>
 
-          {/* Route Summary */}
-          <div className="absolute bottom-4 right-4 space-y-2">
-            {mainRoute && (
-              <Card
-                className={`cursor-pointer p-2 transition-all ${
-                  selectedRoute === "main" ? "border-blue-500 bg-blue-50" : ""
-                }`}
-                onClick={() => handleRouteSelect("main")}
-              >
-                <div className="text-sm font-medium">Main Route</div>
-                <div className="text-muted-foreground text-xs">
-                  {Math.round(mainRoute.duration / 60)} min •{" "}
-                  {(mainRoute.distance * 0.000621371).toFixed(1)} mi
-                </div>
-              </Card>
-            )}
+        <div className="grid grid-cols-2 gap-4">
+          {mainRoute && (
+            <Card className="p-2">
+              <div className="text-sm font-medium">Main Route</div>
+              <div className="text-xs text-muted-foreground">
+                {Math.round(mainRoute.duration / 60)} min • {Math.round(mainRoute.distance / 1000)} km
+              </div>
+            </Card>
+          )}
+          {alternateRoute && (
+            <Card className="p-2">
+              <div className="text-sm font-medium">Alternate Route</div>
+              <div className="text-xs text-muted-foreground">
+                {Math.round(alternateRoute.duration / 60)} min • {Math.round(alternateRoute.distance / 1000)} km
+              </div>
+            </Card>
+          )}
+        </div>
+      </div>
 
-            {alternateRoute && (
-              <Card
-                className={`cursor-pointer p-2 transition-all ${
-                  selectedRoute === "alternate"
-                    ? "border-red-500 bg-red-50"
-                    : ""
-                }`}
-                onClick={() => handleRouteSelect("alternate")}
-              >
-                <div className="text-sm font-medium">Alternate Route</div>
-                <div className="text-muted-foreground text-xs">
-                  {Math.round(alternateRoute.duration / 60)} min •{" "}
-                  {(alternateRoute.distance * 0.000621371).toFixed(1)} mi
-                </div>
-              </Card>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* POI Cards */}
-      {showPois && (
+      <div className="space-y-4">
         <PointsOfInterest
           pois={currentPois}
           startLat={parseFloat(startLat)}
@@ -395,11 +361,8 @@ export default function ResultsMap({
           endLng={parseFloat(endLng)}
           startAddress={startAddress}
           endAddress={endAddress}
-          selectedRoute={selectedRoute}
-          midpointLat={currentMidpoint?.lat || parseFloat(startLat)}
-          midpointLng={currentMidpoint?.lng || parseFloat(startLng)}
         />
-      )}
+      </div>
     </div>
   )
 }

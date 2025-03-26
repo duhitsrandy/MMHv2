@@ -20,7 +20,6 @@ interface AppData {
   endLat?: string
   endLng?: string
   endAddress?: string
-  selectedRoute?: "main" | "alternate"
 }
 
 export default function MeetMeHalfwayApp() {
@@ -121,10 +120,6 @@ export default function MeetMeHalfwayApp() {
             endLng={appData.endLng || "0"}
             startAddress={appData.startAddress || ""}
             endAddress={appData.endAddress || ""}
-            selectedRoute="main"
-            onRouteSelect={route => {
-              setAppData(prev => ({ ...prev, selectedRoute: route }))
-            }}
           />
         </div>
       )}

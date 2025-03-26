@@ -48,8 +48,6 @@ interface MapComponentProps {
   mainRoute?: any
   alternateRoute?: any
   showAlternateRoute?: boolean
-  selectedRoute: "main" | "alternate"
-  onRouteSelect: (route: "main" | "alternate") => void
   pois?: any[]
   showPois?: boolean
 }
@@ -85,8 +83,6 @@ export default function MapComponent({
   mainRoute,
   alternateRoute,
   showAlternateRoute = false,
-  selectedRoute,
-  onRouteSelect,
   pois = [],
   showPois = false
 }: MapComponentProps) {
@@ -154,8 +150,8 @@ export default function MapComponent({
         return;
       }
       
-      // Create a unique key that includes the route type
-      const uniqueKey = `${poi.routeType || 'main'}-${poi.id}`;
+      // Create a unique key using just the POI ID
+      const uniqueKey = poi.id;
       
       console.log('[Map] Adding POI marker:', {
         key: uniqueKey,
@@ -208,94 +204,78 @@ export default function MapComponent({
   }, [pois, showPois]);
 
   return (
-    <div className="h-[600px] w-full">
+    <div className="relative h-[520px] w-full rounded-lg overflow-hidden">
       <MapContainer
         center={[mLat, mLng]}
         zoom={13}
-        className="h-full w-full rounded-lg"
+        className="h-full w-full"
         ref={mapRef}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-
+        
         {/* Main Route */}
-        {mainRouteCoords.length > 0 && (
+        {mainRoute && (
           <Polyline
             positions={mainRouteCoords}
-            pathOptions={{
-              color: selectedRoute === "main" ? "#3b82f6" : "#93c5fd",
-              weight: selectedRoute === "main" ? 6 : 4,
-              opacity: selectedRoute === "main" ? 1 : 0.7
-            }}
-            eventHandlers={{
-              click: () => onRouteSelect("main")
-            }}
+            color="#3b82f6"
+            weight={6}
+            opacity={1}
           />
         )}
 
         {/* Alternate Route */}
-        {alternateRouteCoords.length > 0 && showAlternateRoute && (
+        {alternateRoute && showAlternateRoute && (
           <Polyline
             positions={alternateRouteCoords}
-            pathOptions={{
-              color: selectedRoute === "alternate" ? "#9333ea" : "#c084fc",
-              weight: selectedRoute === "alternate" ? 6 : 5,
-              opacity: selectedRoute === "alternate" ? 1 : 0.85
-            }}
-            eventHandlers={{
-              click: () => onRouteSelect("alternate")
-            }}
+            color="#9333ea"
+            weight={6}
+            opacity={1}
           />
         )}
 
         {/* Start Marker */}
         <Marker position={[sLat, sLng]} icon={defaultIcons.startIcon}>
           <Popup>
-            <div className="font-medium">Start: {startAddress}</div>
+            <div className="font-medium">Start</div>
+            <div className="text-sm text-muted-foreground">{startAddress}</div>
           </Popup>
         </Marker>
 
         {/* End Marker */}
         <Marker position={[eLat, eLng]} icon={defaultIcons.endIcon}>
           <Popup>
-            <div className="font-medium">End: {endAddress}</div>
+            <div className="font-medium">End</div>
+            <div className="text-sm text-muted-foreground">{endAddress}</div>
           </Popup>
         </Marker>
 
         {/* Main Midpoint Marker */}
-        <Marker
-          position={[mLat, mLng]}
-          icon={defaultIcons.midpointIcon}
-          eventHandlers={{
-            click: () => onRouteSelect("main")
-          }}
-        >
+        <Marker position={[mLat, mLng]} icon={defaultIcons.midpointIcon}>
           <Popup>
-            <div className="font-medium">Midpoint (Main Route)</div>
+            <div className="font-medium">Main Midpoint</div>
+            <div className="text-sm text-muted-foreground">
+              {startAddress} ↔ {endAddress}
+            </div>
           </Popup>
         </Marker>
 
         {/* Alternate Midpoint Marker */}
         {showAlternateRoute && (
-          <Marker
-            position={[amLat, amLng]}
-            icon={defaultIcons.midpointIcon}
-            eventHandlers={{
-              click: () => onRouteSelect("alternate")
-            }}
-          >
+          <Marker position={[amLat, amLng]} icon={defaultIcons.midpointIcon}>
             <Popup>
-              <div className="font-medium">Midpoint (Alternate Route)</div>
+              <div className="font-medium">Alternate Midpoint</div>
+              <div className="text-sm text-muted-foreground">
+                {startAddress} ↔ {endAddress}
+              </div>
             </Popup>
           </Marker>
         )}
 
         {/* Fit bounds to route */}
-        <FitBounds
-          route={selectedRoute === "main" ? mainRoute : alternateRoute}
-        />
+        <FitBounds route={mainRoute} />
       </MapContainer>
     </div>
   )

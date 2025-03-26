@@ -300,9 +300,14 @@ export async function searchPoisAction(
         const distanceB = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(b.lat), parseFloat(b.lon));
         return distanceA - distanceB;
       })
-      .slice(0, 8); // Limit to 8 POIs per route
+      .slice(0, 8); // Back to 8 POIs per route
     
-    console.log(`[POI Search] Returning ${sortedPois.length} sorted POIs`);
+    console.log(`[POI Search] Returning ${sortedPois.length} sorted POIs:`, {
+      types: sortedPois.reduce((acc: any, poi: PoiResponse) => {
+        acc[poi.type] = (acc[poi.type] || 0) + 1;
+        return acc;
+      }, {})
+    });
     
     return {
       isSuccess: true,
