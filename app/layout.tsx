@@ -13,7 +13,11 @@ const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Meet Me Halfway",
-  description: "Find the perfect midpoint to meet your friends!",
+  description: "Find the perfect meeting point between two locations",
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+  },
 }
 
 export default function RootLayout({

@@ -121,8 +121,42 @@ export default function ResultsMap({
 
   // Compute current POIs based on selected route
   const currentPois = useMemo(() => {
-    return selectedRoute === 'main' ? mainRoutePois : alternateRoutePois;
-  }, [selectedRoute, mainRoutePois, alternateRoutePois]);
+    console.log('[POI Switch] Computing current POIs:', {
+      selectedRoute,
+      mainRoutePoisCount: mainRoutePois.length,
+      alternateRoutePoisCount: alternateRoutePois.length,
+      showPois
+    });
+    
+    if (!showPois) return [];
+    
+    // Combine POIs from both routes
+    const allPois = [...mainRoutePois, ...alternateRoutePois];
+    
+    console.log('[POI Switch] Combined POIs:', {
+      total: allPois.length,
+      mainRouteCount: mainRoutePois.length,
+      alternateRouteCount: alternateRoutePois.length,
+      types: allPois.reduce((acc: any, poi: any) => {
+        acc[poi.type] = (acc[poi.type] || 0) + 1;
+        return acc;
+      }, {})
+    });
+    
+    return allPois;
+  }, [selectedRoute, mainRoutePois, alternateRoutePois, showPois]);
+
+  // Add logging for route selection
+  const handleRouteSelect = (route: "main" | "alternate") => {
+    console.log('[Route Switch] Switching to route:', {
+      from: selectedRoute,
+      to: route,
+      mainRoutePoisCount: mainRoutePois.length,
+      alternateRoutePoisCount: alternateRoutePois.length,
+      totalPois: currentPois.length
+    });
+    onRouteSelect(route);
+  };
 
   // Set isClient to true on mount
   useEffect(() => {
@@ -166,93 +200,86 @@ export default function ResultsMap({
     fetchRoutes()
   }, [startLat, startLng, endLat, endLng, isClient])
 
-  // Fetch POIs when route or midpoint changes
-  useEffect(() => {
-    const fetchPoisForRoute = async (
-      midpoint: { lat: number; lng: number } | null,
-      isMainRoute: boolean
-    ) => {
-      if (!midpoint || !showPois) return;
-
-      console.log(`Fetching POIs for ${isMainRoute ? 'main' : 'alternate'} route:`, {
-        lat: midpoint.lat.toString(),
-        lng: midpoint.lng.toString()
-      });
-
-      try {
-        const result = await searchPoisAction(
-          midpoint.lat.toString(),
-          midpoint.lng.toString(),
-          1500,
-          [
-            "restaurant",
-            "cafe",
-            "bar",
-            "park",
-            "library",
-            "cinema",
-            "theatre",
-            "museum",
-            "hotel",
-            "supermarket",
-            "shopping_mall"
-          ]
-        );
-
-        console.log(`${isMainRoute ? 'Main' : 'Alternate'} route POI search result:`, result);
-
-        if (result.isSuccess) {
-          const poisWithRouteInfo = result.data.map((poi: any) => ({
-            ...poi,
-            selectedRoute: isMainRoute ? 'main' : 'alternate'
-          }));
-          
-          if (isMainRoute) {
-            console.log('Setting main route POIs:', poisWithRouteInfo);
-            setMainRoutePois(poisWithRouteInfo);
-          } else {
-            console.log('Setting alternate route POIs:', poisWithRouteInfo);
-            setAlternateRoutePois(poisWithRouteInfo);
-          }
-        }
-      } catch (error) {
-        console.error(`Error fetching ${isMainRoute ? 'main' : 'alternate'} route POIs:`, error);
-      }
-    };
-
-    // Fetch POIs for both routes independently
-    if (currentMidpoint) {
-      setIsLoadingPois(true);
-      fetchPoisForRoute(currentMidpoint, true);
-    }
-
-    if (alternateMidpoint) {
-      setIsLoadingPois(true);
-      fetchPoisForRoute(alternateMidpoint, false);
-    }
-
-    // Set loading to false after both fetches complete
-    const timeoutId = setTimeout(() => {
-      setIsLoadingPois(false);
-    }, 1000);
-
-    return () => clearTimeout(timeoutId);
-  }, [currentMidpoint?.lat, currentMidpoint?.lng, alternateMidpoint?.lat, alternateMidpoint?.lng, showPois, selectedRoute]);
-
   // Debug logging for state changes
   useEffect(() => {
     console.log('State update:', {
       hasMainRoute: !!mainRoute,
       hasAlternateRoute: !!alternateRoute,
       selectedRoute,
-      currentMidpoint,
-      alternateMidpoint,
+      currentMidpoint: currentMidpoint ? `${currentMidpoint.lat},${currentMidpoint.lng}` : null,
+      alternateMidpoint: alternateMidpoint ? `${alternateMidpoint.lat},${alternateMidpoint.lng}` : null,
       showPois,
       mainRoutePoisCount: mainRoutePois.length,
       alternateRoutePoisCount: alternateRoutePois.length,
       currentPoisCount: currentPois.length
     });
   }, [mainRoute, alternateRoute, selectedRoute, currentMidpoint, alternateMidpoint, showPois, mainRoutePois, alternateRoutePois, currentPois]);
+
+  // Fetch POIs when midpoints change
+  useEffect(() => {
+    if (!showPois) return;
+
+    console.log('[POI Fetch] Midpoints changed:', {
+      current: currentMidpoint,
+      alternate: alternateMidpoint,
+      showPois
+    });
+
+    const controller = new AbortController();
+
+    const fetchPois = async (lat: string, lng: string, routeType: 'main' | 'alternate') => {
+      try {
+        console.log(`[POI Fetch] Starting ${routeType} route POI fetch:`, { lat, lng });
+        const result = await searchPoisAction(lat, lng);
+        
+        if (result.isSuccess && result.data) {
+          console.log(`[POI Fetch] ${routeType} route POI search result:`, {
+            isSuccess: result.isSuccess,
+            message: result.message,
+            poiCount: result.data.length
+          });
+
+          // Add route type to each POI
+          const poisWithRoute = result.data.map(poi => ({
+            ...poi,
+            routeType
+          }));
+
+          if (routeType === 'main') {
+            setMainRoutePois(poisWithRoute);
+            console.log('[POI Fetch] Setting main route POIs:', {
+              count: poisWithRoute.length,
+              types: poisWithRoute.reduce((acc, poi) => {
+                acc[poi.type] = (acc[poi.type] || 0) + 1;
+                return acc;
+              }, {} as Record<string, number>)
+            });
+          } else {
+            setAlternateRoutePois(poisWithRoute);
+            console.log('[POI Fetch] Setting alternate route POIs:', {
+              count: poisWithRoute.length,
+              types: poisWithRoute.reduce((acc, poi) => {
+                acc[poi.type] = (acc[poi.type] || 0) + 1;
+                return acc;
+              }, {} as Record<string, number>)
+            });
+          }
+        }
+      } catch (error) {
+        console.error(`[POI Fetch] Error fetching ${routeType} route POIs:`, error);
+      }
+    };
+
+    if (currentMidpoint) {
+      fetchPois(currentMidpoint.lat.toString(), currentMidpoint.lng.toString(), 'main');
+    }
+
+    if (alternateMidpoint) {
+      fetchPois(alternateMidpoint.lat.toString(), alternateMidpoint.lng.toString(), 'alternate');
+    }
+
+    return () => controller.abort();
+  }, [currentMidpoint, alternateMidpoint, showPois]);
 
   if (!isClient) {
     return (
@@ -316,7 +343,7 @@ export default function ResultsMap({
             alternateRoute={alternateRoute}
             showAlternateRoute={true}
             selectedRoute={selectedRoute}
-            onRouteSelect={onRouteSelect}
+            onRouteSelect={handleRouteSelect}
             pois={currentPois}
             showPois={showPois}
           />
@@ -328,7 +355,7 @@ export default function ResultsMap({
                 className={`cursor-pointer p-2 transition-all ${
                   selectedRoute === "main" ? "border-blue-500 bg-blue-50" : ""
                 }`}
-                onClick={() => onRouteSelect("main")}
+                onClick={() => handleRouteSelect("main")}
               >
                 <div className="text-sm font-medium">Main Route</div>
                 <div className="text-muted-foreground text-xs">
@@ -345,7 +372,7 @@ export default function ResultsMap({
                     ? "border-red-500 bg-red-50"
                     : ""
                 }`}
-                onClick={() => onRouteSelect("alternate")}
+                onClick={() => handleRouteSelect("alternate")}
               >
                 <div className="text-sm font-medium">Alternate Route</div>
                 <div className="text-muted-foreground text-xs">

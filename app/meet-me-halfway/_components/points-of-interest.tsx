@@ -64,6 +64,7 @@ interface PoiWithTravelTimes extends PoiResponse {
   totalTravelTime?: number
   travelTimeDifference?: number
   isFavorite?: boolean
+  selectedRoute?: "main" | "alternate"
 }
 
 type SortOption =
@@ -172,7 +173,8 @@ export default function PointsOfInterest({
                 if (!startRoute.isSuccess || !endRoute.isSuccess) {
                   return {
                     ...poi,
-                    isFavorite: favorites.includes(poi.osm_id || "")
+                    isFavorite: favorites.includes(poi.osm_id || ""),
+                    selectedRoute: selectedRoute
                   }
                 }
 
@@ -201,13 +203,15 @@ export default function PointsOfInterest({
                   distanceFromEnd,
                   totalTravelTime,
                   travelTimeDifference,
-                  isFavorite: favorites.includes(poi.osm_id || "")
+                  isFavorite: favorites.includes(poi.osm_id || ""),
+                  selectedRoute: selectedRoute
                 }
               } catch (error) {
                 console.error("Error calculating travel times for POI:", error)
                 return {
                   ...poi,
-                  isFavorite: favorites.includes(poi.osm_id || "")
+                  isFavorite: favorites.includes(poi.osm_id || ""),
+                  selectedRoute: selectedRoute
                 }
               }
             })
@@ -235,7 +239,8 @@ export default function PointsOfInterest({
           // Fallback to basic POI data if travel time calculation fails
           const basicPois = pois.map(poi => ({
             ...poi,
-            isFavorite: favorites.includes(poi.osm_id || "")
+            isFavorite: favorites.includes(poi.osm_id || ""),
+            selectedRoute: selectedRoute
           }))
           setPoisWithTravelTimes(basicPois)
           setIsLoading(false)
@@ -249,7 +254,7 @@ export default function PointsOfInterest({
       isMounted = false
       controller.abort()
     }
-  }, [pois, startLat, startLng, endLat, endLng, favorites])
+  }, [pois, startLat, startLng, endLat, endLng, favorites, selectedRoute])
 
   // Memoize sorted and filtered POIs
   const sortedAndFilteredPois = useMemo(() => {
@@ -274,6 +279,11 @@ export default function PointsOfInterest({
           return false
         }
 
+        // Filter by selected route if specified
+        if (selectedRoute && poi.selectedRoute && poi.selectedRoute !== selectedRoute) {
+          return false
+        }
+
         return true
       })
       .sort((a, b) => {
@@ -283,7 +293,7 @@ export default function PointsOfInterest({
         return aTotalTime - bTotalTime
       })
       .slice(0, 10)
-  }, [poisWithTravelTimes, activeTab, maxTimeDifference, showOnlyFavorites])
+  }, [poisWithTravelTimes, activeTab, maxTimeDifference, showOnlyFavorites, selectedRoute])
 
   const formatDuration = (minutes?: number): string => {
     if (minutes === undefined) return "N/A"

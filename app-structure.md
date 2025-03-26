@@ -215,42 +215,73 @@ export function Map({ center, markers, routes }: MapProps) {
 ```typescript
 "use server";
 
-export async function searchPOIs(
-  location: Coordinates,
-  radius: number,
-  categories: string[] = ["restaurant", "cafe", "park"]
-): Promise<POI[]> {
-  const params = new URLSearchParams({
-    key: process.env.LOCATIONIQ_API_KEY!,
-    lat: location.lat.toString(),
-    lon: location.lng.toString(),
-    radius: radius.toString(),
-    tag: categories.join(","),
-    format: "json"
-  });
-
-  const response = await fetch(
-    `https://us1.locationiq.com/v1/nearby.php?${params}`
-  );
+export async function searchPoisAction(lat: string, lon: string, radius: number, types: string[]) {
+  console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
   
-  if (!response.ok) {
-    throw new Error("Failed to fetch POIs");
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // Increased to 60s
+  
+  try {
+    // Log the query being sent
+    console.log('[POI Search] Sending Overpass query:', query);
+    
+    const response = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: `data=${encodeURIComponent(query)}`,
+      signal: controller.signal
+    });
+    
+    const data = await response.json();
+    console.log('[POI Search] Raw response:', {
+      totalElements: data.elements?.length || 0,
+      types: data.elements?.map(e => e.tags?.amenity || e.tags?.leisure || e.tags?.tourism || e.tags?.shop)
+        .filter(Boolean)
+        .reduce((acc, type) => {
+          acc[type] = (acc[type] || 0) + 1;
+          return acc;
+        }, {})
+    });
+
+    // Process POIs with relaxed filtering
+    const pois = data.elements
+      .filter((poi: OverpassElement) => {
+        const lat = poi.lat || poi.center?.lat;
+        const lon = poi.lon || poi.center?.lon;
+        // Removed name requirement
+        return lat && lon;
+      })
+      .map((poi: OverpassElement) => ({
+        id: poi.id.toString(),
+        name: poi.tags?.name || poi.tags?.['addr:housename'] || 'Unnamed Location',
+        type: poi.tags?.amenity || poi.tags?.leisure || poi.tags?.tourism || poi.tags?.shop || 'place',
+        lat: (poi.lat || poi.center?.lat).toString(),
+        lon: (poi.lon || poi.center?.lon).toString(),
+        tags: poi.tags || {}
+      }))
+      .slice(0, 50); // Increased from 15 to 50
+
+    console.log('[POI Search] Processed POIs:', {
+      total: pois.length,
+      types: pois.reduce((acc, poi) => {
+        acc[poi.type] = (acc[poi.type] || 0) + 1;
+        return acc;
+      }, {})
+    });
+
+    return {
+      isSuccess: true,
+      data: pois
+    };
+  } catch (error) {
+    console.error('[POI Search] Error:', error);
+    return {
+      isSuccess: false,
+      error: error.toString(),
+      data: undefined
+    };
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const data = await response.json();
-  
-  return data.map((poi: any) => ({
-    id: poi.place_id,
-    name: poi.name || "Unnamed Location",
-    type: poi.type,
-    coordinates: {
-      lat: parseFloat(poi.lat),
-      lng: parseFloat(poi.lon)
-    },
-    address: poi.display_name,
-    rating: poi.rating,
-    distance: poi.distance
-  }));
 }
 
 // POI Display Component

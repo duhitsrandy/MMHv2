@@ -91,6 +91,7 @@ export default function MapComponent({
   showPois = false
 }: MapComponentProps) {
   const mapRef = useRef<L.Map | null>(null);
+  const poiMarkers = useRef<Map<string, L.Marker>>(new Map());
 
   // Cleanup effect
   useEffect(() => {
@@ -124,6 +125,87 @@ export default function MapComponent({
       coord[1],
       coord[0]
     ]) || []
+
+  // Render POIs if enabled
+  useEffect(() => {
+    if (!mapRef.current || !showPois) return;
+
+    console.log('[Map] Rendering POIs:', {
+      total: pois.length,
+      types: pois.reduce((acc: any, poi: any) => {
+        acc[poi.type] = (acc[poi.type] || 0) + 1;
+        return acc;
+      }, {})
+    });
+
+    // Clear existing POI markers
+    poiMarkers.current.forEach(marker => marker.remove());
+    poiMarkers.current.clear();
+
+    // Add new POI markers
+    pois.forEach((poi: any, index: number) => {
+      // Ensure we have valid coordinates
+      const poiLat = Number(poi.lat);
+      const poiLon = Number(poi.lon);
+      
+      // Skip invalid POIs
+      if (isNaN(poiLat) || isNaN(poiLon)) {
+        console.warn("[Map] Invalid POI coordinates:", poi);
+        return;
+      }
+      
+      // Create a unique key that includes the route type
+      const uniqueKey = `${poi.routeType || 'main'}-${poi.id}`;
+      
+      console.log('[Map] Adding POI marker:', {
+        key: uniqueKey,
+        name: poi.name,
+        type: poi.type,
+        lat: poiLat,
+        lon: poiLon
+      });
+      
+      const marker = L.marker([poiLat, poiLon], {
+        icon: defaultIcons.poiIcon
+      }).addTo(mapRef.current!);
+
+      // Create popup content with more details
+      const popupContent = `
+        <div class="max-w-[200px]">
+          <div class="font-medium">${poi.name || (poi.tags && poi.tags.name) || 'Unnamed Location'}</div>
+          <div class="text-muted-foreground text-sm">
+            ${poi.type || (poi.tags && (poi.tags.amenity || poi.tags.leisure || poi.tags.tourism)) || 'Unknown Type'}
+          </div>
+          ${poi.address ? `
+            <div class="text-muted-foreground mt-1 text-sm">
+              ${[
+                poi.address.road,
+                poi.address.house_number,
+                poi.address.city
+              ]
+                .filter(Boolean)
+                .join(", ")}
+            </div>
+          ` : ''}
+          ${poi.travelTimeFromStart && poi.travelTimeFromEnd ? `
+            <div class="mt-2 text-sm">
+              <div>From Start: ${Math.round(poi.travelTimeFromStart / 60)}min</div>
+              <div>From End: ${Math.round(poi.travelTimeFromEnd / 60)}min</div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      marker.bindPopup(popupContent);
+      poiMarkers.current.set(uniqueKey, marker);
+    });
+
+    return () => {
+      // Clean up markers on unmount
+      poiMarkers.current.forEach(marker => marker.remove());
+      poiMarkers.current.clear();
+    };
+  }, [pois, showPois]);
 
   return (
     <div className="h-[600px] w-full">
@@ -209,42 +291,6 @@ export default function MapComponent({
             </Popup>
           </Marker>
         )}
-
-        {/* POI Markers */}
-        {showPois &&
-          pois.map((poi: any, index: number) => (
-            <Marker
-              key={`poi-${poi.osm_id || poi.id || `${poi.lat}-${poi.lon}-${index}`}`}
-              position={[Number(poi.lat) || 0, Number(poi.lon) || 0]}
-              icon={defaultIcons.poiIcon}
-            >
-              <Popup>
-                <div className="max-w-[200px]">
-                  <div className="font-medium">{poi.name || (poi.tags && poi.tags.name) || 'Unnamed Location'}</div>
-                  <div className="text-muted-foreground text-sm">
-                    {poi.type || (poi.tags && (poi.tags.amenity || poi.tags.leisure || poi.tags.tourism)) || 'Unknown Type'}
-                  </div>
-                  {poi.address && (
-                    <div className="text-muted-foreground mt-1 text-sm">
-                      {[
-                        poi.address.road,
-                        poi.address.house_number,
-                        poi.address.city
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
-                    </div>
-                  )}
-                  {poi.travelTimeFromStart && poi.travelTimeFromEnd && (
-                    <div className="mt-2 text-sm">
-                      <div>From Start: {Math.round(poi.travelTimeFromStart / 60)}min</div>
-                      <div>From End: {Math.round(poi.travelTimeFromEnd / 60)}min</div>
-                    </div>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          ))}
 
         {/* Fit bounds to route */}
         <FitBounds
