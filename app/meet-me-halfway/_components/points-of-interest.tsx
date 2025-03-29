@@ -192,22 +192,78 @@ export default function PointsOfInterest({
 
   const sortedAndFilteredPois = useMemo(() => {
     console.log('[PointsOfInterest] Sorting and filtering POIs with travel times:', poisWithTravelTimes);
-    const filtered = poisWithTravelTimes.filter(poi => !selectedCategory || getPoiCategory(poi.type) === selectedCategory);
+    
+    // Apply category filter (from tabs)
+    let filtered = [...poisWithTravelTimes];
+    
+    // Filter by tabs
+    if (activeTab !== 'all') {
+      filtered = filtered.filter(poi => {
+        const lowerType = poi.type.toLowerCase();
+        switch (activeTab) {
+          case 'food':
+            return lowerType.includes('restaurant') || 
+                   lowerType.includes('cafe') || 
+                   lowerType.includes('bar') || 
+                   lowerType.includes('pub') ||
+                   lowerType.includes('food');
+          case 'activities':
+            return lowerType.includes('park') || 
+                   lowerType.includes('museum') || 
+                   lowerType.includes('cinema') || 
+                   lowerType.includes('theatre') ||
+                   lowerType.includes('theater') || 
+                   lowerType.includes('entertainment') ||
+                   lowerType.includes('gym') ||
+                   lowerType.includes('recreation');
+          case 'lodging':
+            return lowerType.includes('hotel') || 
+                   lowerType.includes('motel') || 
+                   lowerType.includes('inn') || 
+                   lowerType.includes('hostel') ||
+                   lowerType.includes('lodging');
+          case 'other':
+            return !lowerType.includes('restaurant') && 
+                   !lowerType.includes('cafe') && 
+                   !lowerType.includes('bar') && 
+                   !lowerType.includes('pub') &&
+                   !lowerType.includes('food') &&
+                   !lowerType.includes('park') && 
+                   !lowerType.includes('museum') && 
+                   !lowerType.includes('cinema') && 
+                   !lowerType.includes('theatre') &&
+                   !lowerType.includes('theater') && 
+                   !lowerType.includes('entertainment') &&
+                   !lowerType.includes('gym') &&
+                   !lowerType.includes('recreation') &&
+                   !lowerType.includes('hotel') && 
+                   !lowerType.includes('motel') && 
+                   !lowerType.includes('inn') && 
+                   !lowerType.includes('hostel') &&
+                   !lowerType.includes('lodging');
+          default:
+            return true;
+        }
+      });
+    }
+    
+    // Filter by favorites
+    if (showOnlyFavorites) {
+      filtered = filtered.filter(poi => poi.isFavorite);
+    }
+    
     console.log('[PointsOfInterest] Filtered POIs:', filtered);
     
+    // Sort by total travel time
     const sorted = filtered.sort((a, b) => {
       const aTime = a.totalTravelTime || Infinity;
       const bTime = b.totalTravelTime || Infinity;
-      console.log('[PointsOfInterest] Comparing POIs:', {
-        a: { name: a.name, time: aTime },
-        b: { name: b.name, time: bTime }
-      });
       return aTime - bTime;
     });
     
     console.log('[PointsOfInterest] Sorted POIs:', sorted);
     return sorted;
-  }, [poisWithTravelTimes, selectedCategory]);
+  }, [poisWithTravelTimes, activeTab, showOnlyFavorites]);
 
   // Get unique categories for the filter
   const categories = useMemo(() => {
@@ -314,12 +370,17 @@ export default function PointsOfInterest({
         <div className="flex items-center justify-between">
           <CardTitle>Points of Interest</CardTitle>
           <Button
-            variant="outline"
+            variant={showOnlyFavorites ? "default" : "outline"}
             size="sm"
             onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
-            className={showOnlyFavorites ? "bg-yellow-50" : ""}
+            className={showOnlyFavorites ? "bg-yellow-400 hover:bg-yellow-500 border-yellow-400" : ""}
+            title={showOnlyFavorites ? "Show all POIs" : "Show favorites only"}
           >
-            <Star className="size-4" />
+            {showOnlyFavorites ? (
+              <Star className="size-4 fill-current" />
+            ) : (
+              <Star className="size-4" />
+            )}
           </Button>
         </div>
       </CardHeader>
