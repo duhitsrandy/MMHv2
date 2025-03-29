@@ -87,7 +87,7 @@ export default function PointsOfInterest({
   midpointLng = "0"
 }: PointsOfInterestProps) {
   // Debug the full pois prop structure
-  // console.log('[PointsOfInterest] Raw pois prop:', JSON.stringify(pois, null, 2));
+  console.log('[PointsOfInterest] Raw pois prop:', JSON.stringify(pois, null, 2));
 
   const [poisWithTravelTimes, setPoisWithTravelTimes] = useState<
     PoiWithTravelTimes[]
@@ -127,7 +127,7 @@ export default function PointsOfInterest({
   // Combined effect to handle POI updates and travel time calculations
   useEffect(() => {
     if (!pois.length) {
-      // console.log('[PointsOfInterest] No POIs provided');
+      console.log('[PointsOfInterest] No POIs provided');
       setIsLoading(false)
       setPoisWithTravelTimes([])
       return
@@ -137,19 +137,19 @@ export default function PointsOfInterest({
     setPoisWithTravelTimes([]) // Reset before loading new ones
 
     try {
-      // console.log('[PointsOfInterest] Processing POIs:', pois);
+      console.log('[PointsOfInterest] Processing POIs:', pois);
       // Use the pre-calculated travel times from the POIs
       const updatedPois = pois.map(poi => {
         const poiId = poi.osm_id || `${poi.lat}-${poi.lon}`;
-        // console.log('[PointsOfInterest] Processing POI:', {
-        //   name: poi.name,
-        //   id: poiId,
-        //   travelTimeFromStart: poi.travelTimeFromStart,
-        //   travelTimeFromEnd: poi.travelTimeFromEnd,
-        //   totalTravelTime: poi.totalTravelTime,
-        //   distanceFromStart: poi.distanceFromStart,
-        //   distanceFromEnd: poi.distanceFromEnd
-        // });
+        console.log('[PointsOfInterest] Processing POI:', {
+          name: poi.name,
+          id: poiId,
+          travelTimeFromStart: poi.travelTimeFromStart,
+          travelTimeFromEnd: poi.travelTimeFromEnd,
+          totalTravelTime: poi.totalTravelTime,
+          distanceFromStart: poi.distanceFromStart,
+          distanceFromEnd: poi.distanceFromEnd
+        });
 
         // Ensure all required fields are present
         const updatedPoi = {
@@ -164,11 +164,11 @@ export default function PointsOfInterest({
           travelTimeDifference: poi.travelTimeDifference || undefined
         };
 
-        // console.log('[PointsOfInterest] Updated POI:', updatedPoi);
+        console.log('[PointsOfInterest] Updated POI:', updatedPoi);
         return updatedPoi;
       });
 
-      // console.log('[PointsOfInterest] Updated POIs:', updatedPois);
+      console.log('[PointsOfInterest] Updated POIs:', updatedPois);
       setPoisWithTravelTimes(updatedPois);
     } catch (error) {
       console.error("[PointsOfInterest] Error processing POIs:", error);
@@ -191,21 +191,21 @@ export default function PointsOfInterest({
   };
 
   const sortedAndFilteredPois = useMemo(() => {
-    // console.log('[PointsOfInterest] Sorting and filtering POIs with travel times:', poisWithTravelTimes);
+    console.log('[PointsOfInterest] Sorting and filtering POIs with travel times:', poisWithTravelTimes);
     const filtered = poisWithTravelTimes.filter(poi => !selectedCategory || getPoiCategory(poi.type) === selectedCategory);
-    // console.log('[PointsOfInterest] Filtered POIs:', filtered);
+    console.log('[PointsOfInterest] Filtered POIs:', filtered);
     
     const sorted = filtered.sort((a, b) => {
       const aTime = a.totalTravelTime || Infinity;
       const bTime = b.totalTravelTime || Infinity;
-      // console.log('[PointsOfInterest] Comparing POIs:', {
-      //   a: { name: a.name, time: aTime },
-      //   b: { name: b.name, time: bTime }
-      // });
+      console.log('[PointsOfInterest] Comparing POIs:', {
+        a: { name: a.name, time: aTime },
+        b: { name: b.name, time: bTime }
+      });
       return aTime - bTime;
     });
     
-    // console.log('[PointsOfInterest] Sorted POIs:', sorted);
+    console.log('[PointsOfInterest] Sorted POIs:', sorted);
     return sorted;
   }, [poisWithTravelTimes, selectedCategory]);
 
@@ -215,19 +215,19 @@ export default function PointsOfInterest({
   }, [poisWithTravelTimes]);
 
   const formatDuration = (seconds?: number): string => {
-    // console.log('[formatDuration] Input seconds:', seconds);
+    console.log('[formatDuration] Input seconds:', seconds);
     if (seconds === undefined || seconds === null) {
-      // console.log('[formatDuration] Returning N/A for undefined seconds');
+      console.log('[formatDuration] Returning N/A for undefined seconds');
       return "N/A";
     }
 
     // Convert seconds to minutes and round to nearest minute
     const minutes = Math.round(seconds / 60);
-    // console.log('[formatDuration] Converted to minutes:', minutes);
+    console.log('[formatDuration] Converted to minutes:', minutes);
 
     const hours = Math.floor(minutes / 60);
     const mins = Math.round(minutes % 60);
-    // console.log('[formatDuration] Calculated hours:', hours, 'mins:', mins);
+    console.log('[formatDuration] Calculated hours:', hours, 'mins:', mins);
 
     if (hours > 0) {
       return `${hours}h ${mins}m`;
@@ -307,8 +307,6 @@ export default function PointsOfInterest({
       })));
     }
   }, [sortedAndFilteredPois]);
-
-  console.log('[PointsOfInterest] POI data for rendering:', sortedAndFilteredPois);
 
   return (
     <Card className="h-[600px] overflow-hidden">
@@ -462,48 +460,63 @@ export default function PointsOfInterest({
                         )}
                       </div>
 
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="shrink-0">
-                            <Navigation className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.open(
-                                `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
-                                "_blank"
-                              );
-                            }}
-                          >
-                            Open in Google Maps
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.open(
-                                `http://maps.apple.com/?ll=${poi.lat},${poi.lon}`,
-                                "_blank"
-                              );
-                            }}
-                          >
-                            Open in Apple Maps
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.open(
-                                `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
-                                "_blank"
-                              );
-                            }}
-                          >
-                            Open in Waze
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex flex-col gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="icon" 
+                          className="size-8 shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPoiSelect?.(poi.osm_id || `${poi.lat}-${poi.lon}` || "");
+                          }}
+                          title="View on Map"
+                        >
+                          <MapPin className="size-4" />
+                        </Button>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="shrink-0">
+                              <Navigation className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(
+                                  `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
+                                  "_blank"
+                                );
+                              }}
+                            >
+                              Open in Google Maps
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(
+                                  `http://maps.apple.com/?ll=${poi.lat},${poi.lon}`,
+                                  "_blank"
+                                );
+                              }}
+                            >
+                              Open in Apple Maps
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(
+                                  `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
+                                  "_blank"
+                                );
+                              }}
+                            >
+                              Open in Waze
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

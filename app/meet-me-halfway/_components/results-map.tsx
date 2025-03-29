@@ -128,6 +128,7 @@ export default function ResultsMap({
   const [currentMidpoint, setCurrentMidpoint] = useState<{ lat: number; lng: number } | null>(null)
   const [alternateMidpoint, setAlternateMidpoint] = useState<{ lat: number; lng: number } | null>(null)
   const [combinedPois, setCombinedPois] = useState<PoiResponse[]>([])
+  const [selectedPoiId, setSelectedPoiId] = useState<string | undefined>(undefined)
 
   // Combine POIs from both routes, removing duplicates based on osm_id
   const uniquePois = useMemo(() => {
@@ -252,100 +253,77 @@ export default function ResultsMap({
           index === self.findIndex((p) => p.osm_id === poi.osm_id)
         );
         console.log('Combined unique POIs:', uniquePois);
-
-        // Calculate travel times and distances for all POIs
+        
+        // Immediately show POIs on the map without travel times
+        setCombinedPois(uniquePois);
+        
+        // Calculate travel times and distances for all POIs in the background
         console.log('Starting travel time calculations...');
-        const poisWithTravelInfo = await Promise.all(
-          uniquePois.map(async (poi) => {
-            try {
-              console.log(`Calculating travel times for POI: ${poi.name}`);
-              console.log('Start coordinates:', {
-                lat: startAddress.lat,
-                lng: startAddress.lng
-              });
-              console.log('POI coordinates:', {
-                lat: poi.lat,
-                lng: poi.lon
-              });
-              console.log('End coordinates:', {
-                lat: endAddress.lat,
-                lng: endAddress.lng
-              });
+        
+        // Create batches of POIs to process in parallel (5 POIs per batch)
+        // This prevents overwhelming the API with too many simultaneous requests
+        const batchSize = 5;
+        const poiBatches = [];
+        
+        for (let i = 0; i < uniquePois.length; i += batchSize) {
+          poiBatches.push(uniquePois.slice(i, i + batchSize));
+        }
+        
+        // Process each batch sequentially, but process POIs within each batch in parallel
+        let allProcessedPois: PoiResponse[] = [];
+        
+        for (const batch of poiBatches) {
+          const batchResults = await Promise.all(
+            batch.map(async (poi) => {
+              try {
+                console.log(`Calculating travel times for POI: ${poi.name}`);
+                
+                const [startRoute, endRoute] = await Promise.all([
+                  getRouteAction(
+                    startAddress.lat.toString(),
+                    startAddress.lng.toString(),
+                    poi.lat,
+                    poi.lon
+                  ),
+                  getRouteAction(
+                    poi.lat,
+                    poi.lon,
+                    endAddress.lat.toString(),
+                    endAddress.lng.toString()
+                  ),
+                ]);
 
-              const [startRoute, endRoute] = await Promise.all([
-                getRouteAction(
-                  startAddress.lat.toString(),
-                  startAddress.lng.toString(),
-                  poi.lat,
-                  poi.lon
-                ),
-                getRouteAction(
-                  poi.lat,
-                  poi.lon,
-                  endAddress.lat.toString(),
-                  endAddress.lng.toString()
-                ),
-              ]);
+                return {
+                  ...poi,
+                  distanceFromStart: startRoute.data?.distance,
+                  distanceFromEnd: endRoute.data?.distance,
+                  travelTimeFromStart: startRoute.data?.duration,
+                  travelTimeFromEnd: endRoute.data?.duration,
+                  travelTimeDifference: startRoute.data?.duration && endRoute.data?.duration 
+                    ? Math.abs(startRoute.data.duration - endRoute.data.duration)
+                    : undefined,
+                  totalTravelTime: startRoute.data?.duration && endRoute.data?.duration
+                    ? startRoute.data.duration + endRoute.data.duration
+                    : undefined,
+                  isFavorite: false,
+                };
+              } catch (error) {
+                console.error(`Error calculating travel times for POI ${poi.name}:`, error);
+                return poi; // Return the POI without travel times if calculation fails
+              }
+            })
+          );
+          
+          allProcessedPois = [...allProcessedPois, ...batchResults];
+          
+          // Update UI after each batch completes
+          setCombinedPois(allProcessedPois);
+        }
 
-              console.log('Route calculation results:', {
-                startRoute: startRoute.data,
-                endRoute: endRoute.data
-              });
-
-              const poiWithTravelInfo = {
-                ...poi,
-                distanceFromStart: startRoute.data?.distance,
-                distanceFromEnd: endRoute.data?.distance,
-                travelTimeFromStart: startRoute.data?.duration,
-                travelTimeFromEnd: endRoute.data?.duration,
-                travelTimeDifference: startRoute.data?.duration && endRoute.data?.duration 
-                  ? Math.abs(startRoute.data.duration - endRoute.data.duration)
-                  : undefined,
-                totalTravelTime: startRoute.data?.duration && endRoute.data?.duration
-                  ? startRoute.data.duration + endRoute.data.duration
-                  : undefined,
-                isFavorite: false,
-              };
-
-              console.log('POI with travel info:', poiWithTravelInfo);
-              return poiWithTravelInfo;
-            } catch (error) {
-              console.error(`Error calculating travel times for POI ${poi.name}:`, error);
-              return poi; // Return the POI without travel times if calculation fails
-            }
-          })
-        );
-
-        console.log('Final POIs with travel info:', poisWithTravelInfo);
-        setCombinedPois(poisWithTravelInfo);
-
-        // Add logging to verify POI data
-        console.log('Fetched POIs:', {
-          mainRoutePois: mainRoutePois.map(poi => ({
-            name: poi.name,
-            distanceFromStart: poi.distanceFromStart,
-            distanceFromEnd: poi.distanceFromEnd,
-            travelTimeFromStart: poi.travelTimeFromStart,
-            travelTimeFromEnd: poi.travelTimeFromEnd
-          })),
-          alternateRoutePois: alternateRoutePois.map(poi => ({
-            name: poi.name,
-            distanceFromStart: poi.distanceFromStart,
-            distanceFromEnd: poi.distanceFromEnd,
-            travelTimeFromStart: poi.travelTimeFromStart,
-            travelTimeFromEnd: poi.travelTimeFromEnd
-          }))
-        });
-
-        console.log('Final POIs with travel info (detailed):', poisWithTravelInfo.map(poi => ({
-          name: poi.name,
-          distanceFromStart: poi.distanceFromStart,
-          distanceFromEnd: poi.distanceFromEnd,
-          travelTimeFromStart: poi.travelTimeFromStart,
-          travelTimeFromEnd: poi.travelTimeFromEnd,
-          totalTravelTime: poi.totalTravelTime,
-          travelTimeDifference: poi.travelTimeDifference
-        })));
+        console.log('Final POIs with travel info:', allProcessedPois);
+        
+        // Final update to ensure all POIs are displayed
+        setCombinedPois(allProcessedPois);
       } catch (error) {
         console.error("Error fetching POIs:", error);
       } finally {
@@ -387,6 +365,8 @@ export default function ResultsMap({
           showAlternateRoute={true}
           pois={combinedPois}
           showPois={showPois}
+          selectedPoiId={selectedPoiId}
+          onPoiSelect={(poiId) => setSelectedPoiId(poiId)}
         />
 
         <div className="flex items-center justify-between">
@@ -405,7 +385,7 @@ export default function ResultsMap({
             <Card className="p-2">
               <div className="text-sm font-medium">Main Route</div>
               <div className="text-xs text-muted-foreground">
-                {Math.round(mainRoute.duration / 60)} min • {Math.round(mainRoute.distance / 1000)} km
+                {Math.round(mainRoute.duration / 60)} min • {((mainRoute.distance / 1000) * 0.621371).toFixed(1)} mi
               </div>
             </Card>
           )}
@@ -413,22 +393,25 @@ export default function ResultsMap({
             <Card className="p-2">
               <div className="text-sm font-medium">Alternate Route</div>
               <div className="text-xs text-muted-foreground">
-                {Math.round(alternateRoute.duration / 60)} min • {Math.round(alternateRoute.distance / 1000)} km
+                {Math.round(alternateRoute.duration / 60)} min • {((alternateRoute.distance / 1000) * 0.621371).toFixed(1)} mi
               </div>
             </Card>
           )}
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div>
         <PointsOfInterest
           pois={combinedPois}
-          startLat={parseFloat(startLat)}
-          startLng={parseFloat(startLng)}
-          endLat={parseFloat(endLat)}
-          endLng={parseFloat(endLng)}
+          startLat={startLat}
+          startLng={startLng}
+          endLat={endLat}
+          endLng={endLng}
           startAddress={startAddress.display_name || ""}
           endAddress={endAddress.display_name || ""}
+          onPoiSelect={(poiId) => setSelectedPoiId(poiId)}
+          midpointLat={currentMidpoint?.lat || ""}
+          midpointLng={currentMidpoint?.lng || ""}
         />
       </div>
     </div>

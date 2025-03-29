@@ -20,17 +20,41 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "/leaflet/marker-shadow.png"
 })
 
+// Create a custom red icon for the midpoint
+const redIcon = new L.Icon({
+  iconUrl: "/leaflet/marker-icon-red.png",
+  iconRetinaUrl: "/leaflet/marker-icon-2x-red.png",
+  shadowUrl: "/leaflet/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+})
+
+// Create a custom purple icon for the alternate midpoint
+const purpleIcon = new L.Icon({
+  iconUrl: "/leaflet/marker-icon-violet.png",
+  iconRetinaUrl: "/leaflet/marker-icon-2x-violet.png",
+  shadowUrl: "/leaflet/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+})
+
 interface Icons {
   startIcon: L.Icon.Default
   endIcon: L.Icon.Default
-  midpointIcon: L.Icon.Default
+  midpointIcon: L.Icon
+  alternateMidpointIcon: L.Icon
   poiIcon: L.Icon.Default
 }
 
 const defaultIcons: Icons = {
   startIcon: new L.Icon.Default(),
   endIcon: new L.Icon.Default(),
-  midpointIcon: new L.Icon.Default(),
+  midpointIcon: redIcon,
+  alternateMidpointIcon: purpleIcon,
   poiIcon: new L.Icon.Default()
 }
 
@@ -50,6 +74,8 @@ interface MapComponentProps {
   showAlternateRoute?: boolean
   pois?: any[]
   showPois?: boolean
+  selectedPoiId?: string
+  onPoiSelect?: (poiId: string) => void
 }
 
 // Component to fit bounds when route changes
@@ -84,7 +110,9 @@ export default function MapComponent({
   alternateRoute,
   showAlternateRoute = false,
   pois = [],
-  showPois = false
+  showPois = false,
+  selectedPoiId,
+  onPoiSelect
 }: MapComponentProps) {
   const mapRef = useRef<L.Map | null>(null);
   const poiMarkers = useRef<Map<string, L.Marker>>(new Map());
@@ -122,6 +150,29 @@ export default function MapComponent({
       coord[0]
     ]) || []
 
+  // Create an icon for selected POIs
+  const selectedPoiIcon = new L.Icon({
+    iconUrl: "/leaflet/marker-icon-gold.png",
+    iconRetinaUrl: "/leaflet/marker-icon-2x-gold.png",
+    shadowUrl: "/leaflet/marker-shadow.png",
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+  });
+
+  // Zoom to selected POI when it changes
+  useEffect(() => {
+    if (!mapRef.current || !selectedPoiId) return;
+    
+    const selectedMarker = poiMarkers.current.get(selectedPoiId);
+    if (selectedMarker) {
+      console.log('[Map] Zooming to selected POI:', selectedPoiId);
+      mapRef.current.setView(selectedMarker.getLatLng(), 16);
+      selectedMarker.openPopup();
+    }
+  }, [selectedPoiId]);
+
   // Render POIs if enabled
   useEffect(() => {
     if (!mapRef.current || !showPois) return;
@@ -150,25 +201,34 @@ export default function MapComponent({
         return;
       }
       
-      // Create a unique key using just the POI ID
-      const uniqueKey = poi.id;
+      // Create a unique key using the POI ID or coordinates
+      const uniqueKey = poi.osm_id || poi.id || `${poi.lat}-${poi.lon}`;
+      const isSelected = selectedPoiId === uniqueKey;
       
       console.log('[Map] Adding POI marker:', {
         key: uniqueKey,
         name: poi.name,
         type: poi.type,
         lat: poiLat,
-        lon: poiLon
+        lon: poiLon,
+        isSelected
       });
       
       const marker = L.marker([poiLat, poiLon], {
-        icon: defaultIcons.poiIcon
+        icon: isSelected ? selectedPoiIcon : defaultIcons.poiIcon
       }).addTo(mapRef.current!);
+
+      // Add click handler to the marker
+      marker.on('click', () => {
+        if (onPoiSelect) {
+          onPoiSelect(uniqueKey);
+        }
+      });
 
       // Create popup content with more details
       const popupContent = `
-        <div class="max-w-[200px]">
-          <div class="font-medium">${poi.name || (poi.tags && poi.tags.name) || 'Unnamed Location'}</div>
+        <div class="max-w-[330px]">
+          <div class="font-medium text-lg">${poi.name || (poi.tags && poi.tags.name) || 'Unnamed Location'}</div>
           <div class="text-muted-foreground text-sm">
             ${poi.type || (poi.tags && (poi.tags.amenity || poi.tags.leisure || poi.tags.tourism)) || 'Unknown Type'}
           </div>
@@ -177,23 +237,54 @@ export default function MapComponent({
               ${[
                 poi.address.road,
                 poi.address.house_number,
-                poi.address.city
+                poi.address.city,
+                poi.address.state,
+                poi.address.postal_code
               ]
                 .filter(Boolean)
                 .join(", ")}
             </div>
           ` : ''}
           ${poi.travelTimeFromStart && poi.travelTimeFromEnd ? `
-            <div class="mt-2 text-sm">
-              <div>From Start: ${Math.round(poi.travelTimeFromStart / 60)}min</div>
-              <div>From End: ${Math.round(poi.travelTimeFromEnd / 60)}min</div>
+            <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <div class="font-medium">From Start:</div>
+                <div>${Math.round(poi.travelTimeFromStart / 60)} min</div>
+                <div>${((poi.distanceFromStart / 1000) * 0.621371).toFixed(1)} mi</div>
+              </div>
+              <div>
+                <div class="font-medium">From End:</div>
+                <div>${Math.round(poi.travelTimeFromEnd / 60)} min</div>
+                <div>${((poi.distanceFromEnd / 1000) * 0.621371).toFixed(1)} mi</div>
+              </div>
             </div>
           ` : ''}
+          ${poi.travelTimeDifference ? `
+            <div class="mt-2 text-sm ${poi.travelTimeDifference / 60 <= 5 ? 'text-green-600' : 'text-amber-600'}">
+              <div class="font-medium">Time Difference:</div>
+              <div>${Math.round(poi.travelTimeDifference / 60)} min</div>
+            </div>
+          ` : ''}
+          <div class="mt-2 text-sm text-center">
+            <a href="https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}" target="_blank" class="text-blue-600 hover:underline">Google Maps</a>
+            <span class="mx-1 text-gray-400">|</span>
+            <a href="http://maps.apple.com/?ll=${poi.lat},${poi.lon}" target="_blank" class="text-blue-600 hover:underline">Apple Maps</a>
+            <span class="mx-1 text-gray-400">|</span>
+            <a href="https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes" target="_blank" class="text-blue-600 hover:underline">Waze</a>
+          </div>
         </div>
       `;
 
       marker.bindPopup(popupContent);
       poiMarkers.current.set(uniqueKey, marker);
+      
+      // If this is the selected POI, open its popup
+      if (isSelected && mapRef.current) {
+        setTimeout(() => {
+          mapRef.current?.setView([poiLat, poiLon], 16);
+          marker.openPopup();
+        }, 100);
+      }
     });
 
     return () => {
@@ -201,7 +292,7 @@ export default function MapComponent({
       poiMarkers.current.forEach(marker => marker.remove());
       poiMarkers.current.clear();
     };
-  }, [pois, showPois]);
+  }, [pois, showPois, selectedPoiId, onPoiSelect]);
 
   return (
     <div className="relative h-[520px] w-full rounded-lg overflow-hidden">
@@ -264,7 +355,7 @@ export default function MapComponent({
 
         {/* Alternate Midpoint Marker */}
         {showAlternateRoute && (
-          <Marker position={[amLat, amLng]} icon={defaultIcons.midpointIcon}>
+          <Marker position={[amLat, amLng]} icon={defaultIcons.alternateMidpointIcon}>
             <Popup>
               <div className="font-medium">Alternate Midpoint</div>
               <div className="text-sm text-muted-foreground">
