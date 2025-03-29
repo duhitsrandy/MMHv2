@@ -26,10 +26,10 @@ interface MeetMeHalfwayFormProps {
   onFindMidpoint: (data: {
     startLat: string
     startLng: string
-    startAddress: string
+    startAddress: { lat: number; lng: number; display_name?: string }
     endLat: string
     endLng: string
-    endAddress: string
+    endAddress: { lat: number; lng: number; display_name?: string }
   }) => void
 }
 
@@ -94,12 +94,8 @@ export default function MeetMeHalfwayForm({
     setIsLoading(true)
 
     try {
-      console.log('Starting geocoding process...');
-      console.log('Geocoding start address:', startAddress);
-      
       // Geocode start location
       const startResult = await geocodeLocationAction(startAddress)
-      console.log('Start location result:', startResult);
       
       if (!startResult.isSuccess) {
         toast.error(`Start address: ${startResult.message}`)
@@ -107,11 +103,8 @@ export default function MeetMeHalfwayForm({
         return
       }
 
-      console.log('Geocoding end address:', endAddress);
-      
       // Geocode end location
       const endResult = await geocodeLocationAction(endAddress)
-      console.log('End location result:', endResult);
       
       if (!endResult.isSuccess) {
         toast.error(`End address: ${endResult.message}`)
@@ -121,7 +114,6 @@ export default function MeetMeHalfwayForm({
 
       // Save locations if requested
       if (isSignedIn && saveStartLocation && startLocationName) {
-        console.log('Saving start location...');
         const newLocation = {
           userId: user.id,
           name: startLocationName,
@@ -132,7 +124,6 @@ export default function MeetMeHalfwayForm({
 
         try {
           await createLocationAction(newLocation)
-          console.log('Start location saved successfully');
         } catch (error) {
           console.error('Error saving start location:', error);
           // Don't fail the whole process if saving fails
@@ -141,7 +132,6 @@ export default function MeetMeHalfwayForm({
       }
 
       if (isSignedIn && saveEndLocation && endLocationName) {
-        console.log('Saving end location...');
         const newLocation = {
           userId: user.id,
           name: endLocationName,
@@ -152,7 +142,6 @@ export default function MeetMeHalfwayForm({
 
         try {
           await createLocationAction(newLocation)
-          console.log('End location saved successfully');
         } catch (error) {
           console.error('Error saving end location:', error);
           // Don't fail the whole process if saving fails
@@ -162,7 +151,6 @@ export default function MeetMeHalfwayForm({
 
       // Create search record if user is signed in
       if (isSignedIn) {
-        console.log('Creating search record...');
         try {
           await createSearchAction({
             userId: user.id,
@@ -175,7 +163,6 @@ export default function MeetMeHalfwayForm({
             midpointLat: "0", // Will be updated in the results page
             midpointLng: "0" // Will be updated in the results page
           })
-          console.log('Search record created successfully');
         } catch (error) {
           console.error('Error creating search record:', error);
           // Don't fail the whole process if saving fails
@@ -183,21 +170,22 @@ export default function MeetMeHalfwayForm({
         }
       }
 
-      console.log('Calling onFindMidpoint with coordinates:', {
-        startLat: startResult.data.lat,
-        startLng: startResult.data.lon,
-        endLat: endResult.data.lat,
-        endLng: endResult.data.lon
-      });
-
-      // Call onFindMidpoint with the data
+      // Call onFindMidpoint with the data, including full address objects
       onFindMidpoint({
         startLat: startResult.data.lat,
         startLng: startResult.data.lon,
-        startAddress: startAddress,
+        startAddress: {
+          lat: parseFloat(startResult.data.lat),
+          lng: parseFloat(startResult.data.lon),
+          display_name: startResult.data.display_name || startAddress
+        },
         endLat: endResult.data.lat,
         endLng: endResult.data.lon,
-        endAddress: endAddress
+        endAddress: {
+          lat: parseFloat(endResult.data.lat),
+          lng: parseFloat(endResult.data.lon),
+          display_name: endResult.data.display_name || endAddress
+        }
       })
     } catch (error) {
       console.error("Error processing form:", error)

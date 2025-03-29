@@ -16,10 +16,10 @@ type AppState = "input" | "results"
 interface AppData {
   startLat?: string
   startLng?: string
-  startAddress?: string
+  startAddress?: { lat: number; lng: number; display_name?: string }
   endLat?: string
   endLng?: string
-  endAddress?: string
+  endAddress?: { lat: number; lng: number; display_name?: string }
 }
 
 export default function MeetMeHalfwayApp() {
@@ -61,7 +61,14 @@ export default function MeetMeHalfwayApp() {
   }, [isLoaded, userId])
 
   // Handle form submission
-  const handleFindMidpoint = (data: AppData) => {
+  const handleFindMidpoint = (data: {
+    startLat: string
+    startLng: string
+    startAddress: { lat: number; lng: number; display_name?: string }
+    endLat: string
+    endLng: string
+    endAddress: { lat: number; lng: number; display_name?: string }
+  }) => {
     setAppData(data)
     setAppState("results")
   }
@@ -118,8 +125,8 @@ export default function MeetMeHalfwayApp() {
             startLng={appData.startLng || "0"}
             endLat={appData.endLat || "0"}
             endLng={appData.endLng || "0"}
-            startAddress={appData.startAddress || ""}
-            endAddress={appData.endAddress || ""}
+            startAddress={appData.startAddress || { lat: 0, lng: 0, display_name: '' }}
+            endAddress={appData.endAddress || { lat: 0, lng: 0, display_name: '' }}
           />
         </div>
       )}

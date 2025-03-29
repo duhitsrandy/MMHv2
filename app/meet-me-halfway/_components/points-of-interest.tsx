@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -86,6 +86,9 @@ export default function PointsOfInterest({
   midpointLat = "0",
   midpointLng = "0"
 }: PointsOfInterestProps) {
+  // Debug the full pois prop structure
+  // console.log('[PointsOfInterest] Raw pois prop:', JSON.stringify(pois, null, 2));
+
   const [poisWithTravelTimes, setPoisWithTravelTimes] = useState<
     PoiWithTravelTimes[]
   >([])
@@ -97,6 +100,8 @@ export default function PointsOfInterest({
   const [maxTimeDifference, setMaxTimeDifference] =
     useState<MaxTimeDifference>(15)
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState<string>("")
+  const [showFilters, setShowFilters] = useState(false)
 
   // Load favorites from localStorage on component mount
   useEffect(() => {
@@ -121,182 +126,114 @@ export default function PointsOfInterest({
 
   // Combined effect to handle POI updates and travel time calculations
   useEffect(() => {
-    let isMounted = true
-    const controller = new AbortController()
-
-    const updatePoisWithTravelTimes = async () => {
-      if (!pois.length) {
-        setIsLoading(false)
-        setPoisWithTravelTimes([])
-        return
-      }
-
-      setIsLoading(true)
-      setPoisWithTravelTimes([]) // Reset before loading new ones
-
-      try {
-        // Process POIs in batches of 3 to avoid overwhelming the API
-        const batchSize = 3
-        const updatedPois = []
-        
-        for (let i = 0; i < pois.length; i += batchSize) {
-          if (!isMounted) break
-
-          const batch = pois.slice(i, i + batchSize)
-          const batchResults = await Promise.all(
-            batch.map(async poi => {
-              if (!isMounted) return poi
-              
-              try {
-                // Get routes in parallel for each POI
-                const [startRoute, endRoute] = await Promise.all([
-                  getRouteAction(
-                    startLat.toString(),
-                    startLng.toString(),
-                    poi.lat,
-                    poi.lon
-                  ),
-                  getRouteAction(
-                    poi.lat,
-                    poi.lon,
-                    endLat.toString(),
-                    endLng.toString()
-                  )
-                ])
-
-                if (!isMounted) return poi
-
-                // If either route fails, use basic POI data
-                if (!startRoute.isSuccess || !endRoute.isSuccess) {
-                  return {
-                    ...poi,
-                    isFavorite: favorites.includes(poi.osm_id || ""),
-                  }
-                }
-
-                const travelTimeFromStart = startRoute.data?.duration
-                const travelTimeFromEnd = endRoute.data?.duration
-                const distanceFromStart = startRoute.data?.distance
-                const distanceFromEnd = endRoute.data?.distance
-
-                const totalTravelTime =
-                  travelTimeFromStart !== undefined &&
-                  travelTimeFromEnd !== undefined
-                    ? travelTimeFromStart + travelTimeFromEnd
-                    : undefined
-
-                const travelTimeDifference =
-                  travelTimeFromStart !== undefined &&
-                  travelTimeFromEnd !== undefined
-                    ? Math.abs(travelTimeFromEnd - travelTimeFromStart)
-                    : undefined
-
-                return {
-                  ...poi,
-                  travelTimeFromStart,
-                  travelTimeFromEnd,
-                  distanceFromStart,
-                  distanceFromEnd,
-                  totalTravelTime,
-                  travelTimeDifference,
-                  isFavorite: favorites.includes(poi.osm_id || ""),
-                }
-              } catch (error) {
-                console.error("Error calculating travel times for POI:", error)
-                return {
-                  ...poi,
-                  isFavorite: favorites.includes(poi.osm_id || ""),
-                }
-              }
-            })
-          )
-
-          if (!isMounted) break
-
-          updatedPois.push(...batchResults)
-          
-          // Update state incrementally as batches complete
-          if (isMounted) {
-            setPoisWithTravelTimes(prev => [...prev, ...batchResults])
-          }
-
-          // Small delay between batches to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 200))
-        }
-
-        if (isMounted) {
-          setIsLoading(false)
-        }
-      } catch (error) {
-        console.error("Error updating POIs:", error)
-        if (isMounted) {
-          // Fallback to basic POI data if travel time calculation fails
-          const basicPois = pois.map(poi => ({
-            ...poi,
-            isFavorite: favorites.includes(poi.osm_id || ""),
-          }))
-          setPoisWithTravelTimes(basicPois)
-          setIsLoading(false)
-        }
-      }
+    if (!pois.length) {
+      // console.log('[PointsOfInterest] No POIs provided');
+      setIsLoading(false)
+      setPoisWithTravelTimes([])
+      return
     }
 
-    updatePoisWithTravelTimes()
+    setIsLoading(true)
+    setPoisWithTravelTimes([]) // Reset before loading new ones
 
-    return () => {
-      isMounted = false
-      controller.abort()
+    try {
+      // console.log('[PointsOfInterest] Processing POIs:', pois);
+      // Use the pre-calculated travel times from the POIs
+      const updatedPois = pois.map(poi => {
+        const poiId = poi.osm_id || `${poi.lat}-${poi.lon}`;
+        // console.log('[PointsOfInterest] Processing POI:', {
+        //   name: poi.name,
+        //   id: poiId,
+        //   travelTimeFromStart: poi.travelTimeFromStart,
+        //   travelTimeFromEnd: poi.travelTimeFromEnd,
+        //   totalTravelTime: poi.totalTravelTime,
+        //   distanceFromStart: poi.distanceFromStart,
+        //   distanceFromEnd: poi.distanceFromEnd
+        // });
+
+        // Ensure all required fields are present
+        const updatedPoi = {
+          ...poi,
+          osm_id: poiId,
+          isFavorite: favorites.includes(poiId),
+          travelTimeFromStart: poi.travelTimeFromStart || undefined,
+          travelTimeFromEnd: poi.travelTimeFromEnd || undefined,
+          distanceFromStart: poi.distanceFromStart || undefined,
+          distanceFromEnd: poi.distanceFromEnd || undefined,
+          totalTravelTime: poi.totalTravelTime || undefined,
+          travelTimeDifference: poi.travelTimeDifference || undefined
+        };
+
+        // console.log('[PointsOfInterest] Updated POI:', updatedPoi);
+        return updatedPoi;
+      });
+
+      // console.log('[PointsOfInterest] Updated POIs:', updatedPois);
+      setPoisWithTravelTimes(updatedPois);
+    } catch (error) {
+      console.error("[PointsOfInterest] Error processing POIs:", error);
+    } finally {
+      setIsLoading(false);
     }
-  }, [pois, startLat, startLng, endLat, endLng, favorites])
+  }, [pois, favorites]);
 
-  // Memoize sorted and filtered POIs
+  // Define getPoiCategory before using it
+  const getPoiCategory = (type: string): string => {
+    if (type.includes('restaurant') || type.includes('cafe') || type.includes('bar')) return 'Food & Drink';
+    if (type.includes('park') || type.includes('playground') || type.includes('recreation')) return 'Parks & Recreation';
+    if (type.includes('hotel') || type.includes('motel') || type.includes('inn')) return 'Hotels';
+    if (type.includes('shop') || type.includes('store') || type.includes('market')) return 'Shopping';
+    if (type.includes('museum') || type.includes('gallery') || type.includes('theatre')) return 'Arts & Culture';
+    if (type.includes('school') || type.includes('university') || type.includes('college')) return 'Education';
+    if (type.includes('hospital') || type.includes('clinic') || type.includes('pharmacy')) return 'Healthcare';
+    if (type.includes('bank') || type.includes('atm') || type.includes('post')) return 'Services';
+    return 'Other';
+  };
+
   const sortedAndFilteredPois = useMemo(() => {
-    return poisWithTravelTimes
-      .filter(poi => {
-        // Filter by category
-        if (activeTab !== "all") {
-          const category = getPoiCategory(poi.type)
-          if (category !== activeTab) return false
-        }
+    // console.log('[PointsOfInterest] Sorting and filtering POIs with travel times:', poisWithTravelTimes);
+    const filtered = poisWithTravelTimes.filter(poi => !selectedCategory || getPoiCategory(poi.type) === selectedCategory);
+    // console.log('[PointsOfInterest] Filtered POIs:', filtered);
+    
+    const sorted = filtered.sort((a, b) => {
+      const aTime = a.totalTravelTime || Infinity;
+      const bTime = b.totalTravelTime || Infinity;
+      // console.log('[PointsOfInterest] Comparing POIs:', {
+      //   a: { name: a.name, time: aTime },
+      //   b: { name: b.name, time: bTime }
+      // });
+      return aTime - bTime;
+    });
+    
+    // console.log('[PointsOfInterest] Sorted POIs:', sorted);
+    return sorted;
+  }, [poisWithTravelTimes, selectedCategory]);
 
-        // Filter by time difference only if available
-        if (
-          poi.travelTimeDifference &&
-          poi.travelTimeDifference / 60 > maxTimeDifference
-        ) {
-          return false
-        }
+  // Get unique categories for the filter
+  const categories = useMemo(() => {
+    return Array.from(new Set(poisWithTravelTimes.map(poi => getPoiCategory(poi.type)))).sort();
+  }, [poisWithTravelTimes]);
 
-        // Filter favorites
-        if (showOnlyFavorites && !poi.isFavorite) {
-          return false
-        }
+  const formatDuration = (seconds?: number): string => {
+    // console.log('[formatDuration] Input seconds:', seconds);
+    if (seconds === undefined || seconds === null) {
+      // console.log('[formatDuration] Returning N/A for undefined seconds');
+      return "N/A";
+    }
 
-        return true
-      })
-      .sort((a, b) => {
-        // Sort by total travel time by default
-        const aTotalTime = a.totalTravelTime || Infinity
-        const bTotalTime = b.totalTravelTime || Infinity
-        return aTotalTime - bTotalTime
-      })
-      .slice(0, 10)
-  }, [poisWithTravelTimes, activeTab, maxTimeDifference, showOnlyFavorites])
+    // Convert seconds to minutes and round to nearest minute
+    const minutes = Math.round(seconds / 60);
+    // console.log('[formatDuration] Converted to minutes:', minutes);
 
-  const formatDuration = (minutes?: number): string => {
-    if (minutes === undefined) return "N/A"
-
-    // Round to nearest minute
-    minutes = Math.round(minutes)
-
-    const hours = Math.floor(minutes / 60)
-    const mins = Math.round(minutes % 60)
+    const hours = Math.floor(minutes / 60);
+    const mins = Math.round(minutes % 60);
+    // console.log('[formatDuration] Calculated hours:', hours, 'mins:', mins);
 
     if (hours > 0) {
-      return `${hours}h ${mins}m`
+      return `${hours}h ${mins}m`;
     }
 
-    return `${mins}m`
+    return `${mins}m`;
   }
 
   const formatDistance = (meters?: number): string => {
@@ -346,22 +283,6 @@ export default function PointsOfInterest({
     }
   }
 
-  // Group POIs by category for better organization
-  const getPoiCategory = (type: string): FilterOption => {
-    type = type.toLowerCase()
-    if (["restaurant", "cafe", "bar", "pub", "fast_food"].includes(type)) {
-      return "food"
-    } else if (
-      ["park", "cinema", "theatre", "theater", "museum"].includes(type)
-    ) {
-      return "activities"
-    } else if (["hotel", "hostel", "guest_house"].includes(type)) {
-      return "lodging"
-    } else {
-      return "other"
-    }
-  }
-
   const toggleFavorite = (poiId: string) => {
     setFavorites(prev => {
       if (prev.includes(poiId)) {
@@ -371,6 +292,23 @@ export default function PointsOfInterest({
       }
     })
   }
+
+  // Add debugging for POI data
+  useEffect(() => {
+    if (sortedAndFilteredPois.length > 0) {
+      console.log('[PointsOfInterest] POI data for rendering:', sortedAndFilteredPois.map(poi => ({
+        name: poi.name,
+        travelTimeFromStart: poi.travelTimeFromStart,
+        travelTimeFromEnd: poi.travelTimeFromEnd,
+        distanceFromStart: poi.distanceFromStart,
+        distanceFromEnd: poi.distanceFromEnd,
+        totalTravelTime: poi.totalTravelTime,
+        travelTimeDifference: poi.travelTimeDifference
+      })));
+    }
+  }, [sortedAndFilteredPois]);
+
+  console.log('[PointsOfInterest] POI data for rendering:', sortedAndFilteredPois);
 
   return (
     <Card className="h-[600px] overflow-hidden">
@@ -454,52 +392,61 @@ export default function PointsOfInterest({
                           </Button>
                         </div>
 
-                        <div className="text-muted-foreground mb-2 text-sm truncate">
-                          {[
-                            poi.address.road,
-                            poi.address.house_number,
-                            poi.address.city
-                          ]
-                            .filter(Boolean)
-                            .join(", ")}
-                        </div>
+                        <CardDescription>
+                          {poi.type}
+                          {poi.address && (
+                            <div className="text-sm text-muted-foreground mt-1">
+                              {[
+                                poi.address.street,
+                                poi.address.city,
+                                poi.address.state,
+                                poi.address.postal_code
+                              ].filter(Boolean).join(", ")}
+                            </div>
+                          )}
+                        </CardDescription>
 
                         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                           <div className="flex items-center gap-1 whitespace-nowrap">
                             <Clock className="size-3 shrink-0" />
                             <span className="truncate">
                               Start: {" "}
-                              {formatDuration(
-                                poi.travelTimeFromStart &&
-                                  poi.travelTimeFromStart / 60
-                              )}
+                              {typeof poi.travelTimeFromStart === 'number' 
+                                ? formatDuration(poi.travelTimeFromStart)
+                                : "N/A"}
                             </span>
                           </div>
+
                           <div className="flex items-center gap-1 whitespace-nowrap">
                             <Clock className="size-3 shrink-0" />
                             <span className="truncate">
                               End: {" "}
-                              {formatDuration(
-                                poi.travelTimeFromEnd &&
-                                  poi.travelTimeFromEnd / 60
-                              )}
+                              {typeof poi.travelTimeFromEnd === 'number'
+                                ? formatDuration(poi.travelTimeFromEnd)
+                                : "N/A"}
                             </span>
                           </div>
+
                           <div className="flex items-center gap-1 whitespace-nowrap">
                             <Navigation className="size-3 shrink-0" />
                             <span className="truncate">
-                              Start: {formatDistance(poi.distanceFromStart)}
+                              Start: {typeof poi.distanceFromStart === 'number'
+                                ? formatDistance(poi.distanceFromStart)
+                                : "N/A"}
                             </span>
                           </div>
+
                           <div className="flex items-center gap-1 whitespace-nowrap">
                             <Navigation className="size-3 shrink-0" />
                             <span className="truncate">
-                              End: {formatDistance(poi.distanceFromEnd)}
+                              End: {typeof poi.distanceFromEnd === 'number'
+                                ? formatDistance(poi.distanceFromEnd)
+                                : "N/A"}
                             </span>
                           </div>
                         </div>
 
-                        {poi.travelTimeDifference !== undefined && (
+                        {typeof poi.travelTimeDifference === 'number' && (
                           <div className="mt-2">
                             <Badge
                               variant={
@@ -523,32 +470,35 @@ export default function PointsOfInterest({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               window.open(
                                 `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
                                 "_blank"
-                              )
-                            }
+                              );
+                            }}
                           >
                             Open in Google Maps
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               window.open(
                                 `http://maps.apple.com/?ll=${poi.lat},${poi.lon}`,
                                 "_blank"
-                              )
-                            }
+                              );
+                            }}
                           >
                             Open in Apple Maps
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               window.open(
                                 `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
                                 "_blank"
-                              )
-                            }
+                              );
+                            }}
                           >
                             Open in Waze
                           </DropdownMenuItem>

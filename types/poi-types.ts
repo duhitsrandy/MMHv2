@@ -5,13 +5,20 @@ export interface PoiResponse {
   type: string;
   lat: string;
   lon: string;
-  address: {
-    road: string;
-    house_number: string;
-    city: string;
-    state: string;
-    country: string;
-  };
-  travelTime?: string;
   distance?: number;
+  distanceFromStart?: number;
+  distanceFromEnd?: number;
+  travelTimeFromStart?: number;
+  travelTimeFromEnd?: number;
+  travelTimeDifference?: number;
+  totalTravelTime?: number;
+  isFavorite?: boolean;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postal_code?: string;
+  };
+  tags?: Record<string, string>;
 }

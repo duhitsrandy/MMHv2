@@ -1,7 +1,7 @@
 "use server"
 
 import { ActionState } from "@/types"
-import { PoiResponse } from "@/types"
+import { PoiResponse } from "@/types/poi-types"
 
 // Simple rate limiting implementation
 let lastRequestTime = 0;
@@ -81,7 +81,7 @@ async function fallbackGeocodeAction(
   address: string
 ): Promise<ActionState<GeocodingResult>> {
   try {
-    console.log('Using fallback geocoding service (Nominatim)');
+    // console.log('Using fallback geocoding service (Nominatim)'); // Keep commented or remove?
     // Using OpenStreetMap Nominatim as a fallback
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
       address
@@ -126,7 +126,7 @@ export async function geocodeLocationAction(
   address: string
 ): Promise<ActionState<GeocodingResult>> {
   try {
-    console.log('Geocoding address:', address);
+    // console.log('Geocoding address:', address);
     const apiKey = process.env.NEXT_PUBLIC_LOCATIONIQ_KEY;
     if (!apiKey) {
       console.error('LocationIQ API key is missing');
@@ -142,7 +142,7 @@ export async function geocodeLocationAction(
 
     try {
       const response = await rateLimitedFetch(url);
-      console.log('LocationIQ API response status:', response.status);
+      // console.log('LocationIQ API response status:', response.status);
 
       if (!response.ok) {
         console.warn(`LocationIQ API error: ${response.statusText}. Trying fallback.`);
@@ -150,7 +150,7 @@ export async function geocodeLocationAction(
       }
 
       const data = await response.json();
-      console.log('LocationIQ API response:', data);
+      // console.log('LocationIQ API response:', data);
 
       if (!data || data.length === 0) {
         console.warn('No results from LocationIQ. Trying fallback.');
@@ -183,8 +183,8 @@ export async function searchPoisAction(
   radius: number = 1500,
   types: string[] = ["restaurant", "cafe", "bar", "park", "library", "cinema", "theatre", "museum", "hotel"]
 ): Promise<ActionState<PoiResponse[]>> {
-  console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
-  
+  // console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
+
   try {
     // Create an AbortController for timeout
     const controller = new AbortController();
@@ -277,16 +277,15 @@ export async function searchPoisAction(
           lat: poiLat.toString(),
           lon: poiLon.toString(),
           address: {
-            road: poi.tags?.['addr:street'] || '',
-            house_number: poi.tags?.['addr:housenumber'] || '',
+            street: poi.tags?.['addr:street'] || '',
             city: poi.tags?.['addr:city'] || '',
             state: poi.tags?.['addr:state'] || '',
-            country: poi.tags?.['addr:country'] || ''
-          }
+            country: poi.tags?.['addr:country'] || '',
+            postal_code: poi.tags?.['addr:postcode'] || ''
+          },
+          tags: poi.tags
         };
       });
-    
-    console.log(`[POI Search] Found ${pois.length} unique POIs near ${lat},${lon}`);
     
     // Calculate distances and sort by closest to the specified point
     const sortedPois = pois
@@ -302,13 +301,8 @@ export async function searchPoisAction(
       })
       .slice(0, 8); // Back to 8 POIs per route
     
-    console.log(`[POI Search] Returning ${sortedPois.length} sorted POIs:`, {
-      types: sortedPois.reduce((acc: any, poi: PoiResponse) => {
-        acc[poi.type] = (acc[poi.type] || 0) + 1;
-        return acc;
-      }, {})
-    });
-    
+    // console.log(`[POI Search] Found ${processedPois.length} unique POIs after deduplication`);
+
     return {
       isSuccess: true,
       message: "Successfully found points of interest",
@@ -352,408 +346,169 @@ function calculateViewbox(lat: string, lon: string, radiusKm: number): string {
   return `${minLon},${minLat},${maxLon},${maxLat}`;
 }
 
-export async function getRouteAction(
+// Function to calculate driving route using LocationIQ
+interface RouteResult {
+  distance: number
+  duration: number
+  geometry: {
+    coordinates: [number, number][]
+    type: string
+  }
+}
+
+// Internal function to handle OSRM routing
+async function getOsrmRoute(
   startLat: string,
-  startLon: string,
+  startLng: string,
   endLat: string,
-  endLon: string
-): Promise<ActionState<any>> {
+  endLng: string,
+  options: { alternatives: boolean; exclude?: string }
+): Promise<ActionState<RouteResult | RouteResult[]>> {
+  // console.log(`[Route Calculation] Calculating route from (${startLat},${startLng}) to (${endLat},${endLng})`);
+
+  const coordinates = `${startLng},${startLat};${endLng},${endLat}`;
+  let url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`;
+  if (options.alternatives) {
+    url += `&alternatives=true`;
+  }
+  if (options.exclude) {
+    url += `&exclude=${options.exclude}`;
+  }
+
   try {
-    // Validate coordinates
-    if (!startLat || !startLon || !endLat || !endLon) {
-      return {
-        isSuccess: false,
-        message: "Missing coordinates for route calculation"
-      }
-    }
-    
-    // Ensure coordinates are valid numbers
-    const coords = [
-      parseFloat(startLat), parseFloat(startLon),
-      parseFloat(endLat), parseFloat(endLon)
-    ];
-    
-    if (coords.some(isNaN)) {
-      return {
-        isSuccess: false,
-        message: "Invalid coordinates for route calculation"
-      }
-    }
-    
-    // Using OSRM for routing
-    const url = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`
+    // console.log(`[Route Calculation] Requesting route from OSRM: ${url}`);
+    const response = await rateLimitedFetch(url);
+    // console.log(`[Route Calculation] OSRM response:`, await response.clone().json());
 
-    const response = await rateLimitedFetch(url)
     if (!response.ok) {
-      console.warn(`OSRM API error: ${response.statusText}. Using fallback route data.`);
-      
-      // Return a fallback route with estimated data
-      // This is better than failing completely
-      const directDistance = calculateDistance(
-        parseFloat(startLat), parseFloat(startLon),
-        parseFloat(endLat), parseFloat(endLon)
-      );
-      
-      // Estimate duration based on distance (assuming average speed of 50 km/h)
-      // 50 km/h = 13.89 m/s
-      const estimatedDuration = directDistance / 13.89;
-      
-      // Create a simple straight-line route as fallback
-      return {
-        isSuccess: true,
-        message: "Route estimated (API error)",
-        data: {
-          distance: directDistance,
-          duration: estimatedDuration,
-          geometry: {
-            coordinates: [
-              [parseFloat(startLon), parseFloat(startLat)],
-              [parseFloat(endLon), parseFloat(endLat)]
-            ],
-            type: "LineString"
-          }
-        }
-      }
+      console.error(`[Route Calculation] OSRM API error: ${response.status} ${response.statusText}`);
+      throw new Error(`OSRM API error: ${response.statusText}`);
     }
 
-    const data = await response.json()
+    const data = await response.json();
     if (!data || !data.routes || data.routes.length === 0) {
-      return {
-        isSuccess: false,
-        message: "No route found between the provided locations"
-      }
+      console.error('[Route Calculation] No routes found by OSRM.');
+      throw new Error("No routes found");
     }
+
+    const routes = data.routes.map((route: any) => ({
+      distance: route.distance,
+      duration: route.duration,
+      geometry: route.geometry
+    }));
+
+    // console.log(`[Route Calculation] Returning calculated route:`, {
+    //   isSuccess: true,
+    //   message: "Route calculated successfully",
+    //   data: options.alternatives ? routes : routes[0]
+    // });
 
     return {
       isSuccess: true,
       message: "Route calculated successfully",
-      data: data.routes[0]
-    }
+      data: options.alternatives ? routes : routes[0]
+    };
   } catch (error) {
-    console.error("Error calculating route:", error)
-    
-    // Return a fallback route with estimated data
-    try {
-      const directDistance = calculateDistance(
-        parseFloat(startLat), parseFloat(startLon),
-        parseFloat(endLat), parseFloat(endLon)
-      );
-      
-      // Estimate duration based on distance (assuming average speed of 50 km/h)
-      // 50 km/h = 13.89 m/s
-      const estimatedDuration = directDistance / 13.89;
-      
-      return {
-        isSuccess: true,
-        message: "Route estimated (error fallback)",
-        data: {
-          distance: directDistance,
-          duration: estimatedDuration,
-          geometry: {
-            coordinates: [
-              [parseFloat(startLon), parseFloat(startLat)],
-              [parseFloat(endLon), parseFloat(endLat)]
-            ],
-            type: "LineString"
-          }
-        }
-      }
-    } catch (fallbackError) {
-      return { 
-        isSuccess: false, 
-        message: "Failed to calculate route and fallback also failed" 
-      }
-    }
+    console.error("[Route Calculation] Error calculating route:", error);
+    return {
+      isSuccess: false,
+      message: error instanceof Error ? error.message : "Failed to calculate route"
+    };
   }
 }
 
-export async function calculateMidpointAction(
+export async function getRouteAction(
   startLat: string,
-  startLon: string,
+  startLng: string,
   endLat: string,
-  endLon: string
-): Promise<ActionState<{ lat: string; lon: string }>> {
-  try {
-    // Get the route first
-    const routeResult = await getRouteAction(startLat, startLon, endLat, endLon)
-    
-    if (!routeResult.isSuccess) {
-      return {
-        isSuccess: false,
-        message: routeResult.message
-      }
-    }
-    
-    const route = routeResult.data
-    
-    // Extract the coordinates from the route
-    const coordinates = route.geometry.coordinates
-    
-    if (!coordinates || coordinates.length < 2) {
-      return {
-        isSuccess: false,
-        message: "Route has insufficient points for midpoint calculation"
-      }
-    }
-    
-    // Calculate the total distance of the route
-    let totalDistance = 0
-    const distances = []
-    
-    for (let i = 1; i < coordinates.length; i++) {
-      const segmentDistance = calculateDistance(
-        coordinates[i-1][1], coordinates[i-1][0], 
-        coordinates[i][1], coordinates[i][0]
-      )
-      distances.push(segmentDistance)
-      totalDistance += segmentDistance
-    }
-    
-    // Find the midpoint (50% of the total distance)
-    const halfDistance = totalDistance / 2
-    let distanceCovered = 0
-    let midpointIndex = 0
-    
-    for (let i = 0; i < distances.length; i++) {
-      distanceCovered += distances[i]
-      if (distanceCovered >= halfDistance) {
-        midpointIndex = i
-        break
-      }
-    }
-    
-    // Calculate the exact midpoint using linear interpolation
-    const segmentStart = coordinates[midpointIndex]
-    const segmentEnd = coordinates[midpointIndex + 1]
-    
-    // Calculate how far along the segment the midpoint is
-    const distanceBeforeSegment = distanceCovered - distances[midpointIndex]
-    const segmentFraction = (halfDistance - distanceBeforeSegment) / distances[midpointIndex]
-    
-    // Interpolate the coordinates
-    const midpointLon = segmentStart[0] + segmentFraction * (segmentEnd[0] - segmentStart[0])
-    const midpointLat = segmentStart[1] + segmentFraction * (segmentEnd[1] - segmentStart[1])
-    
-    return {
-      isSuccess: true,
-      message: "Midpoint calculated successfully",
-      data: {
-        lat: midpointLat.toString(),
-        lon: midpointLon.toString()
-      }
-    }
-  } catch (error) {
-    console.error("Error calculating midpoint:", error)
-    return { isSuccess: false, message: "Failed to calculate midpoint" }
-  }
+  endLng: string
+): Promise<ActionState<RouteResult>> {
+  return getOsrmRoute(startLat, startLng, endLat, endLng, { alternatives: false }) as Promise<ActionState<RouteResult>>;
 }
 
 export async function getAlternateRouteAction(
   startLat: string,
-  startLon: string,
+  startLng: string,
   endLat: string,
-  endLon: string
-): Promise<ActionState<any>> {
-  try {
-    // Validate coordinates
-    if (!startLat || !startLon || !endLat || !endLon) {
-      return {
-        isSuccess: false as const,
-        message: "Missing coordinates for alternate route calculation"
-      }
-    }
-    
-    // Ensure coordinates are valid numbers
-    const coords = [
-      parseFloat(startLat), parseFloat(startLon),
-      parseFloat(endLat), parseFloat(endLon)
-    ];
-    
-    if (coords.some(isNaN)) {
-      return {
-        isSuccess: false as const,
-        message: "Invalid coordinates for alternate route calculation"
-      }
-    }
+  endLng: string
+): Promise<ActionState<RouteResult>> {
+  const result = await getOsrmRoute(startLat, startLng, endLat, endLng, { alternatives: true });
+  if (result.isSuccess && Array.isArray(result.data) && result.data.length > 1) {
+    // Find the best alternative (different geometry, similar duration)
+    const mainRoute = result.data[0];
+    const alternative = result.data.slice(1).find(route => {
+      // Simple geometry check (e.g., different first coordinate after start)
+      const mainStartPoint = mainRoute.geometry.coordinates[1];
+      const altStartPoint = route.geometry.coordinates[1];
+      const geometryDiffers = mainStartPoint[0] !== altStartPoint[0] || mainStartPoint[1] !== altStartPoint[1];
+      
+      // Duration check (e.g., within 20% of main route duration)
+      const durationDifference = Math.abs(route.duration - mainRoute.duration) / mainRoute.duration;
+      const durationSimilar = durationDifference < 0.2;
+      
+      return geometryDiffers && durationSimilar;
+    });
 
-    // Define route type
-    interface RouteData {
-      distance: number;
-      duration: number;
-      geometry: {
-        coordinates: [number, number][];
-        type: string;
+    return {
+      isSuccess: true,
+      message: "Alternate route calculated successfully",
+      data: alternative || mainRoute // Fallback to main route if no good alternative
+    };
+  } else if (result.isSuccess && Array.isArray(result.data)) {
+    // Only one route found, return it
+    return {
+      isSuccess: true,
+      message: "Only one route found",
+      data: result.data[0]
+    };
+  }
+  // Handle error case
+  return { isSuccess: false, message: result.message || "Failed to get alternate routes" };
+}
+
+export async function reverseGeocodeAction(
+  lat: string,
+  lon: string
+): Promise<ActionState<{ display_name: string }>> {
+  try {
+    const apiKey = process.env.NEXT_PUBLIC_LOCATIONIQ_KEY;
+    if (!apiKey) {
+      console.error('LocationIQ API key is missing');
+      return {
+        isSuccess: false,
+        message: "LocationIQ API key is not configured"
       };
     }
 
-    // Request route with alternatives using OSRM
-    const url = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson&alternatives=true`
+    const url = `https://us1.locationiq.com/v1/reverse.php?key=${apiKey}&lat=${lat}&lon=${lon}&format=json`;
 
-    const response = await rateLimitedFetch(url)
-    if (!response.ok) {
-      console.warn(`OSRM API error for alternate route: ${response.statusText}. Using fallback route data.`);
-      return createFallbackRoute(startLat, startLon, endLat, endLon);
-    }
+    try {
+      const response = await rateLimitedFetch(url);
+      if (!response.ok) {
+        throw new Error(`LocationIQ API error: ${response.statusText}`);
+      }
 
-    const data = await response.json()
-    if (!data || !data.routes || data.routes.length === 0) {
+      const data = await response.json();
+      if (!data || !data.display_name) {
+        throw new Error("No address found for the coordinates");
+      }
+
       return {
-        isSuccess: false as const,
-        message: "No alternate route found between the provided locations"
-      }
-    }
-
-    // If we have multiple routes, choose the most suitable alternate
-    if (data.routes.length > 1) {
-      const mainRoute = data.routes[0] as RouteData;
-      const alternatives = data.routes.slice(1) as RouteData[];
-      
-      // Find a suitable alternative that isn't too much longer
-      const suitableAlternative = alternatives.find((route: RouteData) => 
-        route.distance <= mainRoute.distance * 1.4 // Max 40% longer
-      );
-
-      if (suitableAlternative) {
-        return {
-          isSuccess: true as const,
-          message: "Alternate route calculated successfully",
-          data: suitableAlternative
-        }
-      }
-    }
-
-    // If no suitable alternative found, create a fallback
-    return createFallbackRoute(startLat, startLon, endLat, endLon);
-  } catch (error) {
-    console.error("Error calculating alternate route:", error)
-    return createFallbackRoute(startLat, startLon, endLat, endLon);
-  }
-}
-
-// Helper function to create a fallback route
-function createFallbackRoute(startLat: string, startLon: string, endLat: string, endLon: string): ActionState<any> {
-  try {
-    const directDistance = calculateDistance(
-      parseFloat(startLat), parseFloat(startLon),
-      parseFloat(endLat), parseFloat(endLon)
-    );
-
-    // Create a simple route with a slight detour
-    const midLat = (parseFloat(startLat) + parseFloat(endLat)) / 2;
-    const midLon = (parseFloat(startLon) + parseFloat(endLon)) / 2;
-    
-    // Add a slight offset to the midpoint
-    const dx = parseFloat(endLon) - parseFloat(startLon);
-    const dy = parseFloat(endLat) - parseFloat(startLat);
-    const angle = Math.atan2(dy, dx) + Math.PI / 2; // Perpendicular angle
-    const offset = directDistance * 0.15 / 111000; // 15% of route distance, converted to degrees
-    
-    const detourLat = midLat + Math.sin(angle) * offset;
-    const detourLon = midLon + Math.cos(angle) * offset;
-
-    return {
-      isSuccess: true as const,
-      message: "Alternate route estimated (fallback)",
-      data: {
-        distance: directDistance * 1.2, // 20% longer than direct route
-        duration: (directDistance / 13.89) * 1.2, // Assuming ~50 km/h average speed
-        geometry: {
-          coordinates: [
-            [parseFloat(startLon), parseFloat(startLat)],
-            [detourLon, detourLat],
-            [parseFloat(endLon), parseFloat(endLat)]
-          ],
-          type: "LineString"
-        }
-      }
-    }
-  } catch (fallbackError) {
-    return { 
-      isSuccess: false as const, 
-      message: "Failed to calculate alternate route and fallback also failed" 
-    }
-  }
-}
-
-// Also add a function to calculate the midpoint for the alternate route
-export async function calculateAlternateMidpointAction(
-  startLat: string,
-  startLon: string,
-  endLat: string,
-  endLon: string
-): Promise<ActionState<{ lat: string; lon: string }>> {
-  try {
-    // Get the alternate route first
-    const routeResult = await getAlternateRouteAction(startLat, startLon, endLat, endLon)
-    
-    if (!routeResult.isSuccess) {
+        isSuccess: true,
+        message: "Address found successfully",
+        data: { display_name: data.display_name }
+      };
+    } catch (error) {
+      console.error("Error reverse geocoding location:", error);
+      // Fallback or more specific error handling could be added here
       return {
         isSuccess: false,
-        message: routeResult.message
-      }
-    }
-    
-    const route = routeResult.data
-    
-    // Extract the coordinates from the route
-    const coordinates = route.geometry.coordinates
-    
-    if (!coordinates || coordinates.length < 2) {
-      return {
-        isSuccess: false,
-        message: "Route has insufficient points for midpoint calculation"
-      }
-    }
-    
-    // Calculate the total distance of the route
-    let totalDistance = 0
-    const distances = []
-    
-    for (let i = 1; i < coordinates.length; i++) {
-      const segmentDistance = calculateDistance(
-        coordinates[i-1][1], coordinates[i-1][0], 
-        coordinates[i][1], coordinates[i][0]
-      )
-      distances.push(segmentDistance)
-      totalDistance += segmentDistance
-    }
-    
-    // Find the midpoint (50% of the total distance)
-    const halfDistance = totalDistance / 2
-    let distanceCovered = 0
-    let midpointIndex = 0
-    
-    for (let i = 0; i < distances.length; i++) {
-      distanceCovered += distances[i]
-      if (distanceCovered >= halfDistance) {
-        midpointIndex = i
-        break
-      }
-    }
-    
-    // Calculate the exact midpoint using linear interpolation
-    const segmentStart = coordinates[midpointIndex]
-    const segmentEnd = coordinates[midpointIndex + 1]
-    
-    // Calculate how far along the segment the midpoint is
-    const distanceBeforeSegment = distanceCovered - distances[midpointIndex]
-    const segmentFraction = (halfDistance - distanceBeforeSegment) / distances[midpointIndex]
-    
-    // Interpolate the coordinates
-    const midpointLon = segmentStart[0] + segmentFraction * (segmentEnd[0] - segmentStart[0])
-    const midpointLat = segmentStart[1] + segmentFraction * (segmentEnd[1] - segmentStart[1])
-    
-    return {
-      isSuccess: true,
-      message: "Alternate midpoint calculated successfully",
-      data: {
-        lat: midpointLat.toString(),
-        lon: midpointLon.toString()
-      }
+        message: error instanceof Error ? error.message : "Failed to find address for coordinates"
+      };
     }
   } catch (error) {
-    console.error("Error calculating alternate midpoint:", error)
-    return { isSuccess: false, message: "Failed to calculate alternate midpoint" }
+    console.error("Error in reverseGeocodeAction setup:", error);
+    return { isSuccess: false, message: "Failed to reverse geocode location" };
   }
 }
 
