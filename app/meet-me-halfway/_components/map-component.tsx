@@ -248,14 +248,14 @@ export default function MapComponent({
           ${poi.travelTimeFromStart && poi.travelTimeFromEnd ? `
             <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
               <div>
-                <div class="font-medium">From Start:</div>
+                <div class="font-medium">From Loc 1:</div>
                 <div>${Math.round(poi.travelTimeFromStart / 60)} min</div>
-                <div>${((poi.distanceFromStart / 1000) * 0.621371).toFixed(1)} mi</div>
+                <div>${Math.round((poi.distanceFromStart / 1000) * 0.621371)} mi</div>
               </div>
               <div>
-                <div class="font-medium">From End:</div>
+                <div class="font-medium">From Loc 2:</div>
                 <div>${Math.round(poi.travelTimeFromEnd / 60)} min</div>
-                <div>${((poi.distanceFromEnd / 1000) * 0.621371).toFixed(1)} mi</div>
+                <div>${Math.round((poi.distanceFromEnd / 1000) * 0.621371)} mi</div>
               </div>
             </div>
           ` : ''}
@@ -330,7 +330,7 @@ export default function MapComponent({
         {/* Start Marker */}
         <Marker position={[sLat, sLng]} icon={defaultIcons.startIcon}>
           <Popup>
-            <div className="font-medium">Start</div>
+            <div className="font-medium">Location 1</div>
             <div className="text-sm text-muted-foreground">{startAddress}</div>
           </Popup>
         </Marker>
@@ -338,7 +338,7 @@ export default function MapComponent({
         {/* End Marker */}
         <Marker position={[eLat, eLng]} icon={defaultIcons.endIcon}>
           <Popup>
-            <div className="font-medium">End</div>
+            <div className="font-medium">Location 2</div>
             <div className="text-sm text-muted-foreground">{endAddress}</div>
           </Popup>
         </Marker>

@@ -385,7 +385,7 @@ export default function ResultsMap({
             <Card className="p-2">
               <div className="text-sm font-medium">Main Route</div>
               <div className="text-xs text-muted-foreground">
-                {Math.round(mainRoute.duration / 60)} min • {((mainRoute.distance / 1000) * 0.621371).toFixed(1)} mi
+                {Math.round(mainRoute.duration / 60)} min • {Math.round((mainRoute.distance / 1000) * 0.621371)} mi
               </div>
             </Card>
           )}
@@ -393,7 +393,7 @@ export default function ResultsMap({
             <Card className="p-2">
               <div className="text-sm font-medium">Alternate Route</div>
               <div className="text-xs text-muted-foreground">
-                {Math.round(alternateRoute.duration / 60)} min • {((alternateRoute.distance / 1000) * 0.621371).toFixed(1)} mi
+                {Math.round(alternateRoute.duration / 60)} min • {Math.round((alternateRoute.distance / 1000) * 0.621371)} mi
               </div>
             </Card>
           )}

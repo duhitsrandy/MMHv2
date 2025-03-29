@@ -228,7 +228,7 @@ export default function MeetMeHalfwayForm({
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="startLocation">Start Location</Label>
+              <Label htmlFor="startLocation">Location 1</Label>
               {locations.length > 0 && (
                 <Select
                   value={startLocationId}
@@ -252,7 +252,7 @@ export default function MeetMeHalfwayForm({
               <div className="flex gap-2">
                 <Input
                   id="startLocation"
-                  placeholder="Enter start address"
+                  placeholder="Enter location 1 address"
                   value={startAddress}
                   onChange={e => setStartAddress(e.target.value)}
                   required
@@ -281,7 +281,7 @@ export default function MeetMeHalfwayForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="endLocation">End Location</Label>
+              <Label htmlFor="endLocation">Location 2</Label>
               {locations.length > 0 && (
                 <Select
                   value={endLocationId}
@@ -305,7 +305,7 @@ export default function MeetMeHalfwayForm({
               <div className="flex gap-2">
                 <Input
                   id="endLocation"
-                  placeholder="Enter end address"
+                  placeholder="Enter location 2 address"
                   value={endAddress}
                   onChange={e => setEndAddress(e.target.value)}
                   required

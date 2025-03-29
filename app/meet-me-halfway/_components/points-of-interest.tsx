@@ -299,11 +299,11 @@ export default function PointsOfInterest({
     const miles = meters * 0.000621371
 
     if (miles >= 10) {
-      // For longer distances, show only one decimal place
-      return `${miles.toFixed(1)} mi`
+      // For longer distances, round to nearest mile
+      return `${Math.round(miles)} mi`
     } else if (miles >= 0.1) {
-      // For medium distances, show one decimal place
-      return `${miles.toFixed(1)} mi`
+      // For medium distances, round to nearest mile
+      return `${Math.round(miles)} mi`
     } else {
       // For very short distances, show in feet (1 mile = 5280 feet)
       const feet = Math.round(miles * 5280)
@@ -454,7 +454,7 @@ export default function PointsOfInterest({
                         <CardDescription>
                           {poi.type}
                           {poi.address && (
-                            <div className="text-sm text-muted-foreground mt-1">
+                            <div className="text-xs text-muted-foreground mt-1">
                               {[
                                 poi.address.street,
                                 poi.address.city,
@@ -468,8 +468,8 @@ export default function PointsOfInterest({
                         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                           <div className="flex items-center gap-1 whitespace-nowrap">
                             <Clock className="size-3 shrink-0" />
-                            <span className="truncate">
-                              Start: {" "}
+                            <span className="truncate text-xs">
+                              Location 1: {" "}
                               {typeof poi.travelTimeFromStart === 'number' 
                                 ? formatDuration(poi.travelTimeFromStart)
                                 : "N/A"}
@@ -478,8 +478,8 @@ export default function PointsOfInterest({
 
                           <div className="flex items-center gap-1 whitespace-nowrap">
                             <Clock className="size-3 shrink-0" />
-                            <span className="truncate">
-                              End: {" "}
+                            <span className="truncate text-xs">
+                              Location 2: {" "}
                               {typeof poi.travelTimeFromEnd === 'number'
                                 ? formatDuration(poi.travelTimeFromEnd)
                                 : "N/A"}
@@ -488,8 +488,8 @@ export default function PointsOfInterest({
 
                           <div className="flex items-center gap-1 whitespace-nowrap">
                             <Navigation className="size-3 shrink-0" />
-                            <span className="truncate">
-                              Start: {typeof poi.distanceFromStart === 'number'
+                            <span className="truncate text-xs">
+                              Location 1: {typeof poi.distanceFromStart === 'number'
                                 ? formatDistance(poi.distanceFromStart)
                                 : "N/A"}
                             </span>
@@ -497,8 +497,8 @@ export default function PointsOfInterest({
 
                           <div className="flex items-center gap-1 whitespace-nowrap">
                             <Navigation className="size-3 shrink-0" />
-                            <span className="truncate">
-                              End: {typeof poi.distanceFromEnd === 'number'
+                            <span className="truncate text-xs">
+                              Location 2: {typeof poi.distanceFromEnd === 'number'
                                 ? formatDistance(poi.distanceFromEnd)
                                 : "N/A"}
                             </span>
