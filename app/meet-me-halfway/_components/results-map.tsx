@@ -138,6 +138,20 @@ export default function ResultsMap({
       index === self.findIndex((p) => p.osm_id === poi.osm_id)
     );
     
+    // Log POI counts and types
+    console.log('POI counts:', {
+      main: mainRoutePois.length,
+      alternate: alternateRoutePois.length,
+      combined: uniquePois.length
+    });
+    
+    // Log POI types
+    const poiTypes = uniquePois.reduce((acc, poi) => {
+      acc[poi.type] = (acc[poi.type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log('POI types:', poiTypes);
+    
     return uniquePois;
   }, [mainRoutePois, alternateRoutePois]);
 
@@ -162,6 +176,7 @@ export default function ResultsMap({
           setMainRoute(mainRouteRes.data)
           const mainMidpoint = getMidpoint(mainRouteRes.data);
           if (mainMidpoint) {
+            console.log('Setting main route midpoint:', mainMidpoint);
             setCurrentMidpoint(mainMidpoint);
           }
         }
@@ -170,6 +185,7 @@ export default function ResultsMap({
           setAlternateRoute(alternateRouteRes.data)
           const altMidpoint = getMidpoint(alternateRouteRes.data);
           if (altMidpoint) {
+            console.log('Setting alternate route midpoint:', altMidpoint);
             setAlternateMidpoint(altMidpoint);
           }
         }
@@ -181,6 +197,20 @@ export default function ResultsMap({
     fetchRoutes()
   }, [startLat, startLng, endLat, endLng, isClient])
 
+  // Debug logging for state changes
+  useEffect(() => {
+    console.log('State update:', {
+      hasMainRoute: !!mainRoute,
+      hasAlternateRoute: !!alternateRoute,
+      currentMidpoint: currentMidpoint ? `${currentMidpoint.lat},${currentMidpoint.lng}` : null,
+      alternateMidpoint: alternateMidpoint ? `${alternateMidpoint.lat},${alternateMidpoint.lng}` : null,
+      showPois,
+      mainRoutePoisCount: mainRoutePois.length,
+      alternateRoutePoisCount: alternateRoutePois.length,
+      currentPoisCount: combinedPois.length
+    });
+  }, [mainRoute, alternateRoute, currentMidpoint, alternateMidpoint, showPois, mainRoutePois, alternateRoutePois, combinedPois]);
+
   // Update POIs when routes change
   useEffect(() => {
     if (!mainRoute || !alternateRoute) return;
@@ -188,8 +218,10 @@ export default function ResultsMap({
     const fetchPois = async () => {
       try {
         setIsLoadingPois(true);
+        console.log('Starting POI fetch process...');
         
         // Fetch POIs for main route midpoint
+        console.log('Fetching POIs for main route midpoint:', currentMidpoint);
         const mainPoisResult = await searchPoisAction(
           currentMidpoint?.lat.toString() || "",
           currentMidpoint?.lng.toString() || "",
@@ -197,10 +229,12 @@ export default function ResultsMap({
           ["amenity", "leisure", "tourism", "shop"]
         );
         if (mainPoisResult.isSuccess && mainPoisResult.data) {
+          console.log('Main route POIs:', mainPoisResult.data);
           setMainRoutePois(mainPoisResult.data);
         }
 
         // Fetch POIs for alternate route midpoint
+        console.log('Fetching POIs for alternate route midpoint:', alternateMidpoint);
         const altPoisResult = await searchPoisAction(
           alternateMidpoint?.lat.toString() || "",
           alternateMidpoint?.lng.toString() || "",
@@ -208,6 +242,7 @@ export default function ResultsMap({
           ["amenity", "leisure", "tourism", "shop"]
         );
         if (altPoisResult.isSuccess && altPoisResult.data) {
+          console.log('Alternate route POIs:', altPoisResult.data);
           setAlternateRoutePois(altPoisResult.data);
         }
 
@@ -216,11 +251,27 @@ export default function ResultsMap({
         const uniquePois = allPois.filter((poi, index, self) => 
           index === self.findIndex((p) => p.osm_id === poi.osm_id)
         );
+        console.log('Combined unique POIs:', uniquePois);
 
         // Calculate travel times and distances for all POIs
+        console.log('Starting travel time calculations...');
         const poisWithTravelInfo = await Promise.all(
           uniquePois.map(async (poi) => {
             try {
+              console.log(`Calculating travel times for POI: ${poi.name}`);
+              console.log('Start coordinates:', {
+                lat: startAddress.lat,
+                lng: startAddress.lng
+              });
+              console.log('POI coordinates:', {
+                lat: poi.lat,
+                lng: poi.lon
+              });
+              console.log('End coordinates:', {
+                lat: endAddress.lat,
+                lng: endAddress.lng
+              });
+
               const [startRoute, endRoute] = await Promise.all([
                 getRouteAction(
                   startAddress.lat.toString(),
@@ -235,6 +286,11 @@ export default function ResultsMap({
                   endAddress.lng.toString()
                 ),
               ]);
+
+              console.log('Route calculation results:', {
+                startRoute: startRoute.data,
+                endRoute: endRoute.data
+              });
 
               const poiWithTravelInfo = {
                 ...poi,
@@ -251,6 +307,7 @@ export default function ResultsMap({
                 isFavorite: false,
               };
 
+              console.log('POI with travel info:', poiWithTravelInfo);
               return poiWithTravelInfo;
             } catch (error) {
               console.error(`Error calculating travel times for POI ${poi.name}:`, error);
@@ -259,7 +316,36 @@ export default function ResultsMap({
           })
         );
 
+        console.log('Final POIs with travel info:', poisWithTravelInfo);
         setCombinedPois(poisWithTravelInfo);
+
+        // Add logging to verify POI data
+        console.log('Fetched POIs:', {
+          mainRoutePois: mainRoutePois.map(poi => ({
+            name: poi.name,
+            distanceFromStart: poi.distanceFromStart,
+            distanceFromEnd: poi.distanceFromEnd,
+            travelTimeFromStart: poi.travelTimeFromStart,
+            travelTimeFromEnd: poi.travelTimeFromEnd
+          })),
+          alternateRoutePois: alternateRoutePois.map(poi => ({
+            name: poi.name,
+            distanceFromStart: poi.distanceFromStart,
+            distanceFromEnd: poi.distanceFromEnd,
+            travelTimeFromStart: poi.travelTimeFromStart,
+            travelTimeFromEnd: poi.travelTimeFromEnd
+          }))
+        });
+
+        console.log('Final POIs with travel info (detailed):', poisWithTravelInfo.map(poi => ({
+          name: poi.name,
+          distanceFromStart: poi.distanceFromStart,
+          distanceFromEnd: poi.distanceFromEnd,
+          travelTimeFromStart: poi.travelTimeFromStart,
+          travelTimeFromEnd: poi.travelTimeFromEnd,
+          totalTravelTime: poi.totalTravelTime,
+          travelTimeDifference: poi.travelTimeDifference
+        })));
       } catch (error) {
         console.error("Error fetching POIs:", error);
       } finally {
@@ -279,7 +365,7 @@ export default function ResultsMap({
           </div>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -346,5 +432,5 @@ export default function ResultsMap({
         />
       </div>
     </div>
-  )
+  );
 }
