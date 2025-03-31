@@ -14,7 +14,8 @@ const publicRoutes = createRouteMatcher([
   "/meet-me-halfway",
   "/about",
   "/pricing",
-  "/contact"
+  "/contact",
+  "/api/(.*)"
 ])
 
 export default clerkMiddleware(async (auth, req) => {
