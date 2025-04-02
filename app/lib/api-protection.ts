@@ -88,4 +88,20 @@ export function generateApiKey(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('')
+}
+
+interface ApiKeyCheck {
+  success: boolean;
+  apiKey?: string;
+}
+
+export async function checkApiKey(request: NextRequest): Promise<ApiKeyCheck> {
+  const apiKey = request.headers.get('x-api-key');
+  const expectedApiKey = process.env.API_KEY;
+
+  if (!apiKey || !expectedApiKey || apiKey !== expectedApiKey) {
+    return { success: false };
+  }
+
+  return { success: true, apiKey };
 } 

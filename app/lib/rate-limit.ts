@@ -1,5 +1,7 @@
 // Enhanced rate limiter with per-user and IP-based limiting
 import { auth } from "@clerk/nextjs/server"
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
 
 interface RateLimitConfig {
   maxRequests: number
@@ -85,4 +87,29 @@ export function withRateLimit(handler: Function, config?: RateLimitConfig) {
 
     return handler(req)
   }
+}
+
+// Create a new ratelimiter that allows 10 requests per 10 seconds
+export const ratelimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(10, '10 s'),
+  analytics: true,
+  prefix: 'ratelimit',
+});
+
+// Helper function to check rate limit
+export async function checkRateLimit(identifier: string) {
+  const { success, limit, reset, remaining } = await ratelimit.limit(identifier);
+  
+  return {
+    success,
+    limit,
+    reset,
+    remaining,
+    headers: {
+      'X-RateLimit-Limit': limit.toString(),
+      'X-RateLimit-Remaining': remaining.toString(),
+      'X-RateLimit-Reset': reset.toString(),
+    },
+  };
 } 
