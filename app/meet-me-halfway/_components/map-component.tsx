@@ -354,24 +354,24 @@ export default function MapComponent({
           />
         )}
 
-        {/* Render Start Marker */}
+        {/* Render Start Marker -> Renamed to Location 1 */}
         {sLat !== 0 && sLng !== 0 && (
           <Marker position={[sLat, sLng]} icon={defaultIcons.startIcon}>
             <Popup>
               <div className="text-center">
-                <div className="font-medium">Start Location</div>
+                <div className="font-medium">Location 1</div>
                 <div className="text-sm text-muted-foreground">{startAddress}</div>
               </div>
             </Popup>
           </Marker>
         )}
 
-        {/* Render End Marker */}
+        {/* Render End Marker -> Renamed to Location 2 */}
         {eLat !== 0 && eLng !== 0 && (
           <Marker position={[eLat, eLng]} icon={defaultIcons.endIcon}>
             <Popup>
               <div className="text-center">
-                <div className="font-medium">End Location</div>
+                <div className="font-medium">Location 2</div>
                 <div className="text-sm text-muted-foreground">{endAddress}</div>
               </div>
             </Popup>
