@@ -2,17 +2,14 @@
 
 import { ActionState } from "@/types"
 import { PoiResponse } from "@/types/poi-types"
-
-// Simple rate limiting implementation
-let lastRequestTime = 0;
-const MIN_REQUEST_INTERVAL = 500; // Reduced to 500ms (2 requests per second)
+import { rateLimit } from "@/lib/rate-limit"
 
 // Simple in-memory cache
 const apiCache: Record<string, { data: any, timestamp: number }> = {};
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 // Helper function to enforce rate limiting with retry logic
-async function rateLimitedFetch(url: string, maxRetries = 3): Promise<Response> {
+export async function rateLimitedFetch(url: string, maxRetries = 3): Promise<Response> {
   // Check cache first
   if (apiCache[url] && (Date.now() - apiCache[url].timestamp) < CACHE_TTL) {
     return {
@@ -29,11 +26,10 @@ async function rateLimitedFetch(url: string, maxRetries = 3): Promise<Response> 
 
   while (retries < maxRetries) {
     try {
-      // Enforce rate limiting
-      const now = Date.now();
-      const timeSinceLastRequest = now - lastRequestTime;
-      if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-        await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
+      // Check rate limit before making request
+      const rateLimitResult = await rateLimit({ type: 'authenticated' });
+      if (!rateLimitResult.success) {
+        throw new Error('Rate limit exceeded. Please try again later.');
       }
 
       // Make the request
@@ -43,9 +39,6 @@ async function rateLimitedFetch(url: string, maxRetries = 3): Promise<Response> 
           'Accept-Language': 'en-US,en;q=0.9'
         }
       });
-
-      // Update last request time
-      lastRequestTime = Date.now();
 
       // Cache successful responses
       if (response.ok) {

@@ -73,18 +73,3 @@ export interface MidpointResponse {
   lat: string
   lon: string
 }
-
-export interface PoiResponse {
-  name: string
-  address: {
-    road?: string
-    house_number?: string
-    city?: string
-    state?: string
-    postcode?: string
-    country?: string
-  }
-  lat: string
-  lon: string
-  type: string
-}

@@ -52,7 +52,8 @@ function isRateLimited(identifier: string, type: 'user' | 'ip', config: RateLimi
 
 export async function rateLimitedFetch(url: string, options?: RequestInit): Promise<Response> {
   const { userId } = auth()
-  const ip = options?.headers?.['x-forwarded-for'] as string || 'unknown'
+  const headers = options?.headers as Record<string, string> | undefined
+  const ip = headers?.['x-forwarded-for'] || 'unknown'
   
   // Check both user and IP limits
   if (userId && isRateLimited(userId, 'user')) {

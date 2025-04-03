@@ -1,3 +1,5 @@
+import withBundleAnalyzer from '@next/bundle-analyzer'
+
 /*
 <ai_context>
 Configures Next.js for the app.
@@ -11,4 +13,8 @@ const nextConfig = {
   }
 }
 
-export default nextConfig
+const bundleAnalyzer = withBundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+})
+
+export default bundleAnalyzer(nextConfig)

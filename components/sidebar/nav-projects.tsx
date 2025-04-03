@@ -47,12 +47,12 @@ export function NavProjects({
       <SidebarMenu>
         {projects.map(item => (
           <SidebarMenuItem key={item.name}>
-            <SidebarMenuButton asChild>
-              <a href={item.url}>
+            <a href={item.url} className="block w-full">
+              <SidebarMenuButton>
                 <item.icon />
                 <span>{item.name}</span>
-              </a>
-            </SidebarMenuButton>
+              </SidebarMenuButton>
+            </a>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuAction showOnHover>

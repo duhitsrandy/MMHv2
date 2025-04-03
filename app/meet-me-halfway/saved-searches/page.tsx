@@ -11,30 +11,10 @@ import {
   CardHeader,
   CardTitle
 } from "@/components/ui/card"
+import { SavedSearchesSkeleton } from "./_components/saved-searches-skeleton"
 
-export default async function SavedSearchesPage() {
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="mb-8 text-center text-3xl font-bold">Saved Searches</h1>
-
-      <Card className="mx-auto max-w-4xl">
-        <CardHeader>
-          <CardTitle>Your Saved Searches</CardTitle>
-          <CardDescription>
-            View and reuse your previous searches
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<SavedSearchesSkeleton />}>
-            <SavedSearchesFetcher />
-          </Suspense>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-async function SavedSearchesFetcher() {
+// Separate component for fetching and displaying saved searches
+async function SavedSearchesContent() {
   const { userId } = await auth()
 
   if (!userId) {
@@ -76,19 +56,25 @@ async function SavedSearchesFetcher() {
   return <SavedSearchesList searches={searchesResult.data} />
 }
 
-function SavedSearchesSkeleton() {
+export default async function SavedSearchesPage() {
   return (
-    <div className="space-y-4">
-      {[1, 2, 3].map(i => (
-        <div key={i} className="rounded-md border p-4">
-          <div className="mb-2 h-5 w-40 animate-pulse rounded bg-gray-200"></div>
-          <div className="mb-2 h-4 w-full animate-pulse rounded bg-gray-200"></div>
-          <div className="flex justify-between">
-            <div className="h-4 w-20 animate-pulse rounded bg-gray-200"></div>
-            <div className="h-8 w-24 animate-pulse rounded bg-gray-200"></div>
-          </div>
-        </div>
-      ))}
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="mb-8 text-center text-3xl font-bold">Saved Searches</h1>
+
+      <Card className="mx-auto max-w-4xl">
+        <CardHeader>
+          <CardTitle>Your Saved Searches</CardTitle>
+          <CardDescription>
+            View and reuse your previous searches
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Suspense fallback={<SavedSearchesSkeleton />}>
+            {/* @ts-expect-error Async Server Component */}
+            <SavedSearchesContent />
+          </Suspense>
+        </CardContent>
+      </Card>
     </div>
   )
 }
