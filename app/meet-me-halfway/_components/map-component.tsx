@@ -78,22 +78,8 @@ interface MapComponentProps {
   onPoiSelect?: (poiId: string) => void
 }
 
-// Component to fit bounds when route changes
-function FitBounds({ route }: { route: any }) {
-  const map = useMap()
-
-  useEffect(() => {
-    if (!route) return
-
-    const bounds = L.latLngBounds([])
-    route.geometry.coordinates.forEach((coord: [number, number]) => {
-      bounds.extend([coord[1], coord[0]])
-    })
-    map.fitBounds(bounds, { padding: [50, 50] })
-  }, [map, route])
-
-  return null
-}
+// Component to fit bounds - leave commented out for now
+// function FitBounds({ route }: { route: any }) { ... }
 
 export default function MapComponent({
   startLat,
@@ -116,16 +102,6 @@ export default function MapComponent({
 }: MapComponentProps) {
   const mapRef = useRef<L.Map | null>(null);
   const poiMarkers = useRef<Map<string, L.Marker>>(new Map());
-
-  // Cleanup effect
-  useEffect(() => {
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
-  }, []);
 
   // Convert string coordinates to numbers
   const sLat = Number(startLat) || 0
@@ -161,47 +137,14 @@ export default function MapComponent({
     shadowSize: [41, 41]
   });
 
-  // Zoom and pan to selected POI when it changes
-  useEffect(() => {
-    if (!mapRef.current || !selectedPoiId) return;
-
-    const selectedMarker = poiMarkers.current.get(selectedPoiId);
-    if (selectedMarker) {
-      const map = mapRef.current;
-      const targetLatLng = selectedMarker.getLatLng();
-      const targetZoom = 15; // Reduced zoom level
-
-      console.log('[Map] Focusing on selected POI:', selectedPoiId);
-
-      // Use flyTo for a smoother transition
-      map.flyTo(targetLatLng, targetZoom, {
-        duration: 0.8 // Adjust duration as needed
-      });
-
-      // Open popup after flyTo animation completes
-      const openPopupOnMoveEnd = () => {
-        // Ensure the marker still exists and is the currently selected one
-        const currentMarker = poiMarkers.current.get(selectedPoiId);
-        if (currentMarker === selectedMarker) {
-           // Pan map slightly down to give popup space before opening
-           map.panBy([0, -100], { animate: true, duration: 0.3 }); // Pan down 100px
-
-           // Open popup after panning
-           map.once('moveend', () => { // Use 'once' to avoid infinite loops if pan triggers moveend
-              if (poiMarkers.current.get(selectedPoiId) === selectedMarker) { // Double check selection
-                 selectedMarker.openPopup();
-              }
-           });
-        }
-        map.off('moveend', openPopupOnMoveEnd); // Clean up the initial flyTo listener
-      };
-      map.on('moveend', openPopupOnMoveEnd);
-    }
-  }, [selectedPoiId]);
-
   // Render POIs if enabled
   useEffect(() => {
-    if (!mapRef.current || !showPois) return;
+    const map = mapRef.current;
+    if (!map || !showPois) {
+      poiMarkers.current.forEach(marker => marker.remove());
+      poiMarkers.current.clear();
+      return;
+    }
 
     console.log('[Map] Rendering POIs:', {
       total: pois.length,
@@ -216,47 +159,65 @@ export default function MapComponent({
     poiMarkers.current.clear();
 
     // Add new POI markers
-    pois.forEach((poi: any, index: number) => {
-      // Ensure we have valid coordinates
+    pois.forEach((poi: any) => {
       const poiLat = Number(poi.lat);
       const poiLon = Number(poi.lon);
       
-      // Skip invalid POIs
       if (isNaN(poiLat) || isNaN(poiLon)) {
         console.warn("[Map] Invalid POI coordinates:", poi);
         return;
       }
       
-      // Create a unique key using the POI ID or coordinates
       const uniqueKey = poi.osm_id || poi.id || `${poi.lat}-${poi.lon}`;
       const isSelected = selectedPoiId === uniqueKey;
       
-      console.log('[Map] Adding POI marker:', {
-        key: uniqueKey,
-        name: poi.name,
-        type: poi.type,
-        lat: poiLat,
-        lon: poiLon,
-        isSelected
-      });
-      
       const marker = L.marker([poiLat, poiLon], {
         icon: isSelected ? selectedPoiIcon : defaultIcons.poiIcon
-      }).addTo(mapRef.current!);
+      }).addTo(map);
 
-      // Add click handler to the marker
+      // --- Updated Click Handler --- 
       marker.on('click', () => {
+        if (!map) return; 
+
         if (onPoiSelect) {
           onPoiSelect(uniqueKey);
         }
-      });
 
-      // Create popup content with more details
+        const targetLatLng = L.latLng(poiLat, poiLon);
+        const targetZoom = 15;
+        const currentCenter = map.getCenter();
+        const currentZoom = map.getZoom();
+
+        // Check if already focused & popup is open or opening
+        if (currentZoom === targetZoom && currentCenter.distanceTo(targetLatLng) < 10) { 
+          if (!marker.isPopupOpen()) {
+            marker.openPopup(); // Ensure popup is open if already focused
+          }
+          return; 
+        }
+
+        // Fly to the marker
+        map.flyTo(targetLatLng, targetZoom, { duration: 0.8 });
+
+        // On flyTo end, simply open the popup
+        // Leaflet's default autoPan should handle visibility
+        map.once('moveend', () => {
+            // Retrieve marker again in case it was removed/re-added during flyTo
+            const currentMarker = poiMarkers.current.get(uniqueKey);
+            if (currentMarker && !currentMarker.isPopupOpen()) {
+                currentMarker.openPopup();
+            }
+            // REMOVED nested panBy and second moveend listener
+        });
+      });
+      // --- End Updated Click Handler ---
+
+      // Create popup content
       const popupContent = `
         <div class="max-w-[330px]">
           <div class="font-medium text-lg">${poi.name || (poi.tags && poi.tags.name) || 'Unnamed Location'}</div>
           <div class="text-muted-foreground text-sm">
-            ${poi.type || (poi.tags && (poi.tags.amenity || poi.tags.leisure || poi.tags.tourism)) || 'Unknown Type'}
+            ${poi.type || (poi.tags && (poi.tags.amenity || poi.tags.leisure || poi.tags.tourism || poi.tags.shop)) || 'Unknown Type'}
           </div>
           ${poi.address ? `
             <div class="text-muted-foreground mt-1 text-sm">
@@ -271,21 +232,21 @@ export default function MapComponent({
                 .join(", ")}
             </div>
           ` : ''}
-          ${poi.travelTimeFromStart && poi.travelTimeFromEnd ? `
+          ${poi.travelTimeFromStart != null && poi.travelTimeFromEnd != null ? `
             <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
               <div>
                 <div class="font-medium">From Loc 1:</div>
                 <div>${Math.round(poi.travelTimeFromStart / 60)} min</div>
-                <div>${Math.round((poi.distanceFromStart / 1000) * 0.621371)} mi</div>
+                <div>${poi.distanceFromStart != null ? `${Math.round((poi.distanceFromStart / 1000) * 0.621371)} mi` : ''}</div>
               </div>
               <div>
                 <div class="font-medium">From Loc 2:</div>
                 <div>${Math.round(poi.travelTimeFromEnd / 60)} min</div>
-                <div>${Math.round((poi.distanceFromEnd / 1000) * 0.621371)} mi</div>
+                <div>${poi.distanceFromEnd != null ? `${Math.round((poi.distanceFromEnd / 1000) * 0.621371)} mi` : ''}</div>
               </div>
             </div>
           ` : ''}
-          ${poi.travelTimeDifference ? `
+          ${poi.travelTimeDifference != null ? `
             <div class="mt-2 text-sm ${poi.travelTimeDifference / 60 <= 5 ? 'text-green-600' : 'text-amber-600'}">
               <div class="font-medium">Time Difference:</div>
               <div>${Math.round(poi.travelTimeDifference / 60)} min</div>
@@ -303,97 +264,84 @@ export default function MapComponent({
 
       marker.bindPopup(popupContent);
       poiMarkers.current.set(uniqueKey, marker);
-      
-      // If this is the selected POI, open its popup
-      if (isSelected && mapRef.current) {
-        setTimeout(() => {
-          mapRef.current?.setView([poiLat, poiLon], 16);
-          marker.openPopup();
-        }, 100);
-      }
     });
 
+    // Cleanup function for this POI effect
     return () => {
-      // Clean up markers on unmount
-      poiMarkers.current.forEach(marker => marker.remove());
-      poiMarkers.current.clear();
+      if (mapRef.current) {
+        poiMarkers.current.forEach(marker => marker.remove());
+        poiMarkers.current.clear();
+      }
     };
-  }, [pois, showPois, selectedPoiId, onPoiSelect]);
+  }, [pois, showPois, selectedPoiId, onPoiSelect]); // Dependencies
 
   return (
     <div className="relative h-[520px] w-full rounded-lg overflow-hidden">
       <MapContainer
-        center={[mLat, mLng]}
-        zoom={13}
-        className="h-full w-full"
         ref={mapRef}
+        center={sLat !== 0 && sLng !== 0 ? [sLat, sLng] : [40.5, -74.5]}
+        zoom={10}
+        style={{ height: "600px", width: "100%" }}
+        whenReady={() => { /* Map is ready, ref is set */ }}
+        className="rounded-lg z-0"
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
         
-        {/* Main Route */}
-        {mainRoute && (
+        {/* Render Main Route */}
+        {mainRouteCoords.length > 0 && (
           <Polyline
             positions={mainRouteCoords}
-            color="#3b82f6"
-            weight={6}
-            opacity={1}
+            color="blue"
+            weight={5}
+            opacity={0.7}
           />
         )}
 
-        {/* Alternate Route */}
-        {alternateRoute && showAlternateRoute && (
-          <Polyline
-            positions={alternateRouteCoords}
-            color="#9333ea"
-            weight={6}
-            opacity={1}
-          />
-        )}
-
-        {/* Start Marker */}
-        <Marker position={[sLat, sLng]} icon={defaultIcons.startIcon}>
-          <Popup>
-            <div className="font-medium">Location 1</div>
-            <div className="text-sm text-muted-foreground">{startAddress}</div>
-          </Popup>
-        </Marker>
-
-        {/* End Marker */}
-        <Marker position={[eLat, eLng]} icon={defaultIcons.endIcon}>
-          <Popup>
-            <div className="font-medium">Location 2</div>
-            <div className="text-sm text-muted-foreground">{endAddress}</div>
-          </Popup>
-        </Marker>
-
-        {/* Main Midpoint Marker */}
-        <Marker position={[mLat, mLng]} icon={defaultIcons.midpointIcon}>
-          <Popup>
-            <div className="font-medium">Main Midpoint</div>
-            <div className="text-sm text-muted-foreground">
-              {startAddress} ↔ {endAddress}
-            </div>
-          </Popup>
-        </Marker>
-
-        {/* Alternate Midpoint Marker */}
-        {showAlternateRoute && (
-          <Marker position={[amLat, amLng]} icon={defaultIcons.alternateMidpointIcon}>
-            <Popup>
-              <div className="font-medium">Alternate Midpoint</div>
-              <div className="text-sm text-muted-foreground">
-                {startAddress} ↔ {endAddress}
-              </div>
-            </Popup>
+        {/* Render Start Marker */}
+        {sLat !== 0 && sLng !== 0 && (
+          <Marker position={[sLat, sLng]} icon={defaultIcons.startIcon}>
+            <Popup>{startAddress || 'Start'}</Popup>
           </Marker>
         )}
 
-        {/* Fit bounds to route */}
-        <FitBounds route={mainRoute} />
+        {/* Render End Marker */}
+        {eLat !== 0 && eLng !== 0 && (
+          <Marker position={[eLat, eLng]} icon={defaultIcons.endIcon}>
+            <Popup>{endAddress || 'End'}</Popup>
+          </Marker>
+        )}
+
+        {/* Render Midpoint Marker */}
+        {mLat !== 0 && mLng !== 0 && (
+          <Marker position={[mLat, mLng]} icon={defaultIcons.midpointIcon}>
+            <Popup>Midpoint</Popup>
+          </Marker>
+        )}
+
+        {/* ---- Re-added Alternate Route Elements ---- */} 
+        {/* Render Alternate Midpoint Marker */}
+        {showAlternateRoute && amLat !== 0 && amLng !== 0 && (
+          <Marker position={[amLat, amLng]} icon={defaultIcons.alternateMidpointIcon}>
+            <Popup>Alternate Midpoint</Popup>
+          </Marker>
+        )}
+
+        {/* Render Alternate Route */}
+        {showAlternateRoute && alternateRouteCoords.length > 0 && (
+          <Polyline
+            positions={alternateRouteCoords}
+            color="purple"
+            weight={5}
+            opacity={0.7}
+          />
+        )}
+        {/* ---- End Re-added Elements ---- */}
+
+        {/* {mainRoute && <FitBounds route={mainRoute} />} */}
       </MapContainer>
     </div>
-  )
+  );
 }
