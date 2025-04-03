@@ -14,21 +14,13 @@ import {
   SignUpButton,
   UserButton
 } from "@clerk/nextjs"
-import { Menu, Rocket, X } from "lucide-react"
+import { Menu, Route, X } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { ThemeSwitcher } from "./utilities/theme-switcher"
 
-const navLinks = [
-  { href: "/about", label: "About" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/contact", label: "Contact" }
-]
-
 const signedInLinks = [
-  { href: "/todo", label: "Todo" },
-  { href: "/meet-me-halfway", label: "Meet Me Halfway" },
-  { href: "/meet-me-halfway/saved-searches", label: "Saved Searches" }
+  { href: "/meet-me-halfway/saved-searches", label: "Search History" }
 ]
 
 export default function Header() {
@@ -57,24 +49,14 @@ export default function Header() {
       }`}
     >
       <div className="mx-auto flex max-w-screen-2xl items-center justify-between p-4">
-        <div className="flex items-center space-x-2 hover:cursor-pointer hover:opacity-80">
-          <Rocket className="size-6" />
-          <Link href="/" className="text-xl font-bold">
-            Mckay's App Template
-          </Link>
-        </div>
+        <Link href="/meet-me-halfway" className="flex items-center space-x-2 hover:cursor-pointer hover:opacity-80">
+          <Route className="size-6" />
+          <span className="text-xl font-bold">
+            Meet Me Halfway
+          </span>
+        </Link>
 
         <nav className="absolute left-1/2 hidden -translate-x-1/2 space-x-2 font-semibold md:flex">
-          {navLinks.map(link => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-full px-3 py-1 hover:opacity-80"
-            >
-              {link.label}
-            </Link>
-          ))}
-
           <SignedIn>
             {signedInLinks.map(link => (
               <Link
@@ -95,14 +77,13 @@ export default function Header() {
             <SignInButton>
               <Button variant="outline">Login</Button>
             </SignInButton>
-
             <SignUpButton>
-              <Button className="bg-blue-500 hover:bg-blue-600">Sign Up</Button>
+              <Button>Sign Up</Button>
             </SignUpButton>
           </SignedOut>
 
           <SignedIn>
-            <UserButton />
+            <UserButton afterSignOutUrl="/" />
           </SignedIn>
 
           <div className="md:hidden">
@@ -123,34 +104,14 @@ export default function Header() {
       </div>
 
       {isMenuOpen && (
-        <nav className="bg-primary-foreground text-primary p-4 md:hidden">
+        <nav className="border-t bg-background p-4 md:hidden">
           <ul className="space-y-2">
-            <li>
-              <Link
-                href="/"
-                className="block hover:underline"
-                onClick={toggleMenu}
-              >
-                Home
-              </Link>
-            </li>
-            {navLinks.map(link => (
-              <li key={link.href}>
-                <Link
-                  href={link.href}
-                  className="block hover:underline"
-                  onClick={toggleMenu}
-                >
-                  {link.label}
-                </Link>
-              </li>
-            ))}
             <SignedIn>
               {signedInLinks.map(link => (
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="block hover:underline"
+                    className="block rounded px-3 py-1 hover:bg-accent"
                     onClick={toggleMenu}
                   >
                     {link.label}

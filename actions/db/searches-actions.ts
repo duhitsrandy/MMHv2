@@ -8,8 +8,10 @@ import { eq } from "drizzle-orm"
 export async function createSearchAction(
   search: InsertSearch
 ): Promise<ActionState<SelectSearch>> {
+  console.log("[DB Action] createSearchAction called with:", search);
   try {
     const [newSearch] = await db.insert(searchesTable).values(search).returning()
+    console.log("[DB Action] createSearchAction successful:", newSearch);
     return {
       isSuccess: true,
       message: "Search created successfully",
@@ -17,6 +19,7 @@ export async function createSearchAction(
     }
   } catch (error) {
     console.error("Error creating search:", error)
+    console.error("[DB Action] createSearchAction FAILED:", error);
     return { isSuccess: false, message: "Failed to create search" }
   }
 }
@@ -86,8 +89,10 @@ export async function updateSearchAction(
 }
 
 export async function deleteSearchAction(id: string): Promise<ActionState<void>> {
+  console.log(`[DB Action] deleteSearchAction called for ID: ${id}`);
   try {
     await db.delete(searchesTable).where(eq(searchesTable.id, id))
+    console.log(`[DB Action] deleteSearchAction successful for ID: ${id}`);
     return {
       isSuccess: true,
       message: "Search deleted successfully",
@@ -95,6 +100,7 @@ export async function deleteSearchAction(id: string): Promise<ActionState<void>>
     }
   } catch (error) {
     console.error("Error deleting search:", error)
+    console.error(`[DB Action] deleteSearchAction FAILED for ID: ${id}:`, error);
     return { isSuccess: false, message: "Failed to delete search" }
   }
 } 

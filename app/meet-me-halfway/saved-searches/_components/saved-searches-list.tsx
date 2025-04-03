@@ -41,10 +41,12 @@ export default function SavedSearchesList({
     })
   }
 
-  const handleUseSearch = (search: SelectSearch) => {
-    router.push(
-      `/meet-me-halfway/results?startLat=${search.startLocationLat}&startLng=${search.startLocationLng}&startAddress=${encodeURIComponent(search.startLocationAddress)}&endLat=${search.endLocationLat}&endLng=${search.endLocationLng}&endAddress=${encodeURIComponent(search.endLocationAddress)}`
-    )
+  const handleRunSearchAgain = (search: SelectSearch) => {
+    const params = new URLSearchParams({
+      start: search.startLocationAddress,
+      end: search.endLocationAddress
+    })
+    router.push(`/meet-me-halfway?${params.toString()}`)
   }
 
   const handleDeleteSearch = async (id: string) => {
@@ -55,7 +57,6 @@ export default function SavedSearchesList({
 
       if (result.isSuccess) {
         toast.success("Search deleted successfully")
-        router.refresh()
       } else {
         toast.error(`Error deleting search: ${result.message}`)
       }
@@ -70,7 +71,7 @@ export default function SavedSearchesList({
 
   return (
     <div className="space-y-4">
-      {searches.map(search => (
+      {searches.filter(s => s.id !== searchIdToDelete).map(search => (
         <Card key={search.id} className="transition-shadow hover:shadow-md">
           <CardContent className="p-4">
             <div className="flex flex-col space-y-3">
@@ -88,6 +89,7 @@ export default function SavedSearchesList({
                       variant="ghost"
                       size="icon"
                       onClick={() => setSearchIdToDelete(search.id)}
+                      disabled={isDeleting && searchIdToDelete === search.id}
                     >
                       <Trash2 className="text-muted-foreground size-4" />
                     </Button>
@@ -100,9 +102,9 @@ export default function SavedSearchesList({
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel onClick={() => setSearchIdToDelete(null)}>Cancel</AlertDialogCancel>
                       <AlertDialogAction
-                        onClick={() => handleDeleteSearch(search.id)}
+                        onClick={() => searchIdToDelete && handleDeleteSearch(searchIdToDelete)}
                         disabled={isDeleting}
                       >
                         {isDeleting ? "Deleting..." : "Delete"}
@@ -139,9 +141,9 @@ export default function SavedSearchesList({
                   variant="default"
                   size="sm"
                   className="flex items-center space-x-1"
-                  onClick={() => handleUseSearch(search)}
+                  onClick={() => handleRunSearchAgain(search)}
                 >
-                  <span>Use This Search</span>
+                  <span>Run Search Again</span>
                   <ArrowRight className="ml-1 size-4" />
                 </Button>
               </div>

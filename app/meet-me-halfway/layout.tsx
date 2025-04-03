@@ -1,4 +1,5 @@
 import { ReactNode } from "react"
+import Header from "@/components/header"
 
 function BackgroundWrapper({ children }: { children: ReactNode }) {
   return <div className="min-h-screen bg-gray-50">{children}</div>
@@ -9,5 +10,10 @@ export default function MeetMeHalfwayLayout({
 }: {
   children: ReactNode
 }) {
-  return <BackgroundWrapper>{children}</BackgroundWrapper>
+  return (
+    <BackgroundWrapper>
+      <Header />
+      {children}
+    </BackgroundWrapper>
+  )
 }

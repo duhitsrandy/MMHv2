@@ -59,13 +59,13 @@ async function SavedSearchesContent() {
 export default async function SavedSearchesPage() {
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="mb-8 text-center text-3xl font-bold">Saved Searches</h1>
+      <h1 className="mb-8 text-center text-3xl font-bold">Search History</h1>
 
       <Card className="mx-auto max-w-4xl">
         <CardHeader>
-          <CardTitle>Your Saved Searches</CardTitle>
+          <CardTitle>Your Search History</CardTitle>
           <CardDescription>
-            View and reuse your previous searches
+            View and manage your previous searches
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -78,8 +78,34 @@ interface MapComponentProps {
   onPoiSelect?: (poiId: string) => void
 }
 
-// Component to fit bounds - leave commented out for now
-// function FitBounds({ route }: { route: any }) { ... }
+// Component to fit bounds
+function FitBounds({ routes, shouldFit }: { routes: any[], shouldFit: boolean }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || routes.length === 0 || !shouldFit) return;
+
+    // Create a bounds object that will contain all routes
+    const bounds = L.latLngBounds([]);
+
+    // Add all route coordinates to the bounds
+    routes.forEach(route => {
+      if (route?.geometry?.coordinates) {
+        route.geometry.coordinates.forEach((coord: [number, number]) => {
+          bounds.extend([coord[1], coord[0]]);
+        });
+      }
+    });
+
+    // Fit the map to the bounds with padding
+    map.fitBounds(bounds, {
+      padding: [50, 50], // Add padding to ensure routes aren't at the edge
+      maxZoom: 12 // Limit maximum zoom to ensure routes are visible
+    });
+  }, [map, routes, shouldFit]);
+
+  return null;
+}
 
 export default function MapComponent({
   startLat,
@@ -102,6 +128,7 @@ export default function MapComponent({
 }: MapComponentProps) {
   const mapRef = useRef<L.Map | null>(null);
   const poiMarkers = useRef<Map<string, L.Marker>>(new Map());
+  const [shouldFitBounds, setShouldFitBounds] = useState(true);
 
   // Convert string coordinates to numbers
   const sLat = Number(startLat) || 0
@@ -175,7 +202,6 @@ export default function MapComponent({
         icon: isSelected ? selectedPoiIcon : defaultIcons.poiIcon
       }).addTo(map);
 
-      // --- Updated Click Handler --- 
       marker.on('click', () => {
         if (!map) return; 
 
@@ -188,29 +214,27 @@ export default function MapComponent({
         const currentCenter = map.getCenter();
         const currentZoom = map.getZoom();
 
-        // Check if already focused & popup is open or opening
+        // If we're already at the target location and zoom, just open the popup
         if (currentZoom === targetZoom && currentCenter.distanceTo(targetLatLng) < 10) { 
           if (!marker.isPopupOpen()) {
-            marker.openPopup(); // Ensure popup is open if already focused
+            marker.openPopup();
           }
           return; 
         }
 
-        // Fly to the marker
+        // Disable bounds fitting while we focus on the POI
+        setShouldFitBounds(false);
+        
+        // Fly to the POI location
         map.flyTo(targetLatLng, targetZoom, { duration: 0.8 });
 
-        // On flyTo end, simply open the popup
-        // Leaflet's default autoPan should handle visibility
         map.once('moveend', () => {
-            // Retrieve marker again in case it was removed/re-added during flyTo
-            const currentMarker = poiMarkers.current.get(uniqueKey);
-            if (currentMarker && !currentMarker.isPopupOpen()) {
-                currentMarker.openPopup();
-            }
-            // REMOVED nested panBy and second moveend listener
+          const currentMarker = poiMarkers.current.get(uniqueKey);
+          if (currentMarker && !currentMarker.isPopupOpen()) {
+            currentMarker.openPopup();
+          }
         });
       });
-      // --- End Updated Click Handler ---
 
       // Create popup content
       const popupContent = `
@@ -273,59 +297,98 @@ export default function MapComponent({
         poiMarkers.current.clear();
       }
     };
-  }, [pois, showPois, selectedPoiId, onPoiSelect]); // Dependencies
+  }, [pois, showPois, selectedPoiId, onPoiSelect]);
+
+  // Handle POI selection
+  useEffect(() => {
+    if (!mapRef.current || !selectedPoiId || !pois.length) return;
+
+    const selectedPoi = pois.find(poi => poi.osm_id === selectedPoiId || `${poi.lat}-${poi.lon}` === selectedPoiId);
+    if (!selectedPoi) return;
+
+    const targetLatLng = L.latLng(Number(selectedPoi.lat), Number(selectedPoi.lon));
+    const targetZoom = 15;
+
+    // Disable bounds fitting while we focus on the POI
+    setShouldFitBounds(false);
+    
+    // Fly to the POI location
+    mapRef.current.flyTo(targetLatLng, targetZoom, { duration: 0.8 });
+
+    // Open the popup after the animation
+    mapRef.current.once('moveend', () => {
+      const marker = poiMarkers.current.get(selectedPoiId);
+      if (marker && !marker.isPopupOpen()) {
+        marker.openPopup();
+      }
+    });
+  }, [selectedPoiId, pois]);
+
+  // Reset shouldFitBounds when routes change
+  useEffect(() => {
+    setShouldFitBounds(true);
+  }, [mainRoute, alternateRoute]);
 
   return (
-    <div className="relative h-[520px] w-full rounded-lg overflow-hidden">
+    <div className="relative h-[600px] w-full">
       <MapContainer
-        ref={mapRef}
-        center={sLat !== 0 && sLng !== 0 ? [sLat, sLng] : [40.5, -74.5]}
+        center={[mLat, mLng]}
         zoom={10}
         style={{ height: "600px", width: "100%" }}
-        whenReady={() => { /* Map is ready, ref is set */ }}
+        ref={mapRef}
         className="rounded-lg z-0"
       >
         <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+        <FitBounds routes={[mainRoute, alternateRoute].filter(Boolean)} shouldFit={shouldFitBounds} />
         
         {/* Render Main Route */}
         {mainRouteCoords.length > 0 && (
           <Polyline
             positions={mainRouteCoords}
-            color="blue"
-            weight={5}
-            opacity={0.7}
+            color="#3b82f6"
+            weight={4}
+            opacity={0.8}
           />
         )}
 
         {/* Render Start Marker */}
         {sLat !== 0 && sLng !== 0 && (
           <Marker position={[sLat, sLng]} icon={defaultIcons.startIcon}>
-            <Popup>{startAddress || 'Start'}</Popup>
+            <Popup>
+              <div className="text-center">
+                <div className="font-medium">Start Location</div>
+                <div className="text-sm text-muted-foreground">{startAddress}</div>
+              </div>
+            </Popup>
           </Marker>
         )}
 
         {/* Render End Marker */}
         {eLat !== 0 && eLng !== 0 && (
           <Marker position={[eLat, eLng]} icon={defaultIcons.endIcon}>
-            <Popup>{endAddress || 'End'}</Popup>
+            <Popup>
+              <div className="text-center">
+                <div className="font-medium">End Location</div>
+                <div className="text-sm text-muted-foreground">{endAddress}</div>
+              </div>
+            </Popup>
           </Marker>
         )}
 
         {/* Render Midpoint Marker */}
         {mLat !== 0 && mLng !== 0 && (
           <Marker position={[mLat, mLng]} icon={defaultIcons.midpointIcon}>
-            <Popup>Midpoint</Popup>
-          </Marker>
-        )}
-
-        {/* ---- Re-added Alternate Route Elements ---- */} 
-        {/* Render Alternate Midpoint Marker */}
-        {showAlternateRoute && amLat !== 0 && amLng !== 0 && (
-          <Marker position={[amLat, amLng]} icon={defaultIcons.alternateMidpointIcon}>
-            <Popup>Alternate Midpoint</Popup>
+            <Popup>
+              <div className="text-center">
+                <div className="font-medium">Midpoint</div>
+                <div className="text-sm text-muted-foreground">
+                  {Math.round(mainRoute?.duration / 120)} min from each location
+                </div>
+              </div>
+            </Popup>
           </Marker>
         )}
 
@@ -333,14 +396,28 @@ export default function MapComponent({
         {showAlternateRoute && alternateRouteCoords.length > 0 && (
           <Polyline
             positions={alternateRouteCoords}
-            color="purple"
-            weight={5}
-            opacity={0.7}
+            color="#8b5cf6"
+            weight={4}
+            opacity={0.8}
           />
         )}
-        {/* ---- End Re-added Elements ---- */}
 
-        {/* {mainRoute && <FitBounds route={mainRoute} />} */}
+        {/* Render Alternate Midpoint Marker */}
+        {showAlternateRoute && amLat !== 0 && amLng !== 0 && (
+          <Marker
+            position={[amLat, amLng]}
+            icon={defaultIcons.alternateMidpointIcon}
+          >
+            <Popup>
+              <div className="text-center">
+                <div className="font-medium">Alternate Midpoint</div>
+                <div className="text-sm text-muted-foreground">
+                  {Math.round(alternateRoute?.duration / 120)} min from each location
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        )}
       </MapContainer>
     </div>
   );

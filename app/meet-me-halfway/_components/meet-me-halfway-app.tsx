@@ -10,6 +10,10 @@ import MeetMeHalfwayForm from "./meet-me-halfway-form"
 import SavedLocations from "./saved-locations"
 import RecentSearches from "./recent-searches"
 import dynamic from "next/dynamic"
+import { Location } from "@/types"
+import { Search } from "@/types"
+import { toast } from "sonner"
+import { createSearchAction } from "@/actions/db/searches-actions"
 
 const ResultsMap = dynamic(
   () => import("./results-map").then((mod) => mod.default),
@@ -35,11 +39,11 @@ interface AppData {
 }
 
 export default function MeetMeHalfwayApp() {
-  const { isLoaded, userId } = useAuth()
+  const { isLoaded, userId, isSignedIn } = useAuth()
   const [appState, setAppState] = useState<AppState>("input")
   const [appData, setAppData] = useState<AppData>({})
-  const [locations, setLocations] = useState<any[]>([])
-  const [searches, setSearches] = useState<any[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
+  const [searches, setSearches] = useState<Search[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   // Load user data on mount
@@ -58,10 +62,22 @@ export default function MeetMeHalfwayApp() {
           getSearchesAction(userId)
         ])
 
-        setLocations(locationsRes.data || [])
-        setSearches(searchesRes.data || [])
+        if (!locationsRes.isSuccess) {
+          console.error("Failed to load locations:", locationsRes.message)
+          toast.error("Failed to load saved locations")
+        } else {
+          setLocations(locationsRes.data || [])
+        }
+
+        if (!searchesRes.isSuccess) {
+          console.error("Failed to load searches:", searchesRes.message)
+          toast.error("Failed to load recent searches")
+        } else {
+          setSearches(searchesRes.data || [])
+        }
       } catch (error) {
         console.error("Error loading user data:", error)
+        toast.error("Failed to load user data")
       } finally {
         setIsLoading(false)
       }
@@ -73,7 +89,7 @@ export default function MeetMeHalfwayApp() {
   }, [isLoaded, userId])
 
   // Handle form submission
-  const handleFindMidpoint = (data: {
+  const handleFindMidpoint = async (data: {
     startLat: string
     startLng: string
     startAddress: { lat: number; lng: number; display_name?: string }
@@ -81,8 +97,51 @@ export default function MeetMeHalfwayApp() {
     endLng: string
     endAddress: { lat: number; lng: number; display_name?: string }
   }) => {
+    console.log("[App] handleFindMidpoint called with data:", data);
     setAppData(data)
     setAppState("results")
+
+    // Save search history if user is signed in
+    console.log(`[App] Checking if user is signed in: ${isSignedIn}, userId: ${userId}`);
+    if (isSignedIn && userId) {
+      console.log("[App] User is signed in. Attempting to save search...");
+      try {
+        const newSearchData = {
+          userId: userId,
+          startLocationAddress: data.startAddress.display_name || "",
+          startLocationLat: data.startLat,
+          startLocationLng: data.startLng,
+          endLocationAddress: data.endAddress.display_name || "",
+          endLocationLat: data.endLat,
+          endLocationLng: data.endLng,
+          // Midpoint will be calculated and potentially saved later
+          // For now, we save the search request itself
+          midpointLat: "0", 
+          midpointLng: "0"
+        };
+        
+        console.log("[App] Calling createSearchAction with:", newSearchData);
+        const result = await createSearchAction(newSearchData);
+        console.log("[App] createSearchAction result:", result);
+        
+        if (result.isSuccess && result.data) {
+          // Add the new search to the top of the local state
+          setSearches(prevSearches => [result.data!, ...prevSearches]);
+          toast.success("Search saved to history.");
+          console.log("[App] Search saved successfully.");
+        } else {
+          console.error("Failed to save search:", result.message);
+          toast.error("Failed to save search to history.");
+          console.error(`[App] Failed to save search: ${result.message || "Unknown error"}`);
+        }
+      } catch (error) {
+        console.error("Error creating search record:", error);
+        toast.error("Failed to save search to history due to an unexpected error.");
+        console.error("[App] CATCH Error saving search:", error);
+      }
+    } else {
+      console.log("[App] User not signed in or userId missing, skipping search save.");
+    }
   }
 
   // Handle back to input

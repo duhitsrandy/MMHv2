@@ -8,11 +8,13 @@ import { eq } from "drizzle-orm"
 export async function createLocationAction(
   location: InsertLocation
 ): Promise<ActionState<SelectLocation>> {
+  console.log("[DB Action] createLocationAction called with:", location);
   try {
     const [newLocation] = await db
       .insert(locationsTable)
       .values(location)
       .returning()
+    console.log("[DB Action] createLocationAction successful:", newLocation);
     return {
       isSuccess: true,
       message: "Location created successfully",
@@ -20,6 +22,7 @@ export async function createLocationAction(
     }
   } catch (error) {
     console.error("Error creating location:", error)
+    console.error("[DB Action] createLocationAction FAILED:", error);
     return { isSuccess: false, message: "Failed to create location" }
   }
 }
@@ -91,8 +94,10 @@ export async function updateLocationAction(
 export async function deleteLocationAction(
   id: string
 ): Promise<ActionState<void>> {
+  console.log(`[DB Action] deleteLocationAction called for ID: ${id}`);
   try {
     await db.delete(locationsTable).where(eq(locationsTable.id, id))
+    console.log(`[DB Action] deleteLocationAction successful for ID: ${id}`);
     return {
       isSuccess: true,
       message: "Location deleted successfully",
@@ -100,6 +105,7 @@ export async function deleteLocationAction(
     }
   } catch (error) {
     console.error("Error deleting location:", error)
+    console.error(`[DB Action] deleteLocationAction FAILED for ID: ${id}:`, error);
     return { isSuccess: false, message: "Failed to delete location" }
   }
 } 

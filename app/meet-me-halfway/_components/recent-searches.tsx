@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Search } from "@/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,23 +14,33 @@ interface RecentSearchesProps {
 }
 
 export default function RecentSearches({ searches }: RecentSearchesProps) {
-  const [recentSearches, setRecentSearches] = useState<Search[]>(searches)
+  const [localSearches, setLocalSearches] = useState<Search[]>(searches)
   const router = useRouter()
+
+  useEffect(() => {
+    setLocalSearches(searches);
+  }, [searches]);
 
   const handleDelete = async (id: string) => {
     const result = await deleteSearchAction(id)
 
     if (result.isSuccess) {
-      setRecentSearches(recentSearches.filter(search => search.id !== id))
+      setLocalSearches(prevSearches => prevSearches.filter(search => search.id !== id))
       toast.success(result.message)
     } else {
       toast.error(result.message)
     }
   }
 
-  const handleViewResults = (searchId: string) => {
-    router.push(`/meet-me-halfway/results/${searchId}`)
+  const handleRunSearchAgain = (search: Search) => {
+    const params = new URLSearchParams({
+      start: search.startLocationAddress,
+      end: search.endLocationAddress
+    })
+    router.push(`/meet-me-halfway?${params.toString()}`)
   }
+
+  const displayedSearches = localSearches.slice(-5).reverse();
 
   return (
     <Card>
@@ -38,13 +48,13 @@ export default function RecentSearches({ searches }: RecentSearchesProps) {
         <CardTitle>Recent Searches</CardTitle>
       </CardHeader>
       <CardContent>
-        {recentSearches.length === 0 ? (
+        {displayedSearches.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             No recent searches yet.
           </p>
         ) : (
           <div className="space-y-2">
-            {recentSearches.map(search => (
+            {displayedSearches.map(search => (
               <div key={search.id} className="hover:bg-accent rounded-md p-2">
                 <div className="mb-1 flex items-center justify-between">
                   <p className="text-sm font-medium">
@@ -54,7 +64,8 @@ export default function RecentSearches({ searches }: RecentSearchesProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleViewResults(search.id)}
+                      onClick={() => handleRunSearchAgain(search)}
+                      title="Run this search again"
                     >
                       <ArrowRight className="size-4" />
                     </Button>
@@ -62,6 +73,7 @@ export default function RecentSearches({ searches }: RecentSearchesProps) {
                       variant="ghost"
                       size="icon"
                       onClick={() => handleDelete(search.id)}
+                      title="Delete this search"
                     >
                       <Trash2 className="size-4" />
                     </Button>
