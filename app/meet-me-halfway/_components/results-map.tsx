@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button"
 import { Loader2, MapPin, Route } from "lucide-react"
 import dynamic from "next/dynamic"
 import "leaflet/dist/leaflet.css"
-import PointsOfInterest from "./points-of-interest"
 import { PoiResponse } from "@/types/poi-types"
 import { ActionState } from "@/types"
 
@@ -318,6 +317,18 @@ const MapComponent = dynamic(
         <div className="text-gray-500">Loading map...</div>
       </div>
     )
+  }
+)
+
+const PointsOfInterest = dynamic(
+  () => import("./points-of-interest").then((mod) => mod.default),
+  {
+    loading: () => (
+      <div className="flex h-[200px] items-center justify-center">
+        <div className="text-muted-foreground text-lg">Loading POIs...</div>
+      </div>
+    ),
+    ssr: false
   }
 )
 

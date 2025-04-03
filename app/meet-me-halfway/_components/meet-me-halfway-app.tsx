@@ -9,7 +9,19 @@ import { History } from "lucide-react"
 import MeetMeHalfwayForm from "./meet-me-halfway-form"
 import SavedLocations from "./saved-locations"
 import RecentSearches from "./recent-searches"
-import ResultsMap from "./results-map"
+import dynamic from "next/dynamic"
+
+const ResultsMap = dynamic(
+  () => import("./results-map").then((mod) => mod.default),
+  {
+    loading: () => (
+      <div className="flex h-[600px] items-center justify-center">
+        <div className="text-muted-foreground text-lg">Loading map...</div>
+      </div>
+    ),
+    ssr: false
+  }
+)
 
 type AppState = "input" | "results"
 
