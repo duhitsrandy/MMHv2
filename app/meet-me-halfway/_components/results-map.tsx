@@ -10,7 +10,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
-import { MapPin } from "lucide-react"
+import { Loader2, MapPin } from "lucide-react"
 import dynamic from "next/dynamic"
 import "leaflet/dist/leaflet.css"
 import PointsOfInterest from "./points-of-interest"
@@ -122,13 +122,14 @@ export default function ResultsMap({
   const [mainRoute, setMainRoute] = useState<RouteData | null>(null)
   const [alternateRoute, setAlternateRoute] = useState<RouteData | null>(null)
   const [showPois, setShowPois] = useState(true)
-  const [isLoadingPois, setIsLoadingPois] = useState(false)
+  const [isPoiTravelTimeLoading, setIsPoiTravelTimeLoading] = useState(false)
   const [mainRoutePois, setMainRoutePois] = useState<PoiResponse[]>([])
   const [alternateRoutePois, setAlternateRoutePois] = useState<PoiResponse[]>([])
   const [currentMidpoint, setCurrentMidpoint] = useState<{ lat: number; lng: number } | null>(null)
   const [alternateMidpoint, setAlternateMidpoint] = useState<{ lat: number; lng: number } | null>(null)
   const [combinedPois, setCombinedPois] = useState<PoiResponse[]>([])
   const [selectedPoiId, setSelectedPoiId] = useState<string | undefined>(undefined)
+  const [isMapDataLoading, setIsMapDataLoading] = useState(true)
 
   // Combine POIs from both routes, removing duplicates based on osm_id
   const uniquePois = useMemo(() => {
@@ -161,42 +162,129 @@ export default function ResultsMap({
     setIsClient(true)
   }, [])
 
-  // Fetch routes on component mount
+  // Fetch routes and POIs together
   useEffect(() => {
-    const fetchRoutes = async () => {
+    const fetchMapData = async () => {
       if (!isClient) return
-      
+      setIsMapDataLoading(true)
+      let fetchedMainRoute: RouteData | null = null
+      let fetchedAlternateRoute: RouteData | null = null
+      let mainMidpoint: { lat: number; lng: number } | null = null
+      let altMidpoint: { lat: number; lng: number } | null = null
+
       try {
-        // Get both routes in parallel
+        console.log('[MapData] Fetching routes...');
         const [mainRouteRes, alternateRouteRes] = await Promise.all([
           getRouteAction(startLat, startLng, endLat, endLng),
           getAlternateRouteAction(startLat, startLng, endLat, endLng)
         ])
 
         if (mainRouteRes.isSuccess) {
-          setMainRoute(mainRouteRes.data)
-          const mainMidpoint = getMidpoint(mainRouteRes.data);
-          if (mainMidpoint) {
-            console.log('Setting main route midpoint:', mainMidpoint);
-            setCurrentMidpoint(mainMidpoint);
-          }
+          fetchedMainRoute = mainRouteRes.data
+          mainMidpoint = getMidpoint(mainRouteRes.data)
+          setMainRoute(fetchedMainRoute)
+          if (mainMidpoint) setCurrentMidpoint(mainMidpoint)
+          console.log('[MapData] Main route and midpoint fetched.');
+        } else {
+          console.error('[MapData] Failed to fetch main route:', mainRouteRes.message);
         }
 
         if (alternateRouteRes.isSuccess) {
-          setAlternateRoute(alternateRouteRes.data)
-          const altMidpoint = getMidpoint(alternateRouteRes.data);
-          if (altMidpoint) {
-            console.log('Setting alternate route midpoint:', altMidpoint);
-            setAlternateMidpoint(altMidpoint);
-          }
+          fetchedAlternateRoute = alternateRouteRes.data
+          altMidpoint = getMidpoint(alternateRouteRes.data)
+          setAlternateRoute(fetchedAlternateRoute)
+          if (altMidpoint) setAlternateMidpoint(altMidpoint)
+          console.log('[MapData] Alternate route and midpoint fetched.');
+        } else {
+          console.error('[MapData] Failed to fetch alternate route:', alternateRouteRes.message);
         }
+
+        if (mainMidpoint || altMidpoint) {
+          console.log('[MapData] Fetching initial POIs...');
+          const [mainPoisResult, altPoisResult] = await Promise.all([
+            mainMidpoint ? searchPoisAction(mainMidpoint.lat.toString(), mainMidpoint.lng.toString(), 1000, ["amenity", "leisure", "tourism", "shop"]) : Promise.resolve({ isSuccess: false, data: [] }),
+            altMidpoint ? searchPoisAction(altMidpoint.lat.toString(), altMidpoint.lng.toString(), 1000, ["amenity", "leisure", "tourism", "shop"]) : Promise.resolve({ isSuccess: false, data: [] })
+          ]);
+
+          const mainPois = mainPoisResult.isSuccess ? mainPoisResult.data || [] : [];
+          const altPois = altPoisResult.isSuccess ? altPoisResult.data || [] : [];
+          setMainRoutePois(mainPois);
+          setAlternateRoutePois(altPois);
+
+          const allPois = [...mainPois, ...altPois];
+          const uniqueInitialPois = allPois.filter((poi, index, self) =>
+            index === self.findIndex((p) => p.osm_id === poi.osm_id)
+          );
+          setCombinedPois(uniqueInitialPois);
+          console.log(`[MapData] Initial POIs fetched: ${uniqueInitialPois.length}`);
+
+          setIsMapDataLoading(false);
+
+          if (uniqueInitialPois.length > 0) {
+             setIsPoiTravelTimeLoading(true);
+             console.log('[MapData] Starting background POI travel time calculation...');
+             const batchSize = 5;
+             const poiBatches = [];
+             for (let i = 0; i < uniqueInitialPois.length; i += batchSize) {
+               poiBatches.push(uniqueInitialPois.slice(i, i + batchSize));
+             }
+
+             let processedPoisWithTravelTime: PoiResponse[] = [];
+             for (const batch of poiBatches) {
+               const batchResults = await Promise.all(
+                 batch.map(async (poi) => {
+                   try {
+                     const [startRoute, endRoute] = await Promise.all([
+                       getRouteAction(startAddress.lat.toString(), startAddress.lng.toString(), poi.lat, poi.lon),
+                       getRouteAction(poi.lat, poi.lon, endAddress.lat.toString(), endAddress.lng.toString()),
+                     ]);
+                     return {
+                       ...poi,
+                       distanceFromStart: startRoute.data?.distance,
+                       distanceFromEnd: endRoute.data?.distance,
+                       travelTimeFromStart: startRoute.data?.duration,
+                       travelTimeFromEnd: endRoute.data?.duration,
+                       travelTimeDifference: startRoute.data?.duration && endRoute.data?.duration ? Math.abs(startRoute.data.duration - endRoute.data.duration) : undefined,
+                       totalTravelTime: startRoute.data?.duration && endRoute.data?.duration ? startRoute.data.duration + endRoute.data.duration : undefined,
+                       isFavorite: false,
+                     };
+                   } catch (error) {
+                     console.error(`[MapData] Error calculating travel times for POI ${poi.name}:`, error);
+                     return poi;
+                   }
+                 })
+               );
+               processedPoisWithTravelTime = [...processedPoisWithTravelTime, ...batchResults];
+               setCombinedPois(prevPois => {
+                  const updatedPois = [...prevPois];
+                  batchResults.forEach(updatedPoi => {
+                    const index = updatedPois.findIndex(p => (p.osm_id || `${p.lat}-${p.lon}`) === (updatedPoi.osm_id || `${updatedPoi.lat}-${updatedPoi.lon}`));
+                    if (index !== -1) {
+                      updatedPois[index] = updatedPoi;
+                    }
+                  });
+                  return updatedPois;
+               });
+             }
+             console.log('[MapData] Background POI travel time calculation finished.');
+             setIsPoiTravelTimeLoading(false);
+           } else {
+             console.log('[MapData] No POIs found, skipping travel time calculation.');
+             setIsPoiTravelTimeLoading(false);
+           }
+        } else {
+           console.log('[MapData] No midpoints found, skipping POI fetch.');
+           setIsMapDataLoading(false);
+        }
+
       } catch (error) {
-        console.error("Error fetching routes:", error)
+        console.error("[MapData] Error fetching map data:", error)
+        setIsMapDataLoading(false);
       }
     }
 
-    fetchRoutes()
-  }, [startLat, startLng, endLat, endLng, isClient])
+    fetchMapData()
+  }, [startLat, startLng, endLat, endLng, isClient, startAddress, endAddress])
 
   // Debug logging for state changes
   useEffect(() => {
@@ -212,134 +300,12 @@ export default function ResultsMap({
     });
   }, [mainRoute, alternateRoute, currentMidpoint, alternateMidpoint, showPois, mainRoutePois, alternateRoutePois, combinedPois]);
 
-  // Update POIs when routes change
-  useEffect(() => {
-    if (!mainRoute || !alternateRoute) return;
-
-    const fetchPois = async () => {
-      try {
-        setIsLoadingPois(true);
-        console.log('Starting POI fetch process...');
-        
-        // Fetch POIs for main route midpoint
-        console.log('Fetching POIs for main route midpoint:', currentMidpoint);
-        const mainPoisResult = await searchPoisAction(
-          currentMidpoint?.lat.toString() || "",
-          currentMidpoint?.lng.toString() || "",
-          1000,
-          ["amenity", "leisure", "tourism", "shop"]
-        );
-        if (mainPoisResult.isSuccess && mainPoisResult.data) {
-          console.log('Main route POIs:', mainPoisResult.data);
-          setMainRoutePois(mainPoisResult.data);
-        }
-
-        // Fetch POIs for alternate route midpoint
-        console.log('Fetching POIs for alternate route midpoint:', alternateMidpoint);
-        const altPoisResult = await searchPoisAction(
-          alternateMidpoint?.lat.toString() || "",
-          alternateMidpoint?.lng.toString() || "",
-          1000,
-          ["amenity", "leisure", "tourism", "shop"]
-        );
-        if (altPoisResult.isSuccess && altPoisResult.data) {
-          console.log('Alternate route POIs:', altPoisResult.data);
-          setAlternateRoutePois(altPoisResult.data);
-        }
-
-        // Wait for both POI sets to be loaded
-        const allPois = [...(mainPoisResult.data || []), ...(altPoisResult.data || [])];
-        const uniquePois = allPois.filter((poi, index, self) => 
-          index === self.findIndex((p) => p.osm_id === poi.osm_id)
-        );
-        console.log('Combined unique POIs:', uniquePois);
-        
-        // Immediately show POIs on the map without travel times
-        setCombinedPois(uniquePois);
-        
-        // Calculate travel times and distances for all POIs in the background
-        console.log('Starting travel time calculations...');
-        
-        // Create batches of POIs to process in parallel (5 POIs per batch)
-        // This prevents overwhelming the API with too many simultaneous requests
-        const batchSize = 5;
-        const poiBatches = [];
-        
-        for (let i = 0; i < uniquePois.length; i += batchSize) {
-          poiBatches.push(uniquePois.slice(i, i + batchSize));
-        }
-        
-        // Process each batch sequentially, but process POIs within each batch in parallel
-        let allProcessedPois: PoiResponse[] = [];
-        
-        for (const batch of poiBatches) {
-          const batchResults = await Promise.all(
-            batch.map(async (poi) => {
-              try {
-                console.log(`Calculating travel times for POI: ${poi.name}`);
-                
-                const [startRoute, endRoute] = await Promise.all([
-                  getRouteAction(
-                    startAddress.lat.toString(),
-                    startAddress.lng.toString(),
-                    poi.lat,
-                    poi.lon
-                  ),
-                  getRouteAction(
-                    poi.lat,
-                    poi.lon,
-                    endAddress.lat.toString(),
-                    endAddress.lng.toString()
-                  ),
-                ]);
-
-                return {
-                  ...poi,
-                  distanceFromStart: startRoute.data?.distance,
-                  distanceFromEnd: endRoute.data?.distance,
-                  travelTimeFromStart: startRoute.data?.duration,
-                  travelTimeFromEnd: endRoute.data?.duration,
-                  travelTimeDifference: startRoute.data?.duration && endRoute.data?.duration 
-                    ? Math.abs(startRoute.data.duration - endRoute.data.duration)
-                    : undefined,
-                  totalTravelTime: startRoute.data?.duration && endRoute.data?.duration
-                    ? startRoute.data.duration + endRoute.data.duration
-                    : undefined,
-                  isFavorite: false,
-                };
-              } catch (error) {
-                console.error(`Error calculating travel times for POI ${poi.name}:`, error);
-                return poi; // Return the POI without travel times if calculation fails
-              }
-            })
-          );
-          
-          allProcessedPois = [...allProcessedPois, ...batchResults];
-          
-          // Update UI after each batch completes
-          setCombinedPois(allProcessedPois);
-        }
-
-        console.log('Final POIs with travel info:', allProcessedPois);
-        
-        // Final update to ensure all POIs are displayed
-        setCombinedPois(allProcessedPois);
-      } catch (error) {
-        console.error("Error fetching POIs:", error);
-      } finally {
-        setIsLoadingPois(false);
-      }
-    };
-
-    fetchPois();
-  }, [mainRoute, alternateRoute, startAddress, endAddress, currentMidpoint, alternateMidpoint]);
-
   if (!isClient) {
     return (
       <Card className="h-[600px]">
         <CardContent className="p-0">
           <div className="bg-muted flex h-[600px] animate-pulse items-center justify-center rounded-lg border">
-            <p className="text-muted-foreground">Loading map...</p>
+            <p className="text-muted-foreground">Initializing...</p>
           </div>
         </CardContent>
       </Card>
@@ -347,7 +313,14 @@ export default function ResultsMap({
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr,400px] gap-4">
+    <div className="relative grid grid-cols-1 lg:grid-cols-[1fr,400px] gap-4">
+      {isMapDataLoading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <span className="ml-4 text-lg font-medium">Loading map data...</span>
+        </div>
+      )}
+
       <div className="space-y-4">
         <MapComponent
           startLat={startLat}
@@ -356,10 +329,10 @@ export default function ResultsMap({
           endLng={endLng}
           startAddress={startAddress.display_name || ""}
           endAddress={endAddress.display_name || ""}
-          midpointLat={currentMidpoint?.lat || parseFloat(startLat)}
-          midpointLng={currentMidpoint?.lng || parseFloat(startLng)}
-          alternateMidpointLat={alternateMidpoint?.lat || parseFloat(startLat)}
-          alternateMidpointLng={alternateMidpoint?.lng || parseFloat(startLng)}
+          midpointLat={currentMidpoint?.lat ?? parseFloat(startLat)}
+          midpointLng={currentMidpoint?.lng ?? parseFloat(startLng)}
+          alternateMidpointLat={alternateMidpoint?.lat ?? parseFloat(startLat)}
+          alternateMidpointLng={alternateMidpoint?.lng ?? parseFloat(startLng)}
           mainRoute={mainRoute}
           alternateRoute={alternateRoute}
           showAlternateRoute={true}
@@ -375,9 +348,16 @@ export default function ResultsMap({
               id="show-pois"
               checked={showPois}
               onCheckedChange={setShowPois}
+              disabled={isMapDataLoading}
             />
             <Label htmlFor="show-pois">Show Points of Interest</Label>
           </div>
+          {isPoiTravelTimeLoading && (
+             <div className="flex items-center text-sm text-muted-foreground">
+               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+               <span>Calculating POI travel times...</span>
+             </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -403,6 +383,7 @@ export default function ResultsMap({
       <div>
         <PointsOfInterest
           pois={combinedPois}
+          isLoading={isPoiTravelTimeLoading}
           startLat={startLat}
           startLng={startLng}
           endLat={endLat}
@@ -410,8 +391,8 @@ export default function ResultsMap({
           startAddress={startAddress.display_name || ""}
           endAddress={endAddress.display_name || ""}
           onPoiSelect={(poiId) => setSelectedPoiId(poiId)}
-          midpointLat={currentMidpoint?.lat || ""}
-          midpointLng={currentMidpoint?.lng || ""}
+          midpointLat={currentMidpoint?.lat ?? parseFloat(startLat)}
+          midpointLng={currentMidpoint?.lng ?? parseFloat(startLng)}
         />
       </div>
     </div>

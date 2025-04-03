@@ -23,8 +23,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }}
       signInUrl="/login"
       signUpUrl="/signup"
-      afterSignInUrl="/meet-me-halfway"
-      afterSignUpUrl="/meet-me-halfway"
     >
       {children}
     </ClerkProvider>

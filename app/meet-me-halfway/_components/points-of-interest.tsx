@@ -43,6 +43,7 @@ import {
 
 interface PointsOfInterestProps {
   pois: PoiResponse[]
+  isLoading?: boolean
   startLat: string | number
   startLng: string | number
   endLat: string | number
@@ -76,6 +77,7 @@ type MaxTimeDifference = 5 | 10 | 15 | 30 | 999
 
 export default function PointsOfInterest({
   pois,
+  isLoading = true,
   startLat,
   startLng,
   endLat,
@@ -93,7 +95,6 @@ export default function PointsOfInterest({
     PoiWithTravelTimes[]
   >([])
   const [activeTab, setActiveTab] = useState<FilterOption>("all")
-  const [isLoading, setIsLoading] = useState(true)
   const [selectedPoi, setSelectedPoi] = useState<string | null>(null)
   const [favorites, setFavorites] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<SortOption>("totalTime")
@@ -128,12 +129,10 @@ export default function PointsOfInterest({
   useEffect(() => {
     if (!pois.length) {
       console.log('[PointsOfInterest] No POIs provided');
-      setIsLoading(false)
       setPoisWithTravelTimes([])
       return
     }
 
-    setIsLoading(true)
     setPoisWithTravelTimes([]) // Reset before loading new ones
 
     try {
@@ -172,8 +171,6 @@ export default function PointsOfInterest({
       setPoisWithTravelTimes(updatedPois);
     } catch (error) {
       console.error("[PointsOfInterest] Error processing POIs:", error);
-    } finally {
-      setIsLoading(false);
     }
   }, [pois, favorites]);
 

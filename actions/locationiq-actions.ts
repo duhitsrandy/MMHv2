@@ -579,6 +579,89 @@ export async function calculateMidpointAction(
   }
 }
 
+// Moved calculateDistance higher up
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3 // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180
+  const φ2 = lat2 * Math.PI / 180
+  const Δφ = (lat2 - lat1) * Math.PI / 180
+  const Δλ = (lon2 - lon1) * Math.PI / 180
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+          Math.cos(φ1) * Math.cos(φ2) *
+          Math.sin(Δλ/2) * Math.sin(Δλ/2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+
+  return R * c // Distance in meters
+}
+
+// Copied getMidpoint function from results-map.tsx
+function getMidpoint(route: any): { lat: number; lng: number } | null {
+  if (!route || !route.geometry || !route.geometry.coordinates || !route.distance) return null
+
+  const coordinates = route.geometry.coordinates
+  const totalDistance = route.distance
+
+  if (coordinates.length < 2) return null;
+
+  // Find the point closest to 50% of the total distance
+  let cumulativeDistance = 0
+
+  for (let i = 0; i < coordinates.length - 1; i++) {
+    const point1 = coordinates[i]
+    const point2 = coordinates[i + 1]
+
+    // Ensure points are valid arrays of numbers
+    if (!Array.isArray(point1) || point1.length < 2 || !Array.isArray(point2) || point2.length < 2) {
+      console.warn('[getMidpoint] Invalid coordinate points:', point1, point2);
+      continue; // Skip invalid segment
+    }
+
+    const lat1 = point1[1]
+    const lon1 = point1[0]
+    const lat2 = point2[1]
+    const lon2 = point2[0]
+
+    // Ensure coordinates are numbers
+    if (typeof lat1 !== 'number' || typeof lon1 !== 'number' || typeof lat2 !== 'number' || typeof lon2 !== 'number') {
+      console.warn('[getMidpoint] Non-numeric coordinates in segment:', lat1, lon1, lat2, lon2);
+      continue; // Skip invalid segment
+    }
+
+    const segmentDistance = calculateDistance(lat1, lon1, lat2, lon2);
+
+    if (cumulativeDistance + segmentDistance >= totalDistance / 2) {
+      // The midpoint lies on this segment
+      const ratio = (totalDistance / 2 - cumulativeDistance) / segmentDistance;
+      // Check for division by zero or invalid ratio
+      if (isNaN(ratio) || !isFinite(ratio)) {
+         console.warn('[getMidpoint] Invalid ratio calculation, using segment start.', { totalDistance, cumulativeDistance, segmentDistance });
+         return { lat: lat1, lng: lon1 };
+      }
+      const midLat = lat1 + ratio * (lat2 - lat1)
+      const midLon = lon1 + ratio * (lon2 - lon1)
+      // Final check for valid midpoint coordinates
+      if (isNaN(midLat) || isNaN(midLon)) {
+         console.warn('[getMidpoint] Calculated midpoint coordinates are NaN.');
+         return { lat: lat1, lng: lon1 }; // Fallback to segment start
+      }
+      return { lat: midLat, lng: midLon }
+    }
+    cumulativeDistance += segmentDistance
+  }
+
+  // Fallback: If midpoint wasn't found in loop (e.g., due to coordinate issues or floating point errors),
+  // return the coordinates of the last point as a best guess.
+  console.warn('[getMidpoint] Midpoint not found along segments, returning last point.');
+  const lastPoint = coordinates[coordinates.length - 1];
+  if (Array.isArray(lastPoint) && lastPoint.length >= 2 && typeof lastPoint[0] === 'number' && typeof lastPoint[1] === 'number') {
+      return { lat: lastPoint[1], lng: lastPoint[0] };
+  }
+
+  return null; // Return null if no valid midpoint could be determined
+}
+
+// The updated getAlternateRouteAction function (from previous step)
 export async function getAlternateRouteAction(
   startLat: string,
   startLon: string,
@@ -617,8 +700,8 @@ export async function getAlternateRouteAction(
       };
     }
 
-    // Request route with alternatives using OSRM
-    const url = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson&alternatives=true`
+    // Request route with up to 2 alternatives using OSRM
+    const url = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson&alternatives=3`
 
     const response = await rateLimitedFetch(url)
     if (!response.ok) {
@@ -627,34 +710,72 @@ export async function getAlternateRouteAction(
     }
 
     const data = await response.json()
+    // Ensure we have routes and at least a main route
     if (!data || !data.routes || data.routes.length === 0) {
-      return {
-        isSuccess: false as const,
-        message: "No alternate route found between the provided locations"
-      }
+      console.warn(`OSRM returned no routes. Using fallback.`);
+      return createFallbackRoute(startLat, startLon, endLat, endLon);
     }
 
-    // If we have multiple routes, choose the most suitable alternate
-    if (data.routes.length > 1) {
-      const mainRoute = data.routes[0] as RouteData;
-      const alternatives = data.routes.slice(1) as RouteData[];
-      
-      // Find a suitable alternative that isn't too much longer
-      const suitableAlternative = alternatives.find((route: RouteData) => 
-        route.distance <= mainRoute.distance * 1.4 // Max 40% longer
-      );
+    const mainRoute = data.routes[0] as RouteData;
+    const potentialAlternatives = (data.routes.slice(1) as RouteData[]) || [];
 
-      if (suitableAlternative) {
-        return {
-          isSuccess: true as const,
-          message: "Alternate route calculated successfully",
-          data: suitableAlternative
+    // Filter for reasonable alternatives
+    const reasonableAlternatives = potentialAlternatives.filter((route: RouteData) => 
+      route.distance <= mainRoute.distance * 1.4 && // Max 40% longer distance
+      route.duration <= mainRoute.duration * 1.5   // Max 50% longer duration
+    );
+
+    let selectedAlternative: RouteData | null = null;
+
+    if (reasonableAlternatives.length === 0) {
+      console.log("No reasonable alternatives found. Using fallback.");
+      return createFallbackRoute(startLat, startLon, endLat, endLon);
+    } else if (reasonableAlternatives.length === 1) {
+      console.log("One reasonable alternative found.");
+      selectedAlternative = reasonableAlternatives[0];
+    } else {
+      console.log("Multiple reasonable alternatives found. Selecting the most geographically different.");
+      // Find the one whose midpoint is furthest from the main route's midpoint
+      const mainMidpoint = getMidpoint(mainRoute);
+      if (!mainMidpoint) {
+         console.warn("Could not calculate main route midpoint. Selecting the first reasonable alternative.");
+         selectedAlternative = reasonableAlternatives[0];
+      } else {
+        let maxMidpointDistance = -1;
+        reasonableAlternatives.forEach(alt => {
+          const altMidpoint = getMidpoint(alt);
+          if (altMidpoint) {
+            const distance = calculateDistance(
+              mainMidpoint.lat, mainMidpoint.lng, 
+              altMidpoint.lat, altMidpoint.lng
+            );
+            if (distance > maxMidpointDistance) {
+              maxMidpointDistance = distance;
+              selectedAlternative = alt;
+            }
+          } else {
+             console.warn("Could not calculate midpoint for an alternative route.");
+          }
+        });
+        // Fallback if midpoints couldn't be calculated for any alternatives
+        if (!selectedAlternative) {
+           console.warn("Could not determine most different alternative based on midpoints. Selecting first reasonable.");
+           selectedAlternative = reasonableAlternatives[0];
         }
       }
     }
 
-    // If no suitable alternative found, create a fallback
-    return createFallbackRoute(startLat, startLon, endLat, endLon);
+    if (selectedAlternative) {
+      return {
+        isSuccess: true as const,
+        message: "Alternate route calculated successfully",
+        data: selectedAlternative
+      }
+    } else {
+      // This case should theoretically be covered by the initial checks, but as a safeguard:
+      console.log("Failed to select an alternative. Using fallback.");
+      return createFallbackRoute(startLat, startLon, endLat, endLon);
+    }
   } catch (error) {
     console.error("Error calculating alternate route:", error)
     return createFallbackRoute(startLat, startLon, endLat, endLon);
@@ -786,20 +907,4 @@ export async function calculateAlternateMidpointAction(
     console.error("Error calculating alternate midpoint:", error)
     return { isSuccess: false, message: "Failed to calculate alternate midpoint" }
   }
-}
-
-// Helper function to calculate distance between two points using the Haversine formula
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371e3 // Earth's radius in meters
-  const φ1 = lat1 * Math.PI / 180
-  const φ2 = lat2 * Math.PI / 180
-  const Δφ = (lat2 - lat1) * Math.PI / 180
-  const Δλ = (lon2 - lon1) * Math.PI / 180
-
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-          Math.cos(φ1) * Math.cos(φ2) *
-          Math.sin(Δλ/2) * Math.sin(Δλ/2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-
-  return R * c // Distance in meters
 } 

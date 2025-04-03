@@ -161,15 +161,41 @@ export default function MapComponent({
     shadowSize: [41, 41]
   });
 
-  // Zoom to selected POI when it changes
+  // Zoom and pan to selected POI when it changes
   useEffect(() => {
     if (!mapRef.current || !selectedPoiId) return;
-    
+
     const selectedMarker = poiMarkers.current.get(selectedPoiId);
     if (selectedMarker) {
-      console.log('[Map] Zooming to selected POI:', selectedPoiId);
-      mapRef.current.setView(selectedMarker.getLatLng(), 16);
-      selectedMarker.openPopup();
+      const map = mapRef.current;
+      const targetLatLng = selectedMarker.getLatLng();
+      const targetZoom = 15; // Reduced zoom level
+
+      console.log('[Map] Focusing on selected POI:', selectedPoiId);
+
+      // Use flyTo for a smoother transition
+      map.flyTo(targetLatLng, targetZoom, {
+        duration: 0.8 // Adjust duration as needed
+      });
+
+      // Open popup after flyTo animation completes
+      const openPopupOnMoveEnd = () => {
+        // Ensure the marker still exists and is the currently selected one
+        const currentMarker = poiMarkers.current.get(selectedPoiId);
+        if (currentMarker === selectedMarker) {
+           // Pan map slightly down to give popup space before opening
+           map.panBy([0, -100], { animate: true, duration: 0.3 }); // Pan down 100px
+
+           // Open popup after panning
+           map.once('moveend', () => { // Use 'once' to avoid infinite loops if pan triggers moveend
+              if (poiMarkers.current.get(selectedPoiId) === selectedMarker) { // Double check selection
+                 selectedMarker.openPopup();
+              }
+           });
+        }
+        map.off('moveend', openPopupOnMoveEnd); // Clean up the initial flyTo listener
+      };
+      map.on('moveend', openPopupOnMoveEnd);
     }
   }, [selectedPoiId]);
 

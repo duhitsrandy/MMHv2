@@ -45,7 +45,7 @@ npm install
 
 3. Create a `.env.local` file in the root directory and add your LocationIQ API key:
 ```env
-LOCATIONIQ_API_KEY=your_api_key_here
+NEXT_PUBLIC_LOCATIONIQ_KEY=your_api_key_here
 ```
 
 4. Start the development server:
