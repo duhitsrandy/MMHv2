@@ -191,10 +191,10 @@ export async function searchPoisAction(
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
 
     // Build a more comprehensive query
-    const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "hospital", "marketplace"];
+    const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "marketplace", "fast_food", "pub", "community_centre", "police", "post_office", "townhall"];
     const leisureTypes = ["park", "garden", "playground", "sports_centre"];
     const tourismTypes = ["museum", "hotel", "gallery", "attraction", "viewpoint"];
-    const shopTypes = ["supermarket", "mall", "department_store", "bakery", "convenience"];
+    const shopTypes = ["supermarket", "mall", "department_store", "bakery", "convenience", "books"];
     
     // Simple, direct Overpass query with common POI types
     const query = `
@@ -301,7 +301,7 @@ export async function searchPoisAction(
         const distanceB = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(b.lat), parseFloat(b.lon));
         return distanceA - distanceB;
       })
-      .slice(0, 8); // Back to 8 POIs per route
+      .slice(0, 12); // Increased from 8 to 12 POIs per route
     
     console.log(`[POI Search] Returning ${sortedPois.length} sorted POIs:`, {
       types: sortedPois.reduce((acc: any, poi: PoiResponse) => {
