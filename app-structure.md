@@ -1,916 +1,284 @@
 # Meet Me Halfway App Structure
 
 ## Overview
-Meet Me Halfway is a Next.js application that helps users find a convenient meeting point between two locations. The app calculates two routes between the locations and finds points of interest (POIs) around the midpoints of both routes.
+Meet Me Halfway is a Next.js application that helps users find a convenient meeting point between two locations. The app calculates two routes (main and alternate) between the locations using OSRM, finds points of interest (POIs) around the midpoints of both routes using LocationIQ, and enriches POIs with travel times using OpenRouteService (ORS). Both routes are displayed simultaneously on an interactive map.
 
 ## Core Components
 
 ### 1. Main App Component (`app/meet-me-halfway/page.tsx`)
-- Entry point for the application
-- Handles the main layout and routing
-- Manages the overall application state
-- Renders the main search interface and results view
+- Entry point for the application.
+- Renders `MeetMeHalfwayApp` which contains the search and results logic.
 
-### 2. Search Interface (`app/meet-me-halfway/_components/search-interface.tsx`)
-- Provides the main search form for two locations
-- Features:
-  - Address input fields with autocomplete
-  - Geocoding using LocationIQ API
-  - Form validation and error handling
-  - Loading states and user feedback
-  - Responsive design for mobile and desktop
+### 2. Meet Me Halfway App (`app/meet-me-halfway/_components/meet-me-halfway-app.tsx`)
+- Manages the overall state (search inputs, results visibility).
+- Conditionally renders `SearchInterface` or `ResultsMap`.
+- Handles the transition between search and results.
 
-### 3. Results Map (`app/meet-me-halfway/_components/results-map.tsx`)
-- Displays the calculated routes and meeting points
+### 3. Search Interface (`app/meet-me-halfway/_components/search-interface.tsx`)
+- Provides the main search form for two locations.
 - Features:
-  - Interactive map using react-leaflet
-  - Display of both main and alternate routes
-  - Markers for start points, end points, and midpoints
-  - Points of Interest (POIs) display around both midpoints
-  - Route information cards showing duration and distance
-  - Responsive layout with collapsible POI panel
+  - Address input fields.
+  - Geocoding via LocationIQ (`geocodeLocationAction`).
+  - Form validation.
+  - Loading states and user feedback.
+  - Callback (`onFindMidpoint`) to trigger results display.
 
-### 4. Map Component (`app/meet-me-halfway/_components/map-component.tsx`)
-- Handles the map rendering and interaction
-- Features:
-  - Dynamic map bounds adjustment
-  - Route polyline rendering
-  - Custom markers for locations
-  - POI markers with popups
-  - Map controls and zoom functionality
+### 4. Results Map (`app/meet-me-halfway/_components/results-map.tsx`)
+- Orchestrates the display of map and POI data after a successful search.
+- **Data Fetching**: Uses the `useMapData` custom hook:
+    - Fetches main route (OSRM via `getRouteAction`).
+    - Fetches alternate route (OSRM via `getAlternateRouteAction`).
+    - Calculates midpoints for both routes.
+    - Fetches initial POIs around both midpoints (LocationIQ via `searchPoisAction`).
+    - Fetches travel time matrix (ORS via `getTravelTimeMatrixAction`) to enrich POIs.
+- **State Management**: Manages loading states (`isMapDataLoading`, `isPoiTravelTimeLoading`), POI visibility (`showPois`), and selected POI (`selectedPoiId`).
+- **Rendering**: Renders `MapComponent` and `PointsOfInterest`, passing down the necessary data (routes, enriched POIs, state).
 
-### 5. Points of Interest (`app/meet-me-halfway/_components/points-of-interest.tsx`)
-- Displays and manages POIs around both midpoints
-- Features:
-  - List of POIs with categories
-  - Distance and rating information
-  - Filtering by POI type
-  - Interactive POI selection
-  - Responsive design for mobile and desktop
+### 5. Map Component (`app/meet-me-halfway/_components/map-component.tsx`)
+- Handles the Leaflet map rendering and interaction.
+- Displays:
+    - Main route (blue solid line).
+    - Alternate route (purple solid line, if available).
+    - Markers for start, end, main midpoint, and alternate midpoint (if available).
+    - POI markers (using enriched POI data for popups).
+- **Interaction**: 
+    - Handles POI marker clicks with a smooth `flyTo` animation.
+    - Opens POI popups on single click, relying on Leaflet's `autoPan` for visibility.
+    - Prevents repeated zooming on consecutive clicks on the same marker.
+
+### 6. Points of Interest (`app/meet-me-halfway/_components/points-of-interest.tsx`)
+- Displays a scrollable list of POIs.
+- Uses enriched POI data (`combinedPois`) received from `ResultsMap`.
+- Displays POI name, type, address, and detailed travel time/distance information calculated via ORS.
+- Handles POI selection, synchronizing with the `selectedPoiId` state in `ResultsMap`.
 
 ## API Integration
 
-### 1. LocationIQ API (`actions/locationiq-actions.ts`)
-- Handles all LocationIQ API interactions
-- Key functions:
-  - `geocodeAddress`: Converts addresses to coordinates
-  - `getRouteAction`: Calculates the main route
-  - `getAlternateRouteAction`: Calculates an alternative route
-  - `searchPoisAction`: Finds POIs around a location
-  - `reverseGeocodeAction`: Converts coordinates to addresses
+### 1. Geocoding (`actions/locationiq-actions.ts`)
+- **API**: LocationIQ Geocoding API.
+- **Action**: `geocodeLocationAction`.
+- **Purpose**: Converts user-input addresses into latitude/longitude coordinates.
 
-### 2. Overpass API Integration
-- Used for POI search through LocationIQ
-- Queries for various POI types:
-  - Amenities (restaurants, cafes, etc.)
-  - Leisure facilities
-  - Tourist attractions
-  - Shopping locations
-- Implements deduplication and distance-based sorting
+### 2. Routing (`actions/locationiq-actions.ts`)
+- **API**: OSRM Demo Server (Route Service).
+- **Actions**: 
+    - `getRouteAction`: Fetches the main driving route.
+    - `getAlternateRouteAction`: Fetches up to 3 alternative routes.
+- **Purpose**: Calculates the road network paths between the geocoded start and end points.
+- **Note**: Although LocationIQ offers routing, the app currently calls the free OSRM demo server directly from these actions.
 
-## State Management
+### 3. Alternate Route Selection (`actions/locationiq-actions.ts`)
+- **Logic**: Within `getAlternateRouteAction`.
+- **Process**:
+    1. Fetches up to 3 alternatives from OSRM.
+    2. Filters alternatives based on reasonable duration/distance compared to the main route.
+    3. Calculates midpoints of the main route and valid alternatives.
+    4. Selects the alternative whose midpoint is geographically furthest from the main route's midpoint.
+    5. Returns the selected alternate route or null/fallback.
 
-### 1. Route State
-- Manages both main and alternate routes
-- Stores:
-  - Route geometry
-  - Duration and distance
-  - Midpoint coordinates
-  - Route metadata
+### 4. POI Search (`actions/locationiq-actions.ts`)
+- **API**: LocationIQ Nearby API (which likely uses Overpass API data).
+- **Action**: `searchPoisAction`.
+- **Purpose**: Finds POIs (amenities, shops, leisure, tourism) within a specified radius around the calculated midpoints.
 
-### 2. POI State
-- Manages POIs for both midpoints
-- Features:
-  - Deduplication based on OSM ID
-  - Distance-based sorting
-  - Category-based filtering
-  - Combined display of POIs from both midpoints
+### 5. Travel Time Matrix (`actions/ors-actions.ts`)
+- **API**: OpenRouteService (ORS) Matrix API.
+- **Action**: `getTravelTimeMatrixAction`.
+- **Purpose**: Calculates a matrix of travel times and distances between multiple sources (start/end locations) and destinations (all fetched POIs). This data is used to enrich the POIs displayed in the list and popups.
 
-## Key Features
+## State Management (`useMapData` hook in `results-map.tsx`)
 
-### 1. Route Calculation
-- Calculates two routes between locations
-- Main route: Direct route between points
-- Alternate route: Different path with similar duration
-- Both routes are displayed simultaneously
+- **Route State**: `mainRoute`, `alternateRoute` (containing geometry, duration, distance).
+- **Midpoint State**: `currentMidpoint`, `alternateMidpoint` (calculated `{lat, lng}` coordinates).
+- **POI State**: 
+    - `initialPois`: Raw POIs fetched from LocationIQ for both midpoints, deduplicated.
+    - `combinedPois`: Enriched POIs after processing with ORS travel time matrix data.
+- **Loading State**: `isMapDataLoading` (for routes/initial POIs), `isPoiTravelTimeLoading` (for ORS matrix calculation).
 
-### 2. Midpoint Calculation
-- Calculates midpoints along both routes
-- Considers actual route geometry
-- Provides meeting points at equal travel time
+## Key Features & Flow
 
-### 3. POI Discovery
-- Finds POIs around both midpoints
-- Implements radius-based search
-- Categorizes POIs by type
-- Sorts by distance from midpoint
-- Limits to 8 POIs per route for clarity
+1.  **Search**: User enters two addresses in `SearchInterface`.
+2.  **Geocoding**: Addresses are geocoded using LocationIQ (`geocodeLocationAction`).
+3.  **Trigger Results**: `onFindMidpoint` is called in `MeetMeHalfwayApp`, switching the view to `ResultsMap`.
+4.  **Fetch Routes & POIs (`useMapData`)**: 
+    - Main and alternate routes requested from OSRM.
+    - Midpoints calculated.
+    - Initial POIs fetched from LocationIQ around both midpoints.
+    - `isMapDataLoading` set to `false`, `isPoiTravelTimeLoading` set to `true`.
+5.  **Render Initial Map**: `MapComponent` renders with routes and midpoints. `PointsOfInterest` renders with a loading state.
+6.  **Fetch Travel Times (`useMapData`)**: 
+    - ORS Matrix API called with start/end points and all initial POIs.
+7.  **Enrich POIs**: Results from ORS are used to add travel time/distance data to each POI, creating `combinedPois`.
+8.  **Render Final State**: `isPoiTravelTimeLoading` set to `false`. `MapComponent` updates POI markers (if shown) with popup data. `PointsOfInterest` displays the list with full details.
+9.  **Interaction**: User can click POIs on the map (`MapComponent`) or in the list (`PointsOfInterest`), which updates the shared `selectedPoiId` state in `ResultsMap`, highlighting the selection in both components.
 
-### 4. User Interface
-- Responsive design for all screen sizes
-- Interactive map with route visualization
-- Collapsible POI panel
-- Loading states and error handling
-- Clear feedback for user actions
+## Recent Changes & Refinements
 
-## Recent Changes
-
-### 1. Route Display Updates
-- Removed route selection/toggle functionality
-- Both routes now displayed simultaneously
-- Improved route visualization
-- Example implementation:
-```typescript
-// In results-map.tsx
-const ResultsMap: React.FC<ResultsMapProps> = ({
-  startLat,
-  startLng,
-  endLat,
-  endLng,
-  startAddress,
-  endAddress
-}) => {
-  // Both routes are now always displayed
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr,350px] gap-4">
-      <MapComponent
-        startLat={startLat}
-        startLng={startLng}
-        endLat={endLat}
-        endLng={endLng}
-        startAddress={startAddress}
-        endAddress={endAddress}
-        mainRoute={mainRoute}
-        alternateRoute={alternateRoute}
-        showAlternateRoute={true}
-        pois={currentPois}
-        showPois={true}
-      />
-      <PointsOfInterest
-        pois={currentPois}
-        onPoiSelect={handlePoiSelect}
-      />
-    </div>
-  );
-};
-```
-
-### 2. POI Handling Improvements
-- POIs now fetched for both midpoints
-- Implemented deduplication based on OSM ID
-- Combined display of POIs from both routes
-- Limited to 8 POIs per route for clarity
-- Example implementation:
-```typescript
-// In locationiq-actions.ts
-export async function searchPoisAction(
-  lat: string,
-  lon: string,
-  radius: number = 1000,
-  types: string[] = ["amenity", "leisure", "tourism", "shop"]
-): Promise<ActionState<PoiResponse[]>> {
-  console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
-  
-  try {
-    // ... existing query construction ...
-    
-    const pois = data.elements
-      .filter((poi: OverpassElement) => {
-        const lat = poi.lat || poi.center?.lat;
-        const lon = poi.lon || poi.center?.lon;
-        return lat && lon;
-      })
-      .map((poi: OverpassElement) => ({
-        id: poi.id.toString(),
-        osm_id: poi.id.toString(),
-        name: poi.tags?.name || poi.tags?.['addr:housename'] || 'Unnamed Location',
-        type: poi.tags?.amenity || poi.tags?.leisure || poi.tags?.tourism || poi.tags?.shop || 'place',
-        lat: (poi.lat || poi.center?.lat).toString(),
-        lon: (poi.lon || poi.center?.lon).toString(),
-        tags: poi.tags || {}
-      }))
-      .slice(0, 8); // Limited to 8 POIs per route
-
-    return {
-      isSuccess: true,
-      data: pois
-    };
-  } catch (error) {
-    // ... error handling ...
-  }
-}
-```
-
-### 3. UI Improvements
-- Enhanced responsive design
-- Improved POI card layout
-- Better error handling and loading states
-- Example implementation:
-```typescript
-// In points-of-interest.tsx
-const PointsOfInterest: React.FC<PointsOfInterestProps> = ({
-  pois,
-  onPoiSelect
-}) => {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Points of Interest</h2>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            Filters
-          </Button>
-        </div>
-      </div>
-      
-      {showFilters && (
-        <div className="space-y-2">
-          <Select
-            value={selectedCategory}
-            onValueChange={setSelectedCategory}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">All Categories</SelectItem>
-              {categories.map(category => (
-                <SelectItem key={category} value={category}>
-                  {category}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {filteredPois.map(poi => (
-          <Card
-            key={poi.osm_id}
-            className="cursor-pointer hover:bg-accent"
-            onClick={() => onPoiSelect(poi)}
-          >
-            <CardHeader>
-              <CardTitle>{poi.name}</CardTitle>
-              <CardDescription>{poi.type}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                {formatDistance(poi.distance)}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-};
-```
+1.  **Map Stability**: Fixed Leaflet rendering errors by simplifying map component lifecycle management and ensuring proper cleanup.
+2.  **POI Interaction**: 
+    - Clicking a POI marker triggers a smooth `flyTo` animation.
+    - Popup opens reliably on a single click.
+    - Repeated clicks on an already selected/focused marker do not trigger re-animation.
+    - Removed manual map panning after `flyTo`, relying on Leaflet's `autoPan` for better popup visibility.
+3.  **API Usage**: Clarified the distinct roles of LocationIQ (Geocoding, POI Search), OSRM (Routing), and ORS (Travel Time Matrix).
+4.  **Alternate Route Logic**: Implemented the strategy to select the most geographically distinct alternate route based on midpoint distance.
+5.  **Data Flow**: Ensured the fully enriched `combinedPois` data (with travel times) is used for both the POI list display and the map marker popups.
 
 ## Future Improvements
-1. Add more POI categories
-2. Implement POI filtering by distance
-3. Add route comparison features
-4. Enhance mobile responsiveness
-5. Add more detailed POI information
+1. Add more POI categories & filtering options.
+2. Implement user accounts to save searches.
+3. Add route comparison features (e.g., elevation, road types).
+4. Consider replacing OSRM Demo Server with a more robust routing service (e.g., LocationIQ routing, ORS routing, Mapbox) for better reliability.
+5. Add unit/integration tests.
 
-## Tech Stack Breakdown
+## Tech Stack Breakdown (Summary)
 
-### Frontend
-- **Next.js 14+**: App Router, Server Components
-- **React**: For UI components and state management
-- **Tailwind CSS**: For styling
-- **Shadcn UI**: Component library built on Radix UI
-- **Framer Motion**: For animations
-- **Leaflet**: For interactive maps
+- **Frontend**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS, shadcn/ui, react-leaflet
+- **Backend/APIs**: Next.js Server Actions, LocationIQ, OSRM Demo, OpenRouteService
+- **(Potential Future)**: Database (e.g., Supabase), Authentication (e.g., Clerk)
 
-### Backend
-- **Supabase**: PostgreSQL database
-- **Drizzle ORM**: Type-safe database operations
-- **Server Actions**: Next.js server-side operations
-- **LocationIQ API**: Geocoding, routing, and POI search
-
-### Authentication
-- **Clerk**: User authentication and management
-
-### Analytics
-- **PostHog**: User behavior tracking
-
-### Development Tools
-- **TypeScript**: Type safety
-- **ESLint & Prettier**: Code formatting
-- **Husky**: Git hooks
-
-## Directory Structure
+## Directory Structure (Simplified)
 
 ```
-├── actions/
-│   ├── db/
-│   │   └── searches-actions.ts
-│   └── location-actions.ts
+├── actions/                  # Server Actions for API calls
+│   ├── locationiq-actions.ts # Geocoding, OSRM Routing, POI Search
+│   └── ors-actions.ts      # ORS Matrix API calls
 ├── app/
-│   ├── api/
-│   ├── meet-me-halfway/
-│   │   ├── results/
-│   │   └── saved-searches/
-│   └── page.tsx
-├── components/
-│   ├── ui/
-│   ├── map/
-│   └── search/
-├── db/
-│   ├── schema/
-│   └── db.ts
-├── lib/
-│   ├── hooks/
-│   └── utils.ts
-└── types/
+│   └── meet-me-halfway/
+│       ├── _components/      # UI Components
+│       │   ├── map-component.tsx
+│       │   ├── points-of-interest.tsx
+│       │   ├── results-map.tsx
+│       │   ├── search-interface.tsx
+│       │   └── meet-me-halfway-app.tsx
+│       └── page.tsx          # Page entry point
+├── lib/                      # Utilities, Hooks (if any)
+├── types/                    # TypeScript types
+├── public/
+│   └── leaflet/            # Leaflet assets (e.g., marker icons)
+├── .env.local              # Environment variables (API keys)
+└── README.md
 ```
 
-## Key Implementation Details
+## Key Implementation Snippets
 
-### 1. Authentication Flow
-- Clerk handles user authentication
-- Protected routes using middleware
-- User session management
-
-### 2. Database Operations
+### Map Component - POI Click Handler (Simplified Logic)
 ```typescript
-// Example server action for saving a search
-export async function saveSearchAction(
-  startLocation: string,
-  endLocation: string,
-  midpoint: Coordinates
-): Promise<ActionState<Search>> {
-  try {
-    const [search] = await db
-      .insert(searchesTable)
-      .values({
-        userId: auth().userId,
-        startLocation,
-        endLocation,
-        midpoint
-      })
-      .returning();
-    
-    return {
-      isSuccess: true,
-      message: "Search saved successfully",
-      data: search
-    };
-  } catch (error) {
-    return {
-      isSuccess: false,
-      message: "Failed to save search"
-    };
+// Inside MapComponent useEffect for rendering POIs
+marker.on('click', () => {
+  if (!map) return;
+
+  if (onPoiSelect) {
+    onPoiSelect(uniqueKey);
   }
-}
+
+  const targetLatLng = L.latLng(poiLat, poiLon);
+  const targetZoom = 15;
+  const currentCenter = map.getCenter();
+  const currentZoom = map.getZoom();
+
+  // Prevent re-animation if already focused
+  if (currentZoom === targetZoom && currentCenter.distanceTo(targetLatLng) < 10) {
+    if (!marker.isPopupOpen()) marker.openPopup();
+    return;
+  }
+
+  // Fly to marker
+  map.flyTo(targetLatLng, targetZoom, { duration: 0.8 });
+
+  // Open popup on arrival (Leaflet autoPan handles visibility)
+  map.once('moveend', () => {
+    const currentMarker = poiMarkers.current.get(uniqueKey);
+    if (currentMarker && !currentMarker.isPopupOpen()) {
+      currentMarker.openPopup();
+    }
+  });
+});
 ```
 
-### 3. Map Integration
+### Results Map - Passing Props
 ```typescript
-// Example map component structure
-interface MapProps {
-  center: Coordinates;
-  markers: Array<{
-    position: Coordinates;
-    type: 'start' | 'end' | 'poi';
-    info?: string;
-  }>;
-  routes?: Array<{
-    points: Coordinates[];
-    color: string;
-  }>;
-}
+// Inside ResultsMap component return
+<MapComponent
+  // ... other props
+  mainRoute={mainRoute}
+  alternateRoute={alternateRoute}
+  pois={mapComponentPois} // Enriched POIs
+  showPois={showPois}
+  showAlternateRoute={!!alternateRoute} // Show if exists
+  selectedPoiId={selectedPoiId}
+  onPoiSelect={setSelectedPoiId}
+/>
+<PointsOfInterest
+  pois={combinedPois} // Enriched POIs
+  // ... other props
+  onPoiSelect={setSelectedPoiId}
+  isLoading={isPoiTravelTimeLoading || isMapDataLoading}
+/>
 ```
 
-### 4. Points of Interest
+### Alternate Route Action - Selection Concept
 ```typescript
-interface POI {
-  id: string;
-  name: string;
-  type: string;
-  coordinates: Coordinates;
-  address: string;
-  rating?: number;
-  distance: number;
-}
+// Conceptual logic within getAlternateRouteAction
+async function getAlternateRouteAction(...) {
+  // 1. Fetch routes from OSRM (alternatives=3)
+  const osrmResponse = await fetchOsrmRoutes(...);
+  const mainRoute = osrmResponse.routes[0];
+  const potentialAlternates = osrmResponse.routes.slice(1);
 
-// Example POI fetch function
-async function fetchNearbyPOIs(
-  location: Coordinates,
-  radius: number
-): Promise<POI[]> {
-  // LocationIQ API call implementation
+  // 2. Filter long alternatives
+  const validAlternates = potentialAlternates.filter(alt => 
+    alt.distance < mainRoute.distance * 1.4 // Example: max 40% longer
+  );
+
+  // 3. Calculate midpoints
+  const mainMidpoint = calculateRouteMidpoint(mainRoute);
+  const alternateMidpoints = validAlternates.map(calculateRouteMidpoint);
+
+  // 4. Find furthest midpoint
+  let bestAlternate = null;
+  let maxDistance = -1;
+
+  validAlternates.forEach((alt, index) => {
+    const altMidpoint = alternateMidpoints[index];
+    if (mainMidpoint && altMidpoint) {
+      const distance = calculateGeoDistance(mainMidpoint, altMidpoint);
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        bestAlternate = alt;
+      }
+    }
+  });
+
+  // 5. Return bestAlternate (or null/fallback)
+  return { isSuccess: true, data: bestAlternate }; 
 }
 ```
 
 ## Environment Variables
 ```env
 # Required environment variables
-DATABASE_URL=
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-CLERK_SECRET_KEY=
-NEXT_PUBLIC_LOCATIONIQ_KEY=
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=
+NEXT_PUBLIC_LOCATIONIQ_KEY=your_locationiq_api_key_here
+
+# Optional for future features (Rate Limiting, DB, Auth)
+# UPSTASH_REDIS_URL=
+# UPSTASH_REDIS_TOKEN=
+# DATABASE_URL=
+# NEXT_PUBLIC_SUPABASE_URL=
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=
+# NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+# CLERK_SECRET_KEY=
+# NEXT_PUBLIC_CLERK_SIGN_IN_URL=...
+# NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=...
 ```
 
 ## Deployment Considerations
-
-### Database Setup
-1. Create Supabase project
-2. Run migrations
-3. Set up RLS policies
-
-### API Keys
-1. LocationIQ API key with required permissions
-2. Clerk configuration
-3. Supabase connection details
-
-### Performance Optimization
-1. Image optimization
-2. API route caching
-3. Static page generation where possible
-
-## Error Handling
-
-```typescript
-// Example error handling structure
-interface ErrorResponse {
-  code: string;
-  message: string;
-  details?: unknown;
-}
-
-function handleApiError(error: unknown): ErrorResponse {
-  if (error instanceof Error) {
-    return {
-      code: 'INTERNAL_ERROR',
-      message: error.message
-    };
-  }
-  return {
-    code: 'UNKNOWN_ERROR',
-    message: 'An unexpected error occurred'
-  };
-}
-```
-
-## Testing Considerations
-
-1. Unit tests for utility functions
-2. Integration tests for API routes
-3. E2E tests for critical user flows
+- Ensure `NEXT_PUBLIC_LOCATIONIQ_KEY` is set in the deployment environment (e.g., Vercel).
+- The app currently relies on free tiers/public endpoints (OSRM Demo, ORS free tier). Consider dedicated/paid services for production use to ensure reliability and higher rate limits.
 
 ## Security Measures
-
-1. Input validation
-2. Rate limiting
-3. API key protection
-4. SQL injection prevention through Drizzle ORM
-5. XSS prevention
-6. CORS configuration
-
-This documentation serves as a comprehensive guide for rebuilding the Meet-Me-Halfway application. It includes core functionality, database structure, API integrations, and important implementation details. 
-
-## Additional Implementation Details
-
-### 1. Route Protection
-```typescript
-// middleware.ts
-import { authMiddleware } from "@clerk/nextjs";
-
-export default authMiddleware({
-  publicRoutes: ["/", "/login", "/signup"],
-  ignoredRoutes: ["/api/webhooks(.*)"]
-});
-
-export const config = {
-  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"]
-};
-```
-
-### 2. API Rate Limiting
-```typescript
-// lib/rate-limit.ts
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
-
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_URL!,
-  token: process.env.UPSTASH_REDIS_TOKEN!
-});
-
-export const rateLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(10, "1m"),
-  analytics: true
-});
-
-// Usage in API routes
-export async function rateLimit(identifier: string) {
-  const { success, limit, reset, remaining } = await rateLimiter.limit(identifier);
-  
-  if (!success) {
-    throw new Error(`Rate limit exceeded. Try again in ${reset - Date.now()}ms`);
-  }
-  
-  return { remaining, reset };
-}
-```
-
-### 3. Error Boundaries
-```typescript
-"use client";
-
-import { Component, ErrorInfo, ReactNode } from "react";
-
-interface Props {
-  children?: ReactNode;
-  fallback?: ReactNode;
-}
-
-interface State {
-  hasError: boolean;
-}
-
-export class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false
-  };
-
-  public static getDerivedStateFromError(_: Error): State {
-    return { hasError: true };
-  }
-
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Uncaught error:", error, errorInfo);
-  }
-
-  public render() {
-    if (this.state.hasError) {
-      return this.props.fallback || <div>Something went wrong</div>;
-    }
-
-    return this.props.children;
-  }
-}
-```
-
-### 4. Caching Strategy
-```typescript
-// lib/cache.ts
-export const CACHE_KEYS = {
-  RECENT_SEARCHES: (userId: string) => `recent-searches:${userId}`,
-  POI_RESULTS: (location: string, radius: number) => 
-    `poi:${location}:${radius}`,
-  GEOCODING: (address: string) => `geocoding:${address}`
-} as const;
-
-export const CACHE_TTL = {
-  RECENT_SEARCHES: 60 * 60 * 24, // 24 hours
-  POI_RESULTS: 60 * 60, // 1 hour
-  GEOCODING: 60 * 60 * 24 * 7 // 1 week
-} as const;
-```
-
-## Project Setup and Configuration
-
-### Environment Variables
-```bash
-# Authentication - Clerk
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-CLERK_SECRET_KEY=
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=
-NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=
-NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=
-
-# LocationIQ API
-NEXT_PUBLIC_LOCATIONIQ_KEY=
-
-# Database - Supabase
-DATABASE_URL=
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-
-# Analytics - PostHog
-POSTHOG_KEY=
-```
-
-### Initial Setup Steps
-
-1. **Database Setup**
-```typescript
-// db/setup.ts
-import { drizzle } from "drizzle-orm/postgres-js";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
-import postgres from "postgres";
-
-const migrationClient = postgres(process.env.DATABASE_URL!, { max: 1 });
-
-async function setupDatabase() {
-  const db = drizzle(migrationClient);
-  await migrate(db, { migrationsFolder: "drizzle" });
-}
-
-setupDatabase()
-  .catch(console.error)
-  .finally(() => migrationClient.end());
-```
-
-2. **API Integration Configuration**
-```typescript
-// lib/api/locationiq.ts
-export const LOCATIONIQ_CONFIG = {
-  endpoints: {
-    geocoding: "https://us1.locationiq.com/v1/search.php",
-    reverse: "https://us1.locationiq.com/v1/reverse.php",
-    directions: "https://us1.locationiq.com/v1/directions/driving",
-    nearby: "https://us1.locationiq.com/v1/nearby.php"
-  },
-  rateLimits: {
-    requestsPerSecond: 2,
-    dailyLimit: 5000
-  },
-  retryConfig: {
-    maxRetries: 3,
-    baseDelay: 1000,
-    maxDelay: 5000
-  }
-};
-
-export class LocationIQError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public code: string
-  ) {
-    super(message);
-    this.name = "LocationIQError";
-  }
-}
-
-export async function makeLocationIQRequest<T>(
-  endpoint: keyof typeof LOCATIONIQ_CONFIG["endpoints"],
-  params: Record<string, string>
-): Promise<T> {
-  const url = new URL(LOCATIONIQ_CONFIG.endpoints[endpoint]);
-  url.search = new URLSearchParams({
-    ...params,
-    key: process.env.NEXT_PUBLIC_LOCATIONIQ_KEY!,
-    format: "json"
-  }).toString();
-
-  const response = await fetch(url.toString());
-  
-  if (!response.ok) {
-    throw new LocationIQError(
-      "LocationIQ API request failed",
-      response.status,
-      await response.text()
-    );
-  }
-
-  return response.json();
-}
-```
-
-## Testing
-
-### Unit Tests
-
-```typescript
-// __tests__/midpoint.test.ts
-import { calculateMidpoint } from "@/lib/midpoint";
-import { mockLocationIQResponse } from "@/lib/test-utils";
-
-jest.mock("@/lib/api/locationiq");
-
-describe("Midpoint Calculation", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it("calculates correct midpoint between two points", async () => {
-    const start = { lat: 40.7128, lng: -74.0060 }; // NYC
-    const end = { lat: 34.0522, lng: -118.2437 }; // LA
-    
-    mockLocationIQResponse({
-      routes: [{ duration: 3600 }] // 1 hour
-    });
-
-    const result = await calculateMidpoint(start, end);
-    
-    expect(result.midpoint).toEqual({
-      lat: expect.closeTo(37.3825, 2),
-      lng: expect.closeTo(-96.1248, 2)
-    });
-    expect(result.travelTimeA).toBe(3600);
-    expect(result.travelTimeB).toBe(3600);
-  });
-
-  it("handles API errors gracefully", async () => {
-    const start = { lat: 40.7128, lng: -74.0060 };
-    const end = { lat: 34.0522, lng: -118.2437 };
-    
-    mockLocationIQResponse(null, new LocationIQError("Rate limit exceeded", 429, "TOO_MANY_REQUESTS"));
-
-    await expect(calculateMidpoint(start, end)).rejects.toThrow("Rate limit exceeded");
-  });
-});
-```
-
-### Integration Tests
-
-```typescript
-// __tests__/integration/search-flow.test.ts
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { SearchPage } from "@/app/meet-me-halfway/page";
-
-describe("Search Flow", () => {
-  it("completes full search process", async () => {
-    render(<SearchPage />);
-
-    // Fill in search form
-    fireEvent.change(screen.getByLabelText(/start location/i), {
-      target: { value: "New York, NY" }
-    });
-    fireEvent.change(screen.getByLabelText(/end location/i), {
-      target: { value: "Boston, MA" }
-    });
-
-    // Submit form
-    fireEvent.click(screen.getByRole("button", { name: /find midpoint/i }));
-
-    // Wait for results
-    await waitFor(() => {
-      expect(screen.getByText(/midpoint found/i)).toBeInTheDocument();
-    });
-
-    // Verify map and POIs are displayed
-    expect(screen.getByTestId("map-container")).toBeInTheDocument();
-    expect(screen.getByTestId("poi-list")).toBeInTheDocument();
-  });
-});
-```
-
-## Performance Optimization
-
-### Caching Strategy
-
-```typescript
-// lib/cache.ts
-import { Redis } from "@upstash/redis";
-
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_URL!,
-  token: process.env.UPSTASH_REDIS_TOKEN!
-});
-
-export const CACHE_KEYS = {
-  search: (id: string) => `search:${id}`,
-  location: (query: string) => `location:${query}`,
-  poi: (location: string, radius: number) => `poi:${location}:${radius}`
-};
-
-export const CACHE_TTL = {
-  search: 60 * 60 * 24, // 24 hours
-  location: 60 * 60 * 24 * 7, // 1 week
-  poi: 60 * 60 // 1 hour
-};
-
-export async function getCachedData<T>(
-  key: string,
-  fetchFn: () => Promise<T>,
-  ttl: number
-): Promise<T> {
-  const cached = await redis.get<T>(key);
-  if (cached) return cached;
-
-  const fresh = await fetchFn();
-  await redis.setex(key, ttl, fresh);
-  return fresh;
-}
-
-// Example usage
-export async function getCachedSearchResults(searchId: string) {
-  return getCachedData(
-    CACHE_KEYS.search(searchId),
-    () => db.query.searches.findFirst({
-      where: eq(searches.id, searchId)
-    }),
-    CACHE_TTL.search
-  );
-}
-```
-
-### API Rate Limiting
-
-```typescript
-// lib/rate-limit.ts
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
-
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_URL!,
-  token: process.env.UPSTASH_REDIS_TOKEN!
-});
-
-export const rateLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(10, "1m"),
-  analytics: true,
-  prefix: "mmh-api"
-});
-
-export async function withRateLimit(
-  identifier: string,
-  fn: () => Promise<any>
-) {
-  const { success, reset } = await rateLimiter.limit(identifier);
-  
-  if (!success) {
-    throw new Error(`Rate limit exceeded. Try again in ${reset - Date.now()}ms`);
-  }
-  
-  return fn();
-}
-```
-
-## Deployment
-
-### Vercel Configuration
-
-```json
-// vercel.json
-{
-  "env": {
-    "NEXT_PUBLIC_LOCATIONIQ_KEY": "@locationiq_key",
-    "DATABASE_URL": "@database_url",
-    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "@clerk_pub_key",
-    "CLERK_SECRET_KEY": "@clerk_secret_key"
-  },
-  "build": {
-    "env": {
-      "NEXT_PUBLIC_LOCATIONIQ_KEY": "@locationiq_key",
-      "DATABASE_URL": "@database_url",
-      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "@clerk_pub_key",
-      "CLERK_SECRET_KEY": "@clerk_secret_key"
-    }
-  },
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        },
-        {
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        },
-        {
-          "key": "X-XSS-Protection",
-          "value": "1; mode=block"
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Build Optimization
-
-```typescript
-// next.config.js
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  images: {
-    domains: [
-      "locationiq.com",
-      "openstreetmap.org"
-    ]
-  },
-  experimental: {
-    serverActions: true
-  },
-  webpack: (config) => {
-    config.optimization.minimize = true;
-    return config;
-  }
-};
-
-module.exports = nextConfig;
-```
-
-[Previous sections about State Management, Error Handling, etc. remain the same] 
+- **API Key**: The LocationIQ key is public (`NEXT_PUBLIC_`). While necessary for client-side use in some scenarios, ideally, sensitive API calls (especially if paid) should be proxied through Server Actions or API routes to hide the key.
+- **Rate Limiting**: Currently not implemented for OSRM/ORS calls but recommended for production, especially if using paid services.
+- **Input Validation**: Basic validation exists, but robust server-side validation in actions is crucial.
+
+This documentation serves as a comprehensive guide reflecting the current state of the Meet-Me-Halfway application. 

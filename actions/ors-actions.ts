@@ -224,4 +224,103 @@ function createFallbackRoute(startLat: string, startLon: string, endLat: string,
       message: "Failed to calculate alternate route and fallback also failed" 
     };
   }
+}
+
+const OSRM_API_BASE = "https://router.project-osrm.org";
+
+// --- Get Travel Time Matrix (OSRM Table Service) ---
+interface MatrixResponse {
+  code: string;
+  durations?: number[][]; // Optional: Might be null if routes aren't found
+  distances?: number[][]; // Optional: Might be null if routes aren't found
+  message?: string; // Error message from OSRM
+}
+
+interface MatrixData {
+  durations: number[][] | null;
+  distances: number[][] | null;
+}
+
+export async function getTravelTimeMatrixAction(
+  coordinates: string, // Format: "lon1,lat1;lon2,lat2;..."
+  sources: string, // Format: "idx1;idx2;..." (indices from coordinates)
+  destinations: string // Format: "idx1;idx2;..." (indices from coordinates)
+): Promise<ActionState<MatrixData>> {
+  console.log("[Matrix Calculation] Requesting travel time matrix from OSRM");
+
+  if (!coordinates || !sources || !destinations) {
+    return { isSuccess: false, message: "Missing required parameters for matrix calculation." };
+  }
+
+  // Construct the OSRM Table API URL
+  // Example: /table/v1/driving/lon1,lat1;lon2,lat2?sources=0&destinations=1&annotations=duration,distance
+  const apiUrl = `${OSRM_API_BASE}/table/v1/driving/${coordinates}?sources=${sources}&destinations=${destinations}&annotations=duration,distance`;
+  console.log("[Matrix Calculation] OSRM Table URL:", apiUrl);
+
+  try {
+    // Perform the fetch call SERVER-SIDE
+    const response = await fetch(apiUrl, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      // Add cache control if desired, e.g., cache for an hour
+      next: { revalidate: 3600 } 
+    });
+
+    if (!response.ok) {
+      // Handle HTTP errors (e.g., 4xx, 5xx)
+      let errorBody = "Unknown error";
+      try {
+          // Try to parse OSRM error message if available
+          const errorJson = await response.json();
+          errorBody = errorJson.message || `HTTP error ${response.status}`;
+      } catch (e) {
+          errorBody = `HTTP error ${response.status}`;
+      }
+      console.error("[Matrix Calculation] OSRM API Error:", errorBody);
+      return { isSuccess: false, message: `OSRM API Error: ${errorBody}` };
+    }
+
+    const matrixResult: MatrixResponse = await response.json();
+    console.log("[Matrix Calculation] OSRM API Raw Response:", matrixResult);
+
+    if (matrixResult.code !== "Ok") {
+      console.error("[Matrix Calculation] OSRM returned non-Ok code:", matrixResult.code, matrixResult.message);
+      return { 
+        isSuccess: false, 
+        message: `OSRM Error: ${matrixResult.message || matrixResult.code}` 
+      };
+    }
+
+    // Check if durations/distances are present (they might be null if some routes failed)
+    if (!matrixResult.durations || !matrixResult.distances) {
+        console.warn("[Matrix Calculation] OSRM response missing durations or distances.");
+        // Return success but with null data, indicating partial failure
+        return { 
+            isSuccess: true, // Still considered a success in terms of API call
+            message: "Matrix calculated, but some routes might have failed.",
+            data: { durations: matrixResult.durations || null, distances: matrixResult.distances || null }
+        };
+    }
+
+    console.log("[Matrix Calculation] Successfully fetched and processed matrix data.");
+    return {
+      isSuccess: true,
+      message: "Travel time matrix calculated successfully.",
+      data: { 
+          durations: matrixResult.durations,
+          distances: matrixResult.distances
+       },
+    };
+
+  } catch (error) {
+    console.error("[Matrix Calculation] Network or processing error:", error);
+    // Handle network errors or JSON parsing errors
+    let errorMessage = "Failed to fetch or process travel time matrix.";
+    if (error instanceof Error) {
+      errorMessage = error.message; // More specific error message if available
+    }
+    return { isSuccess: false, message: errorMessage };
+  }
 } 
