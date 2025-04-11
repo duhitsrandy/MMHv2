@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import { Location } from "@/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,6 +39,7 @@ export default function MeetMeHalfwayForm({
 }: MeetMeHalfwayFormProps) {
   const { user, isSignedIn } = useUser()
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
 
   const [startAddress, setStartAddress] = useState("")
@@ -50,20 +51,35 @@ export default function MeetMeHalfwayForm({
   const [isSavingStart, setIsSavingStart] = useState(false)
   const [isSavingEnd, setIsSavingEnd] = useState(false)
 
+  // Effect to read query parameters on mount *only if rerunning*
   useEffect(() => {
+    const shouldRerun = searchParams.get('rerun') === 'true';
     const startQuery = searchParams.get('start');
     const endQuery = searchParams.get('end');
-    
-    if (startQuery) {
+
+    let populated = false;
+    if (shouldRerun && startQuery) {
       setStartAddress(startQuery);
       setStartLocationId('custom');
+      populated = true;
     }
-    if (endQuery) {
+    if (shouldRerun && endQuery) {
       setEndAddress(endQuery);
       setEndLocationId('custom');
+      populated = true;
     }
-  }, [searchParams]);
 
+    // Clean up the URL parameters after reading them 
+    // if we actually populated the fields from them.
+    if (populated) {
+      // Use router.replace to update URL without adding to history
+      router.replace(pathname, { scroll: false }); 
+    }
+  // IMPORTANT: Run only when searchParams *object identity* changes,
+  // which happens on navigation, not on every render.
+  }, [searchParams, router, pathname]);
+
+  // Effect to set initial locations (remains the same)
   useEffect(() => {
     setLocations(initialLocations)
   }, [initialLocations])

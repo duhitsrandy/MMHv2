@@ -35,7 +35,8 @@ export default function RecentSearches({ searches }: RecentSearchesProps) {
   const handleRunSearchAgain = (search: Search) => {
     const params = new URLSearchParams({
       start: search.startLocationAddress,
-      end: search.endLocationAddress
+      end: search.endLocationAddress,
+      rerun: "true"
     })
     router.push(`/meet-me-halfway?${params.toString()}`)
   }

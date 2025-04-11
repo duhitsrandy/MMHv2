@@ -6,14 +6,14 @@ import { getLocationsAction } from "@/actions/db/locations-actions"
 import { getSearchesAction } from "@/actions/db/searches-actions"
 import { Button } from "@/components/ui/button"
 import { History } from "lucide-react"
-import MeetMeHalfwayForm from "./meet-me-halfway-form"
-import SavedLocations from "./saved-locations"
-import RecentSearches from "./recent-searches"
 import dynamic from "next/dynamic"
 import { Location } from "@/types"
 import { Search } from "@/types"
 import { toast } from "sonner"
 import { createSearchAction } from "@/actions/db/searches-actions"
+import MeetMeHalfwayForm from "./meet-me-halfway-form"
+import SavedLocations from "./saved-locations"
+import RecentSearches from "./recent-searches"
 
 const ResultsMap = dynamic(
   () => import("./results-map").then((mod) => mod.default),
@@ -44,7 +44,7 @@ export default function MeetMeHalfwayApp() {
   const [appData, setAppData] = useState<AppData>({})
   const [locations, setLocations] = useState<Location[]>([])
   const [searches, setSearches] = useState<Search[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
 
   // Load user data on mount
   useEffect(() => {
@@ -52,10 +52,10 @@ export default function MeetMeHalfwayApp() {
       if (!userId) {
         setLocations([])
         setSearches([])
-        setIsLoading(false)
         return
       }
 
+      setIsLoading(true)
       try {
         const [locationsRes, searchesRes] = await Promise.all([
           getLocationsAction(userId),
@@ -158,30 +158,34 @@ export default function MeetMeHalfwayApp() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Meet Me Halfway</h1>
-        <Button variant="outline" className="flex items-center gap-2">
-          <History className="size-4" />
-          View All Saved Searches
-        </Button>
-      </div>
-
-      {appState === "input" ? (
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <MeetMeHalfwayForm
-              initialLocations={locations}
-              onFindMidpoint={handleFindMidpoint}
-            />
+    <div className="container mx-auto max-w-7xl px-4 py-8">
+      {appState === "input" && (
+        <>
+          <div className="mb-8 flex items-center justify-between">
+            <h1 className="text-3xl font-bold">Meet Me Halfway</h1>
+            <Button variant="outline" className="flex items-center gap-2">
+              {/* <History className="size-4" /> */}
+              View All Saved Searches
+            </Button>
           </div>
 
-          <div className="space-y-8">
-            <SavedLocations locations={locations} />
-            <RecentSearches searches={searches} />
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <MeetMeHalfwayForm
+                initialLocations={locations}
+                onFindMidpoint={handleFindMidpoint}
+              />
+            </div>
+
+            <div className="space-y-8">
+              <SavedLocations locations={locations} />
+              <RecentSearches searches={searches} />
+            </div>
           </div>
-        </div>
-      ) : (
+        </>
+      )}
+
+      {appState === "results" && (
         <div>
           <Button
             variant="outline"

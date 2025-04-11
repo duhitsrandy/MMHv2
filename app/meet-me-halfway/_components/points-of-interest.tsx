@@ -32,7 +32,8 @@ import {
   Landmark,
   ArrowUpDown,
   Star,
-  StarOff
+  StarOff,
+  Loader2
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -348,7 +349,7 @@ export default function PointsOfInterest({
 
   // Add debugging for POI data
   useEffect(() => {
-    if (sortedAndFilteredPois.length > 0) {
+    if (!isLoading && sortedAndFilteredPois.length > 0) {
       console.log('[PointsOfInterest] POI data for rendering:', sortedAndFilteredPois.map(poi => ({
         name: poi.name,
         travelTimeFromStart: poi.travelTimeFromStart,
@@ -359,10 +360,10 @@ export default function PointsOfInterest({
         travelTimeDifference: poi.travelTimeDifference
       })));
     }
-  }, [sortedAndFilteredPois]);
+  }, [sortedAndFilteredPois, isLoading]);
 
   return (
-    <Card className="h-[600px] overflow-hidden">
+    <Card className="relative h-[600px] overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle>Points of Interest</CardTitle>
@@ -370,8 +371,9 @@ export default function PointsOfInterest({
             variant={showOnlyFavorites ? "default" : "outline"}
             size="sm"
             onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
-            className={showOnlyFavorites ? "bg-yellow-400 hover:bg-yellow-500 border-yellow-400" : ""}
+            className={`${showOnlyFavorites ? "bg-yellow-400 hover:bg-yellow-500 border-yellow-400" : ""} disabled:opacity-50`}
             title={showOnlyFavorites ? "Show all POIs" : "Show favorites only"}
+            disabled={isLoading}
           >
             {showOnlyFavorites ? (
               <Star className="size-4 fill-current" />
@@ -381,7 +383,7 @@ export default function PointsOfInterest({
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent className="relative p-0">
         <Tabs
           defaultValue="all"
           value={activeTab}
@@ -389,197 +391,195 @@ export default function PointsOfInterest({
         >
           <div className="border-b px-6">
             <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="food">Food</TabsTrigger>
-              <TabsTrigger value="activities">Activities</TabsTrigger>
-              <TabsTrigger value="lodging">Lodging</TabsTrigger>
-              <TabsTrigger value="other">Other</TabsTrigger>
+              <TabsTrigger value="all" disabled={isLoading}>All</TabsTrigger>
+              <TabsTrigger value="food" disabled={isLoading}>Food</TabsTrigger>
+              <TabsTrigger value="activities" disabled={isLoading}>Activities</TabsTrigger>
+              <TabsTrigger value="lodging" disabled={isLoading}>Lodging</TabsTrigger>
+              <TabsTrigger value="other" disabled={isLoading}>Other</TabsTrigger>
             </TabsList>
           </div>
 
-          <div className="h-[485px] space-y-4 overflow-y-auto px-2 py-4">
-            {isLoading ? (
-              Array(3)
-                .fill(0)
-                .map((_, i) => (
-                  <Card key={i} className="mx-4">
+          <div className="relative h-[485px]">
+            {isLoading && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center space-y-2 bg-background/80 backdrop-blur-sm">
+                <Loader2 className="size-8 animate-spin text-primary" />
+                <p className="text-muted-foreground">Loading POIs...</p>
+              </div>
+            )}
+
+            <div className="h-full space-y-4 overflow-y-auto px-2 py-4">
+              {sortedAndFilteredPois.length === 0 && !isLoading ? (
+                <div className="text-muted-foreground p-4 text-center">
+                  No points of interest found for the selected filters.
+                </div>
+              ) : (
+                sortedAndFilteredPois.map(poi => (
+                  <Card
+                    key={poi.osm_id || `${poi.lat}-${poi.lon}`}
+                    className={`mx-4 transition-all hover:shadow-md ${
+                      selectedPoi === (poi.osm_id || `${poi.lat}-${poi.lon}`) ? "ring-primary ring-2" : ""
+                    }`}
+                    onClick={() => {
+                      setSelectedPoi(poi.osm_id || `${poi.lat}-${poi.lon}` || null)
+                      onPoiSelect?.(poi.osm_id || `${poi.lat}-${poi.lon}` || "")
+                    }}
+                  >
                     <CardContent className="p-4">
-                      <Skeleton className="mb-2 h-4 w-3/4" />
-                      <Skeleton className="h-4 w-1/2" />
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="mb-2 flex items-center gap-2">
+                            {getPoiIcon(poi.type)}
+                            <span className="font-medium truncate">{poi.name}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="size-6 p-0 shrink-0"
+                              onClick={e => {
+                                e.stopPropagation()
+                                if (poi.osm_id) toggleFavorite(poi.osm_id)
+                              }}
+                            >
+                              {poi.isFavorite ? (
+                                <Star className="size-4 text-yellow-500" />
+                              ) : (
+                                <StarOff className="size-4" />
+                              )}
+                            </Button>
+                          </div>
+
+                          <CardDescription>
+                            {poi.type}
+                            {poi.address && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {[
+                                  poi.address.street,
+                                  poi.address.city,
+                                  poi.address.state,
+                                  poi.address.postal_code
+                                ].filter(Boolean).join(", ")}
+                              </div>
+                            )}
+                          </CardDescription>
+
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                            <div className="flex items-center gap-1 whitespace-nowrap">
+                              <Clock className="size-3 shrink-0" />
+                              <span className="truncate text-xs">
+                                Location 1: {" "}
+                                {typeof poi.travelTimeFromStart === 'number' 
+                                  ? formatDuration(poi.travelTimeFromStart)
+                                  : "N/A"}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1 whitespace-nowrap">
+                              <Clock className="size-3 shrink-0" />
+                              <span className="truncate text-xs">
+                                Location 2: {" "}
+                                {typeof poi.travelTimeFromEnd === 'number'
+                                  ? formatDuration(poi.travelTimeFromEnd)
+                                  : "N/A"}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1 whitespace-nowrap">
+                              <Navigation className="size-3 shrink-0" />
+                              <span className="truncate text-xs">
+                                Location 1: {typeof poi.distanceFromStart === 'number'
+                                  ? formatDistance(poi.distanceFromStart)
+                                  : "N/A"}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1 whitespace-nowrap">
+                              <Navigation className="size-3 shrink-0" />
+                              <span className="truncate text-xs">
+                                Location 2: {typeof poi.distanceFromEnd === 'number'
+                                  ? formatDistance(poi.distanceFromEnd)
+                                  : "N/A"}
+                              </span>
+                            </div>
+                          </div>
+
+                          {typeof poi.travelTimeDifference === 'number' && (
+                            <div className="mt-2">
+                              <Badge
+                                variant={
+                                  poi.travelTimeDifference / 60 <= 5
+                                    ? "default"
+                                    : "secondary"
+                                }
+                              >
+                                {Math.round(poi.travelTimeDifference / 60)} min
+                                difference
+                              </Badge>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="icon" 
+                            className="size-8 shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onPoiSelect?.(poi.osm_id || `${poi.lat}-${poi.lon}` || "");
+                            }}
+                            title="View on Map"
+                          >
+                            <MapPin className="size-4" />
+                          </Button>
+
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="shrink-0">
+                                <Navigation className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(
+                                    `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
+                                    "_blank"
+                                  );
+                                }}
+                              >
+                                Open in Google Maps
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(
+                                    `http://maps.apple.com/?ll=${poi.lat},${poi.lon}`,
+                                    "_blank"
+                                  );
+                                }}
+                              >
+                                Open in Apple Maps
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(
+                                    `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
+                                    "_blank"
+                                  );
+                                }}
+                              >
+                                Open in Waze
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 ))
-            ) : sortedAndFilteredPois.length === 0 ? (
-              <div className="text-muted-foreground p-4 text-center">
-                No points of interest found for the selected filters.
-              </div>
-            ) : (
-              sortedAndFilteredPois.map(poi => (
-                <Card
-                  key={poi.osm_id || `${poi.lat}-${poi.lon}`}
-                  className={`mx-4 transition-all hover:shadow-md ${
-                    selectedPoi === (poi.osm_id || `${poi.lat}-${poi.lon}`) ? "ring-primary ring-2" : ""
-                  }`}
-                  onClick={() => {
-                    setSelectedPoi(poi.osm_id || `${poi.lat}-${poi.lon}` || null)
-                    onPoiSelect?.(poi.osm_id || `${poi.lat}-${poi.lon}` || "")
-                  }}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="mb-2 flex items-center gap-2">
-                          {getPoiIcon(poi.type)}
-                          <span className="font-medium truncate">{poi.name}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="size-6 p-0 shrink-0"
-                            onClick={e => {
-                              e.stopPropagation()
-                              if (poi.osm_id) toggleFavorite(poi.osm_id)
-                            }}
-                          >
-                            {poi.isFavorite ? (
-                              <Star className="size-4 text-yellow-500" />
-                            ) : (
-                              <StarOff className="size-4" />
-                            )}
-                          </Button>
-                        </div>
-
-                        <CardDescription>
-                          {poi.type}
-                          {poi.address && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {[
-                                poi.address.street,
-                                poi.address.city,
-                                poi.address.state,
-                                poi.address.postal_code
-                              ].filter(Boolean).join(", ")}
-                            </div>
-                          )}
-                        </CardDescription>
-
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                          <div className="flex items-center gap-1 whitespace-nowrap">
-                            <Clock className="size-3 shrink-0" />
-                            <span className="truncate text-xs">
-                              Location 1: {" "}
-                              {typeof poi.travelTimeFromStart === 'number' 
-                                ? formatDuration(poi.travelTimeFromStart)
-                                : "N/A"}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-1 whitespace-nowrap">
-                            <Clock className="size-3 shrink-0" />
-                            <span className="truncate text-xs">
-                              Location 2: {" "}
-                              {typeof poi.travelTimeFromEnd === 'number'
-                                ? formatDuration(poi.travelTimeFromEnd)
-                                : "N/A"}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-1 whitespace-nowrap">
-                            <Navigation className="size-3 shrink-0" />
-                            <span className="truncate text-xs">
-                              Location 1: {typeof poi.distanceFromStart === 'number'
-                                ? formatDistance(poi.distanceFromStart)
-                                : "N/A"}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-1 whitespace-nowrap">
-                            <Navigation className="size-3 shrink-0" />
-                            <span className="truncate text-xs">
-                              Location 2: {typeof poi.distanceFromEnd === 'number'
-                                ? formatDistance(poi.distanceFromEnd)
-                                : "N/A"}
-                            </span>
-                          </div>
-                        </div>
-
-                        {typeof poi.travelTimeDifference === 'number' && (
-                          <div className="mt-2">
-                            <Badge
-                              variant={
-                                poi.travelTimeDifference / 60 <= 5
-                                  ? "default"
-                                  : "secondary"
-                              }
-                            >
-                              {Math.round(poi.travelTimeDifference / 60)} min
-                              difference
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="icon" 
-                          className="size-8 shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onPoiSelect?.(poi.osm_id || `${poi.lat}-${poi.lon}` || "");
-                          }}
-                          title="View on Map"
-                        >
-                          <MapPin className="size-4" />
-                        </Button>
-
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="shrink-0">
-                              <Navigation className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(
-                                  `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
-                                  "_blank"
-                                );
-                              }}
-                            >
-                              Open in Google Maps
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(
-                                  `http://maps.apple.com/?ll=${poi.lat},${poi.lon}`,
-                                  "_blank"
-                                );
-                              }}
-                            >
-                              Open in Apple Maps
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(
-                                  `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
-                                  "_blank"
-                                );
-                              }}
-                            >
-                              Open in Waze
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
+              )}
+            </div>
           </div>
         </Tabs>
       </CardContent>

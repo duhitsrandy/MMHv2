@@ -184,7 +184,7 @@ export async function searchPoisAction(
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
 
     // Build a more comprehensive query
-    const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "marketplace", "fast_food", "pub", "community_centre", "police", "post_office", "townhall"];
+    const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "marketplace", "fast_food", "pub", "community_centre", "police", "post_office", "townhall", "ice_cream"];
     const leisureTypes = ["park", "garden", "playground", "sports_centre"];
     const tourismTypes = ["museum", "hotel", "gallery", "attraction", "viewpoint"];
     const shopTypes = ["supermarket", "mall", "department_store", "bakery", "convenience", "books"];

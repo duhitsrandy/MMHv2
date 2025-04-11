@@ -44,7 +44,8 @@ export default function SavedSearchesList({
   const handleRunSearchAgain = (search: SelectSearch) => {
     const params = new URLSearchParams({
       start: search.startLocationAddress,
-      end: search.endLocationAddress
+      end: search.endLocationAddress,
+      rerun: "true"
     })
     router.push(`/meet-me-halfway?${params.toString()}`)
   }
