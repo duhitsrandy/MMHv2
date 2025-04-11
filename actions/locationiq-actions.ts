@@ -170,20 +170,21 @@ export async function geocodeLocationAction(
 }
 
 // Add this new function to search POIs using Overpass API
-export async function searchPoisAction(
-  lat: string,
-  lon: string,
-  radius: number = 1500,
-  types: string[] = ["restaurant", "cafe", "bar", "park", "library", "cinema", "theatre", "museum", "hotel"]
-): Promise<ActionState<PoiResponse[]>> {
-  console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
-  
+export async function searchPoisAction(coordinates: { lat: string; lon: string }[], radius: number = 1500): Promise<ActionState<PoiResponse[]>> {
+  console.log(`[POI Search] Starting search for ${coordinates.length} locations with radius ${radius}m`);
+
   try {
     // Create an AbortController for timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
 
     // Build a more comprehensive query
+    // Build a more comprehensive query
+    const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "marketplace", "fast_food", "pub", "community_centre", "police", "post_office", "townhall", "ice_cream"];
+    const leisureTypes = ["park", "garden", "playground", "sports_centre"];
+    const tourismTypes = ["museum", "hotel", "gallery", "attraction", "viewpoint"];
+    const shopTypes = ["supermarket", "mall", "department_store", "bakery", "convenience", "books"];
+
     const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "marketplace", "fast_food", "pub", "community_centre", "police", "post_office", "townhall", "ice_cream"];
     const leisureTypes = ["park", "garden", "playground", "sports_centre"];
     const tourismTypes = ["museum", "hotel", "gallery", "attraction", "viewpoint"];
@@ -191,25 +192,31 @@ export async function searchPoisAction(
     
     // Simple, direct Overpass query with common POI types
     const query = `
-      [out:json][timeout:60];
-      (
-        node["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
-        way["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
-        relation["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
-        
-        node["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
-        way["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
-        relation["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
-        
-        node["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
-        way["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
-        relation["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
-        
-        node["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
-        way["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
-        relation["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
-      );
-      out body center;
+        [out:json][timeout:60];
+        (
+          ${coordinates
+            .map(
+              ({ lat, lon }) => `
+                  node["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
+                  way["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
+                  relation["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
+          
+                  node["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
+                  way["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
+                  relation["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
+          
+                  node["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
+                  way["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
+                  relation["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
+          
+                  node["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
+                  way["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
+                  relation["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
+                `,
+            )
+            .join("")}
+        );
+        out body center;
     `;
 
     const response = await fetch('https://overpass-api.de/api/interpreter', {
@@ -236,12 +243,14 @@ export async function searchPoisAction(
     // Process POIs with relaxed filtering and deduplication
     const pois = data.elements
       .filter((poi: any) => {
+
         const lat = poi.lat || poi.center?.lat;
         const lon = poi.lon || poi.center?.lon;
         const hasValidCoords = lat && lon;
-        
+
         // Create a unique key for this POI
         const poiKey = `${lat},${lon}`;
+
         const isUnique = !uniquePois.has(poiKey);
         
         if (isUnique) {
@@ -249,17 +258,18 @@ export async function searchPoisAction(
         }
         
         return hasValidCoords && isUnique;
+
       })
       .map((poi: any) => {
         const poiLat = poi.lat || poi.center?.lat || 0;
         const poiLon = poi.lon || poi.center?.lon || 0;
-        
+
         // Determine the type from tags
-        const poiType = 
-          poi.tags?.amenity || 
-          poi.tags?.leisure || 
-          poi.tags?.tourism || 
-          poi.tags?.shop || 
+        const poiType =
+          poi.tags?.amenity ||
+          poi.tags?.leisure ||
+          poi.tags?.tourism ||
+          poi.tags?.shop ||
           'place';
         
         return {
@@ -280,18 +290,31 @@ export async function searchPoisAction(
         };
       });
     
-    console.log(`[POI Search] Found ${pois.length} unique POIs near ${lat},${lon}`);
-    
-    // Calculate distances and sort by closest to the specified point
-    const sortedPois = pois
-      .sort((a: PoiResponse, b: PoiResponse) => {
-        // Prioritize named locations
-        if (a.name !== 'Unnamed Location' && b.name === 'Unnamed Location') return -1;
-        if (a.name === 'Unnamed Location' && b.name !== 'Unnamed Location') return 1;
-        
-        // Then sort by distance
-        const distanceA = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(a.lat), parseFloat(a.lon));
-        const distanceB = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(b.lat), parseFloat(b.lon));
+    //calculate distances and sort for each coordinate set
+    const sortedPoisByCoordinate = coordinates.map(({ lat, lon }) => {
+        const poisForCoordinate = pois.filter(poi => poi);
+        console.log(`[POI Search] Found ${poisForCoordinate.length} unique POIs near ${lat},${lon}`);
+
+        // Calculate distances and sort by closest to the specified point
+        const sortedPois = poisForCoordinate
+          .sort((a: PoiResponse, b: PoiResponse) => {
+            // Prioritize named locations
+            if (a.name !== 'Unnamed Location' && b.name === 'Unnamed Location') return -1;
+            if (a.name === 'Unnamed Location' && b.name !== 'Unnamed Location') return 1;
+
+            // Then sort by distance
+            const distanceA = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(a.lat), parseFloat(a.lon));
+            const distanceB = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(b.lat), parseFloat(b.lon));
+            return distanceA - distanceB;
+          })
+          .slice(0, 12); // Increased from 8 to 12 POIs per route
+        console.log(`[POI Search] Returning ${sortedPois.length} sorted POIs:`, {
+            types: sortedPois.reduce((acc: any, poi: PoiResponse) => {
+              acc[poi.type] = (acc[poi.type] || 0) + 1;
+              return acc;
+            }, {})
+          });
+          return sortedPois
         return distanceA - distanceB;
       })
       .slice(0, 12); // Increased from 8 to 12 POIs per route
@@ -306,7 +329,7 @@ export async function searchPoisAction(
     return {
       isSuccess: true,
       message: "Successfully found points of interest",
-      data: sortedPois
+      data: sortedPois.flat()
     };
 
   } catch (error) {

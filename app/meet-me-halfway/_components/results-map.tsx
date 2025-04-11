@@ -169,27 +169,133 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
 
         if (mainMidpoint || altMidpoint) {
           console.log('[MapData] Fetching initial POIs...')
-          const searchPromises: Promise<ActionState<PoiResponse[]>>[] = []
+          const coordinates = [];
           if (mainMidpoint) {
-            searchPromises.push(searchPoisAction(mainMidpoint.lat.toString(), mainMidpoint.lng.toString(), 1500))
-          } else {
-            searchPromises.push(Promise.resolve({ isSuccess: false, message: "No main midpoint" }))
+            coordinates.push({ lat: mainMidpoint.lat.toString(), lon: mainMidpoint.lng.toString() });
           }
-          if (altMidpoint && altMidpoint !== mainMidpoint) {
-            searchPromises.push(searchPoisAction(altMidpoint.lat.toString(), altMidpoint.lng.toString(), 1500))
-          } else {
-            searchPromises.push(Promise.resolve({ isSuccess: false, message: "No alternate/distinct midpoint" }))
+          if (altMidpoint && (coordinates.length === 0 || altMidpoint.lat !== mainMidpoint.lat || altMidpoint.lng !== mainMidpoint.lng)) {
+            coordinates.push({ lat: altMidpoint.lat.toString(), lon: altMidpoint.lng.toString() });
+          }
+        
+          let uniqueInitialPois: PoiResponse[] = [];
+          if (coordinates.length > 0) {
+            const poisResult = await searchPoisAction(coordinates, 1500);
+            uniqueInitialPois = poisResult.isSuccess ? poisResult.data || [] : [];
+          }
+          setInitialPois(uniqueInitialPois);
+          console.log(`[MapData] Initial POIs fetched: ${uniqueInitialPois.length}`);
+          if (uniqueInitialPois.length > 0) {
+            console.log('[MapData Debug] Sample Initial POI:', uniqueInitialPois[0]);
           }
 
-          const [mainPoisResult, altPoisResult] = await Promise.all(searchPromises)
+          setIsMapDataLoading(false);
 
-          const mainPois = mainPoisResult.isSuccess ? mainPoisResult.data || [] : []
-          const altPois = altPoisResult.isSuccess ? altPoisResult.data || [] : []
-          setMainRoutePois(mainPois)
-          setAlternateRoutePois(altPois)
+          if (uniqueInitialPois.length > 0) {
+            setIsPoiTravelTimeLoading(true);
+            console.log('[MapData] Calculating POI travel times using matrix...');
 
-          const allPois = [...mainPois, ...altPois]
-          const uniqueInitialPois = allPois.filter((poi, index, self) =>
+            try {
+              const poiCoords = uniqueInitialPois.map(p => `${p.lon},${p.lat}`);
+              const allCoordinates = [
+                `${startAddress.lng},${startAddress.lat}`,
+                `${endAddress.lng},${endAddress.lat}`,
+                ...poiCoords
+              ].join(';');
+
+              const sources = "0;1";
+              const destinations = uniqueInitialPois.map((_, i) => i + 2).join(';');
+
+              const matrixResult = await getTravelTimeMatrixAction(allCoordinates, sources, destinations);
+              console.log('[MapData Debug] Matrix Result:', matrixResult);
+
+              if (matrixResult.isSuccess && matrixResult.data) {
+                console.log('[MapData] Travel time matrix received.');
+                const { durations, distances } = matrixResult.data;
+                console.log('[MapData Debug] Matrix Durations (sample):', durations?.[0]?.slice(0, 5));
+                console.log('[MapData Debug] Matrix Distances (sample):', distances?.[0]?.slice(0, 5));
+
+                const poisWithTravelTime = uniqueInitialPois.map((poi, index) => {
+                  const matrixIndex = index;
+                  const travelTimeFromStart = durations?.[0]?.[matrixIndex];
+                  const travelTimeFromEnd = durations?.[1]?.[matrixIndex];
+                  const distanceFromStart = distances?.[0]?.[matrixIndex];
+                  const distanceFromEnd = distances?.[1]?.[matrixIndex];
+                  
+                  const isValidTime = travelTimeFromStart != null && travelTimeFromEnd != null;
+
+                  const poiWithTimes = {
+                    ...poi,
+                    distanceFromStart,
+                    distanceFromEnd,
+                    travelTimeFromStart,
+                    travelTimeFromEnd,
+                    travelTimeDifference: isValidTime ? Math.abs(travelTimeFromStart - travelTimeFromEnd) : undefined,
+                    totalTravelTime: isValidTime ? travelTimeFromStart + travelTimeFromEnd : undefined,
+                    isFavorite: false,
+                  };
+                  if (index === 0) {
+                    console.log('[MapData Debug] First POI processed with times:', poiWithTimes);
+                  }
+                  return poiWithTimes;
+                });
+                setCombinedPois(poisWithTravelTime);
+                console.log('[MapData] POIs updated with travel times from matrix.');
+              } else {
+                console.error('[MapData] Failed to calculate travel time matrix:', matrixResult.message);
+                const fallbackPois = uniqueInitialPois.map(p => ({...p, isFavorite: false}));
+                setCombinedPois(fallbackPois);
+                if (fallbackPois.length > 0) {
+                  console.log('[MapData Debug] Setting fallback POIs (sample):', fallbackPois[0]);
+                }
+              }
+            } catch (matrixError) {
+              console.error('[MapData] Error during matrix calculation process:', matrixError);
+              const errorFallbackPois = uniqueInitialPois.map(p => ({...p, isFavorite: false}));
+              setCombinedPois(errorFallbackPois);
+              if (errorFallbackPois.length > 0) {
+                console.log('[MapData Debug] Setting error fallback POIs (sample):', errorFallbackPois[0]);
+              }
+            } finally {
+              setIsPoiTravelTimeLoading(false);
+            }
+          } else {
+            setIsPoiTravelTimeLoading(false);
+          }
+        } else {
+          setIsMapDataLoading(false);
+        }
+      } catch (error) {
+        console.error("[MapData] Error fetching map data:", error);
+        setIsMapDataLoading(false);
+        setIsPoiTravelTimeLoading(false);
+      }
+    };
+
+    fetchMapData();
+  }, [startLat, startLng, endLat, endLng, startAddress, endAddress]);
+
+  console.log('[MapData Debug] Returning Hook State:', {
+    mainRoute: !!mainRoute,
+    alternateRoute: !!alternateRoute,
+    currentMidpoint: !!currentMidpoint,
+    alternateMidpoint: !!alternateMidpoint,
+    initialPoisCount: initialPois.length,
+    combinedPoisCount: combinedPois.length,
+    isMapDataLoading,
+    isPoiTravelTimeLoading,
+  });
+
+  return {
+    mainRoute,
+    alternateRoute,
+    currentMidpoint,
+    alternateMidpoint,
+    initialPois,
+    combinedPois,
+    isMapDataLoading,
+    isPoiTravelTimeLoading,
+  };
+}
             poi.lat && poi.lon && index === self.findIndex((p) => p.osm_id === poi.osm_id)
           )
           setInitialPois(uniqueInitialPois)
