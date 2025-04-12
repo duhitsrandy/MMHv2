@@ -16,18 +16,26 @@ const apiCache: Record<string, { data: any, timestamp: number }> = {};
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 // Helper function to enforce rate limiting with retry logic
-export async function rateLimitedFetch(url: string, maxRetries = 3): Promise<Response> {
-  // Check cache first
-  if (apiCache[url] && (Date.now() - apiCache[url].timestamp) < CACHE_TTL) {
-    return {
-      ok: true,
-      json: async () => apiCache[url].data,
-      text: async () => JSON.stringify(apiCache[url].data),
+export async function rateLimitedFetch(
+  url: string,
+  options?: RequestInit,
+  maxRetries = 3,
+  cacheKey?: string // Add optional cacheKey parameter
+): Promise<Response> {
+  const effectiveCacheKey = cacheKey || url; // Use custom key if provided, else URL
+
+  // Check cache first using the effective key
+  if (apiCache[effectiveCacheKey] && (Date.now() - apiCache[effectiveCacheKey].timestamp) < CACHE_TTL) {
+    console.log(`[Cache] HIT for Key: ${effectiveCacheKey}`); // Log cache hit
+    const cachedData = apiCache[effectiveCacheKey].data;
+    return new Response(JSON.stringify(cachedData), {
       status: 200,
-      statusText: 'OK (Cached)'
-    } as Response;
+      statusText: 'OK (Cached)',
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 
+  console.log(`[Cache] MISS for Key: ${effectiveCacheKey}`); // Log cache miss
   let retries = 0;
   let lastError: Error | null = null;
 
@@ -40,22 +48,35 @@ export async function rateLimitedFetch(url: string, maxRetries = 3): Promise<Res
       }
 
       // Make the request
-      const response = await fetch(url, {
+      // Pass through any provided fetch options (headers, method, body, etc.)
+      const mergedOptions = {
+        ...options, // Spread provided options
         headers: {
           'User-Agent': 'Meet-Me-Halfway/1.0',
-          'Accept-Language': 'en-US,en;q=0.9'
+          'Accept-Language': 'en-US,en;q=0.9',
+          ...(options?.headers || {}), // Merge headers from options
         }
-      });
+      };
+      console.log(`[Fetch] Making request to ${url} with options:`, mergedOptions);
+      const response = await fetch(url, mergedOptions);
 
-      // Cache successful responses
+      // Cache successful responses using the effective key
       if (response.ok) {
-        const data = await response.clone().json();
-        apiCache[url] = {
-          data,
-          timestamp: Date.now()
-        };
+        try {
+            const data = await response.clone().json(); // Clone before reading
+            apiCache[effectiveCacheKey] = {
+              data,
+              timestamp: Date.now()
+            };
+            console.log(`[Cache] Stored response for Key: ${effectiveCacheKey}`);
+        } catch (jsonError) {
+            // Handle cases where response is OK but not JSON (rare for APIs we use)
+            console.warn(`[Cache] Response for ${effectiveCacheKey} was OK but not valid JSON.`);
+            // Decide whether to cache non-JSON or not. Currently not caching.
+        }
       }
 
+      // Return the original response object (not the clone)
       return response;
     } catch (error) {
       lastError = error as Error;
@@ -216,60 +237,66 @@ export async function searchPoisAction(
       message: `Invalid input: ${errorMessage}`,
     };
   }
-  // Use validated data
   const { lat, lon, radius, types } = validationResult.data;
   // --- Validation End ---
 
   console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
-  
-  try {
-    // Create an AbortController for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
+  const overpassApiUrl = "https://overpass-api.de/api/interpreter";
 
-    // Build a more comprehensive query
-    const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "marketplace", "fast_food", "pub", "community_centre", "police", "post_office", "townhall", "ice_cream"];
-    const leisureTypes = ["park", "garden", "playground", "sports_centre"];
-    const tourismTypes = ["museum", "hotel", "gallery", "attraction", "viewpoint"];
-    const shopTypes = ["supermarket", "mall", "department_store", "bakery", "convenience", "books"];
-    
-    // Simple, direct Overpass query with common POI types
-    const query = `
+  // --- Build Overpass Query ---
+  // Removed the types parameter check as the schema handles optionality
+  // Keep the comprehensive query structure
+  const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "marketplace", "fast_food", "pub", "community_centre", "police", "post_office", "townhall", "ice_cream"];
+  const leisureTypes = ["park", "garden", "playground", "sports_centre", "pitch", "track"]; // Added pitch, track
+  const tourismTypes = ["museum", "hotel", "gallery", "attraction", "viewpoint", "picnic_site"]; // Added picnic_site
+  const shopTypes = ["supermarket", "mall", "department_store", "bakery", "convenience", "books", "clothes", "gift"]; // Added clothes, gift
+
+  const query = `
       [out:json][timeout:60];
       (
         node["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
         way["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
         relation["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
-        
+
         node["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
         way["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
         relation["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
-        
+
         node["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
         way["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
         relation["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
-        
+
         node["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
         way["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
         relation["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
       );
-      out body center;
+      out center;
     `;
+  // --- End Overpass Query ---
 
-    const response = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: `data=${encodeURIComponent(query)}`,
-      signal: controller.signal
-    });
+  try {
+    console.log(`[POI Search] Overpass Query Body: ${query.substring(0, 100)}...`); // Log query snippet
 
-    clearTimeout(timeoutId);
+    // --- Use rateLimitedFetch for Overpass API call ---
+    // Create a specific cache key for this POI search
+    const poiCacheKey = `poi_${lat}_${lon}_${radius}`;
+
+    const response = await rateLimitedFetch(
+        overpassApiUrl,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `data=${encodeURIComponent(query)}`,
+        },
+        3, // maxRetries (default)
+        poiCacheKey // Provide the specific cache key
+    );
+    // --- End fetch modification ---
 
     if (!response.ok) {
-      console.error(`[POI Search] Overpass API error: ${response.status} ${response.statusText}`);
-      throw new Error(`Overpass API error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error(`[POI Search] Overpass API Error ${response.status}: ${errorText}`);
+      throw new Error(`Overpass API error: ${response.statusText}`);
     }
 
     const data = await response.json();
