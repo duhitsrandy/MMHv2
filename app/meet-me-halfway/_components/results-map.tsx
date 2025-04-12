@@ -357,6 +357,67 @@ export default function ResultsMap({
     isPoiTravelTimeLoading,
   } = useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddress })
 
+  // Memoize MapComponent props
+  const mapComponentProps = useMemo(() => ({
+    startLat,
+    startLng,
+    endLat,
+    endLng,
+    startAddress: startAddress.display_name || "",
+    endAddress: endAddress.display_name || "",
+    midpointLat: currentMidpoint?.lat || 0,
+    midpointLng: currentMidpoint?.lng || 0,
+    alternateMidpointLat: alternateMidpoint?.lat || 0,
+    alternateMidpointLng: alternateMidpoint?.lng || 0,
+    mainRoute,
+    alternateRoute,
+    pois: showPois ? combinedPois : [],
+    showPois,
+    showAlternateRoute: !!alternateRoute,
+    selectedPoiId,
+    onPoiSelect: setSelectedPoiId,
+  }), [
+    startLat,
+    startLng,
+    endLat,
+    endLng,
+    startAddress.display_name,
+    endAddress.display_name,
+    currentMidpoint,
+    alternateMidpoint,
+    mainRoute,
+    alternateRoute,
+    showPois,
+    combinedPois,
+    selectedPoiId,
+  ])
+
+  // Memoize PointsOfInterest props
+  const pointsOfInterestProps = useMemo(() => ({
+    pois: combinedPois,
+    startLat,
+    startLng,
+    endLat,
+    endLng,
+    startAddress: startAddress.display_name || "",
+    endAddress: endAddress.display_name || "",
+    onPoiSelect: setSelectedPoiId,
+    midpointLat: currentMidpoint?.lat || 0,
+    midpointLng: currentMidpoint?.lng || 0,
+    isLoading: isPoiTravelTimeLoading || isMapDataLoading,
+  }), [
+    combinedPois,
+    startLat,
+    startLng,
+    endLat,
+    endLng,
+    startAddress.display_name,
+    endAddress.display_name,
+    currentMidpoint,
+    isPoiTravelTimeLoading,
+    isMapDataLoading,
+  ])
+
   useEffect(() => {
     setIsClient(true)
   }, [])
@@ -381,30 +442,10 @@ export default function ResultsMap({
     return <div className="flex h-[520px] w-full items-center justify-center rounded-lg bg-gray-100"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
   }
 
-  const mapComponentPois = showPois ? combinedPois : [];
-
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       <div className="md:col-span-2">
-        <MapComponent
-          startLat={startLat}
-          startLng={startLng}
-          endLat={endLat}
-          endLng={endLng}
-          startAddress={startAddress.display_name || ""}
-          endAddress={endAddress.display_name || ""}
-          midpointLat={currentMidpoint?.lat || 0}
-          midpointLng={currentMidpoint?.lng || 0}
-          alternateMidpointLat={alternateMidpoint?.lat || 0}
-          alternateMidpointLng={alternateMidpoint?.lng || 0}
-          mainRoute={mainRoute}
-          alternateRoute={alternateRoute}
-          pois={mapComponentPois}
-          showPois={showPois}
-          showAlternateRoute={!!alternateRoute}
-          selectedPoiId={selectedPoiId}
-          onPoiSelect={setSelectedPoiId}
-        />
+        <MapComponent {...mapComponentProps} />
       </div>
       <div className="md:col-span-1">
         <Card className="h-[600px] overflow-hidden">
@@ -421,19 +462,7 @@ export default function ResultsMap({
             </div>
           </CardHeader>
           <CardContent className="h-[calc(600px-60px)] p-0">
-            <PointsOfInterest
-              pois={combinedPois}
-              startLat={startLat}
-              startLng={startLng}
-              endLat={endLat}
-              endLng={endLng}
-              startAddress={startAddress.display_name || ""}
-              endAddress={endAddress.display_name || ""}
-              onPoiSelect={setSelectedPoiId}
-              midpointLat={currentMidpoint?.lat || 0}
-              midpointLng={currentMidpoint?.lng || 0}
-              isLoading={isPoiTravelTimeLoading || isMapDataLoading}
-            />
+            <PointsOfInterest {...pointsOfInterestProps} />
           </CardContent>
         </Card>
       </div>
