@@ -143,8 +143,8 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
       try {
         console.log('[MapData] Fetching routes...')
         const [mainRouteRes, alternateRouteRes] = await Promise.all([
-          getRouteAction(startLat, startLng, endLat, endLng),
-          getAlternateRouteAction(startLat, startLng, endLat, endLng)
+          getRouteAction({ startLat, startLon: startLng, endLat, endLon: endLng }),
+          getAlternateRouteAction({ startLat, startLon: startLng, endLat, endLon: endLng })
         ])
 
         if (mainRouteRes.isSuccess && mainRouteRes.data) {
@@ -171,12 +171,14 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
           console.log('[MapData] Fetching initial POIs...')
           const searchPromises: Promise<ActionState<PoiResponse[]>>[] = []
           if (mainMidpoint) {
-            searchPromises.push(searchPoisAction(mainMidpoint.lat.toString(), mainMidpoint.lng.toString(), 1500))
+            console.log('[ResultsMap] Searching POIs around main midpoint:', mainMidpoint)
+            searchPromises.push(searchPoisAction({ lat: mainMidpoint.lat.toString(), lon: mainMidpoint.lng.toString(), radius: 1500 }))
           } else {
             searchPromises.push(Promise.resolve({ isSuccess: false, message: "No main midpoint" }))
           }
           if (altMidpoint && altMidpoint !== mainMidpoint) {
-            searchPromises.push(searchPoisAction(altMidpoint.lat.toString(), altMidpoint.lng.toString(), 1500))
+            console.log('[ResultsMap] Searching POIs around alternate midpoint:', altMidpoint)
+            searchPromises.push(searchPoisAction({ lat: altMidpoint.lat.toString(), lon: altMidpoint.lng.toString(), radius: 1500 }))
           } else {
             searchPromises.push(Promise.resolve({ isSuccess: false, message: "No alternate/distinct midpoint" }))
           }

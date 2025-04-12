@@ -3,6 +3,13 @@
 import { ActionState } from "@/types"
 import { PoiResponse } from "@/types/poi-types"
 import { rateLimit } from "@/lib/rate-limit"
+import { z } from 'zod';
+import {
+  AddressSchema,
+  PoiSearchSchema,
+  RouteCoordinatesSchema,
+} from '@/lib/schemas';
+import { formatZodError } from '@/lib/utils';
 
 // Simple in-memory cache
 const apiCache: Record<string, { data: any, timestamp: number }> = {};
@@ -118,8 +125,21 @@ async function fallbackGeocodeAction(
 export async function geocodeLocationAction(
   address: string
 ): Promise<ActionState<GeocodingResult>> {
+  // --- Validation Start ---
+  const validationResult = AddressSchema.safeParse(address);
+  if (!validationResult.success) {
+    const errorMessage = formatZodError(validationResult.error);
+    console.error("Validation failed for geocodeLocationAction:", errorMessage);
+    return {
+      isSuccess: false,
+      message: `Invalid input: ${errorMessage}`,
+    };
+  }
+  const validatedAddress = validationResult.data;
+  // --- Validation End ---
+
   try {
-    console.log('Geocoding address:', address);
+    console.log('Geocoding address:', validatedAddress);
     const apiKey = process.env.LOCATIONIQ_KEY;
     if (!apiKey) {
       console.error('LocationIQ API key is missing');
@@ -130,7 +150,7 @@ export async function geocodeLocationAction(
     }
 
     const url = `https://us1.locationiq.com/v1/search.php?key=${apiKey}&q=${encodeURIComponent(
-      address
+      validatedAddress
     )}&format=json&limit=1`;
 
     try {
@@ -139,7 +159,7 @@ export async function geocodeLocationAction(
 
       if (!response.ok) {
         console.warn(`LocationIQ API error: ${response.statusText}. Trying fallback.`);
-        return fallbackGeocodeAction(address);
+        return fallbackGeocodeAction(validatedAddress);
       }
 
       const data = await response.json();
@@ -147,7 +167,7 @@ export async function geocodeLocationAction(
 
       if (!data || data.length === 0) {
         console.warn('No results from LocationIQ. Trying fallback.');
-        return fallbackGeocodeAction(address);
+        return fallbackGeocodeAction(validatedAddress);
       }
 
       return {
@@ -161,7 +181,7 @@ export async function geocodeLocationAction(
       };
     } catch (error) {
       console.warn("Error with primary geocoding service:", error);
-      return fallbackGeocodeAction(address);
+      return fallbackGeocodeAction(validatedAddress);
     }
   } catch (error) {
     console.error("Error geocoding location:", error);
@@ -171,11 +191,35 @@ export async function geocodeLocationAction(
 
 // Add this new function to search POIs using Overpass API
 export async function searchPoisAction(
-  lat: string,
-  lon: string,
-  radius: number = 1500,
-  types: string[] = ["restaurant", "cafe", "bar", "park", "library", "cinema", "theatre", "museum", "hotel"]
+  // Combine parameters into an object for easier validation
+  params: {
+    lat: string;
+    lon: string;
+    radius?: number;
+    types?: string[];
+  }
 ): Promise<ActionState<PoiResponse[]>> {
+
+  // --- Validation Start ---
+  // Provide default radius if not present before validation
+  const paramsWithDefaults = {
+    ...params,
+    radius: params.radius ?? 1500, // Default radius: 1500m
+  };
+  const validationResult = PoiSearchSchema.safeParse(paramsWithDefaults);
+
+  if (!validationResult.success) {
+    const errorMessage = formatZodError(validationResult.error);
+    console.error("Validation failed for searchPoisAction:", errorMessage);
+    return {
+      isSuccess: false,
+      message: `Invalid input: ${errorMessage}`,
+    };
+  }
+  // Use validated data
+  const { lat, lon, radius, types } = validationResult.data;
+  // --- Validation End ---
+
   console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
   
   try {
@@ -347,159 +391,153 @@ function calculateViewbox(lat: string, lon: string, radiusKm: number): string {
 }
 
 export async function getRouteAction(
-  startLat: string,
-  startLon: string,
-  endLat: string,
-  endLon: string
+  // Combine parameters into an object
+  params: {
+    startLat: string;
+    startLon: string;
+    endLat: string;
+    endLon: string;
+  }
 ): Promise<ActionState<any>> {
-  try {
-    console.log(`[Route Calculation] Calculating route from (${startLat},${startLon}) to (${endLat},${endLon})`);
-    
-    // Validate coordinates
-    if (!startLat || !startLon || !endLat || !endLon) {
-      console.error('[Route Calculation] Missing coordinates');
-      return {
-        isSuccess: false as const,
-        message: "Missing coordinates for route calculation"
-      }
+
+  // --- Validation Start ---
+  const validationResult = RouteCoordinatesSchema.safeParse(params);
+  if (!validationResult.success) {
+    const errorMessage = formatZodError(validationResult.error);
+    console.error("Validation failed for getRouteAction:", errorMessage);
+    return {
+      isSuccess: false,
+      message: `Invalid input: ${errorMessage}`,
+    };
+  }
+  const { startLat, startLon, endLat, endLon } = validationResult.data;
+  // --- Validation End ---
+
+  console.log(`[Route Calculation] Calculating route from (${startLat},${startLon}) to (${endLat},${endLon})`);
+  
+  // Validate coordinates
+  if (!startLat || !startLon || !endLat || !endLon) {
+    console.error('[Route Calculation] Missing coordinates');
+    return {
+      isSuccess: false as const,
+      message: "Missing coordinates for route calculation"
     }
+  }
+  
+  // Ensure coordinates are valid numbers
+  const coords = [
+    parseFloat(startLat), parseFloat(startLon),
+    parseFloat(endLat), parseFloat(endLon)
+  ];
+  
+  if (coords.some(isNaN)) {
+    console.error('[Route Calculation] Invalid coordinates:', coords);
+    return {
+      isSuccess: false as const,
+      message: "Invalid coordinates for route calculation"
+    }
+  }
+  
+  // Using OSRM for routing
+  const url = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`
+  console.log('[Route Calculation] Requesting route from OSRM:', url);
+
+  const response = await rateLimitedFetch(url)
+  if (!response.ok) {
+    console.warn(`[Route Calculation] OSRM API error: ${response.statusText}. Using fallback route data.`);
     
-    // Ensure coordinates are valid numbers
-    const coords = [
+    // Return a fallback route with estimated data
+    const directDistance = calculateDistance(
       parseFloat(startLat), parseFloat(startLon),
       parseFloat(endLat), parseFloat(endLon)
-    ];
+    );
     
-    if (coords.some(isNaN)) {
-      console.error('[Route Calculation] Invalid coordinates:', coords);
-      return {
-        isSuccess: false as const,
-        message: "Invalid coordinates for route calculation"
-      }
-    }
+    // Estimate duration based on distance (assuming average speed of 50 km/h)
+    // 50 km/h = 13.89 m/s
+    const estimatedDuration = directDistance / 13.89;
     
-    // Using OSRM for routing
-    const url = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`
-    console.log('[Route Calculation] Requesting route from OSRM:', url);
-
-    const response = await rateLimitedFetch(url)
-    if (!response.ok) {
-      console.warn(`[Route Calculation] OSRM API error: ${response.statusText}. Using fallback route data.`);
-      
-      // Return a fallback route with estimated data
-      const directDistance = calculateDistance(
-        parseFloat(startLat), parseFloat(startLon),
-        parseFloat(endLat), parseFloat(endLon)
-      );
-      
-      // Estimate duration based on distance (assuming average speed of 50 km/h)
-      // 50 km/h = 13.89 m/s
-      const estimatedDuration = directDistance / 13.89;
-      
-      const fallbackRoute = {
-        isSuccess: true as const,
-        message: "Route estimated (API error)",
-        data: {
-          distance: directDistance,
-          duration: estimatedDuration,
-          geometry: {
-            coordinates: [
-              [parseFloat(startLon), parseFloat(startLat)],
-              [parseFloat(endLon), parseFloat(endLat)]
-            ],
-            type: "LineString"
-          }
-        }
-      };
-      
-      console.log('[Route Calculation] Returning fallback route:', fallbackRoute);
-      return fallbackRoute;
-    }
-
-    const data = await response.json()
-    console.log('[Route Calculation] OSRM response:', data);
-    
-    if (!data || !data.routes || data.routes.length === 0) {
-      console.error('[Route Calculation] No route found in OSRM response');
-      return {
-        isSuccess: false as const,
-        message: "No route found between the provided locations"
-      }
-    }
-
-    // Ensure the route data has the correct structure
-    const routeData = data.routes[0];
-    if (!routeData.distance || !routeData.duration) {
-      console.error('[Route Calculation] Route data missing required fields:', routeData);
-      return {
-        isSuccess: false as const,
-        message: "Route data is incomplete"
-      }
-    }
-
-    const route = {
+    const fallbackRoute = {
       isSuccess: true as const,
-      message: "Route calculated successfully",
+      message: "Route estimated (API error)",
       data: {
-        distance: routeData.distance,
-        duration: routeData.duration,
-        geometry: routeData.geometry
+        distance: directDistance,
+        duration: estimatedDuration,
+        geometry: {
+          coordinates: [
+            [parseFloat(startLon), parseFloat(startLat)],
+            [parseFloat(endLon), parseFloat(endLat)]
+          ],
+          type: "LineString"
+        }
       }
     };
     
-    console.log('[Route Calculation] Returning calculated route:', route);
-    return route;
-  } catch (error) {
-    console.error("[Route Calculation] Error:", error)
-    
-    // Return a fallback route with estimated data
-    try {
-      const directDistance = calculateDistance(
-        parseFloat(startLat), parseFloat(startLon),
-        parseFloat(endLat), parseFloat(endLon)
-      );
-      
-      // Estimate duration based on distance (assuming average speed of 50 km/h)
-      // 50 km/h = 13.89 m/s
-      const estimatedDuration = directDistance / 13.89;
-      
-      const fallbackRoute = {
-        isSuccess: true as const,
-        message: "Route estimated (error fallback)",
-        data: {
-          distance: directDistance,
-          duration: estimatedDuration,
-          geometry: {
-            coordinates: [
-              [parseFloat(startLon), parseFloat(startLat)],
-              [parseFloat(endLon), parseFloat(endLat)]
-            ],
-            type: "LineString"
-          }
-        }
-      };
-      
-      console.log('[Route Calculation] Returning error fallback route:', fallbackRoute);
-      return fallbackRoute;
-    } catch (fallbackError) {
-      console.error('[Route Calculation] Fallback calculation failed:', fallbackError);
-      return { 
-        isSuccess: false as const, 
-        message: "Failed to calculate route and fallback also failed" 
-      }
+    console.log('[Route Calculation] Returning fallback route:', fallbackRoute);
+    return fallbackRoute;
+  }
+
+  const data = await response.json()
+  console.log('[Route Calculation] OSRM response:', data);
+  
+  if (!data || !data.routes || data.routes.length === 0) {
+    console.error('[Route Calculation] No route found in OSRM response');
+    return {
+      isSuccess: false as const,
+      message: "No route found between the provided locations"
     }
   }
+
+  // Ensure the route data has the correct structure
+  const routeData = data.routes[0];
+  if (!routeData.distance || !routeData.duration) {
+    console.error('[Route Calculation] Route data missing required fields:', routeData);
+    return {
+      isSuccess: false as const,
+      message: "Route data is incomplete"
+    }
+  }
+
+  const route = {
+    isSuccess: true as const,
+    message: "Route calculated successfully",
+    data: {
+      distance: routeData.distance,
+      duration: routeData.duration,
+      geometry: routeData.geometry
+    }
+  };
+  
+  console.log('[Route Calculation] Returning calculated route:', route);
+  return route;
 }
 
 export async function calculateMidpointAction(
-  startLat: string,
-  startLon: string,
-  endLat: string,
-  endLon: string
+  // Combine parameters
+  params: {
+    startLat: string;
+    startLon: string;
+    endLat: string;
+    endLon: string;
+  }
 ): Promise<ActionState<{ lat: string; lon: string }>> {
+
+  // --- Validation Start ---
+  const validationResult = RouteCoordinatesSchema.safeParse(params);
+  if (!validationResult.success) {
+    const errorMessage = formatZodError(validationResult.error);
+    console.error("Validation failed for calculateMidpointAction:", errorMessage);
+    return {
+      isSuccess: false,
+      message: `Invalid input: ${errorMessage}`,
+    };
+  }
+  const { startLat, startLon, endLat, endLon } = validationResult.data;
+  // --- Validation End ---
+
+  console.log(`[Midpoint Calc] Calculating midpoint between (${startLat}, ${startLon}) and (${endLat}, ${endLon})`);
   try {
     // Get the route first
-    const routeResult = await getRouteAction(startLat, startLon, endLat, endLon)
+    const routeResult = await getRouteAction({ startLat, startLon, endLat, endLon })
     
     if (!routeResult.isSuccess) {
       return {
@@ -656,33 +694,32 @@ function getMidpoint(route: any): { lat: number; lng: number } | null {
 
 // The updated getAlternateRouteAction function (from previous step)
 export async function getAlternateRouteAction(
-  startLat: string,
-  startLon: string,
-  endLat: string,
-  endLon: string
+  // Combine parameters
+  params: {
+    startLat: string;
+    startLon: string;
+    endLat: string;
+    endLon: string;
+  }
 ): Promise<ActionState<any>> {
-  try {
-    // Validate coordinates
-    if (!startLat || !startLon || !endLat || !endLon) {
-      return {
-        isSuccess: false as const,
-        message: "Missing coordinates for alternate route calculation"
-      }
-    }
-    
-    // Ensure coordinates are valid numbers
-    const coords = [
-      parseFloat(startLat), parseFloat(startLon),
-      parseFloat(endLat), parseFloat(endLon)
-    ];
-    
-    if (coords.some(isNaN)) {
-      return {
-        isSuccess: false as const,
-        message: "Invalid coordinates for alternate route calculation"
-      }
-    }
 
+  // --- Validation Start ---
+  const validationResult = RouteCoordinatesSchema.safeParse(params);
+  if (!validationResult.success) {
+    const errorMessage = formatZodError(validationResult.error);
+    console.error("Validation failed for getAlternateRouteAction:", errorMessage);
+    return {
+      isSuccess: false,
+      message: `Invalid input: ${errorMessage}`,
+    };
+  }
+  const { startLat, startLon, endLat, endLon } = validationResult.data;
+  // --- Validation End ---
+
+  console.log(`[OSRM Alt Route] Requesting alternate routes from (${startLat}, ${startLon}) to (${endLat}, ${endLon})`);
+  const profile = "driving";
+
+  try {
     // Define route type
     interface RouteData {
       distance: number;
@@ -822,14 +859,32 @@ function createFallbackRoute(startLat: string, startLon: string, endLat: string,
 
 // Also add a function to calculate the midpoint for the alternate route
 export async function calculateAlternateMidpointAction(
-  startLat: string,
-  startLon: string,
-  endLat: string,
-  endLon: string
+  // Combine parameters
+  params: {
+    startLat: string;
+    startLon: string;
+    endLat: string;
+    endLon: string;
+  }
 ): Promise<ActionState<{ lat: string; lon: string }>> {
+
+  // --- Validation Start ---
+  const validationResult = RouteCoordinatesSchema.safeParse(params);
+  if (!validationResult.success) {
+    const errorMessage = formatZodError(validationResult.error);
+    console.error("Validation failed for calculateAlternateMidpointAction:", errorMessage);
+    return {
+      isSuccess: false,
+      message: `Invalid input: ${errorMessage}`,
+    };
+  }
+  const { startLat, startLon, endLat, endLon } = validationResult.data;
+  // --- Validation End ---
+
+  console.log(`[Alt Midpoint Calc] Calculating alt midpoint between (${startLat}, ${startLon}) and (${endLat}, ${endLon})`);
   try {
     // Get the alternate route first
-    const routeResult = await getAlternateRouteAction(startLat, startLon, endLat, endLon)
+    const routeResult = await getAlternateRouteAction({ startLat, startLon, endLat, endLon })
     
     if (!routeResult.isSuccess) {
       return {
