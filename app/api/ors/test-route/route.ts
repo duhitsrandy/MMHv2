@@ -1,7 +1,25 @@
 import { NextResponse } from 'next/server';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function POST(request: Request) {
   try {
+    // --- Rate Limiting Start ---
+    const { success, limit, reset, remaining, type } = await rateLimit();
+    if (!success) {
+      console.warn(`[Rate Limit Exceeded] Type: ${type}, Identifier: (determined by rateLimit function)`);
+      return NextResponse.json(
+        {
+          error: "Rate limit exceeded",
+          limit,
+          reset: new Date(reset * 1000).toISOString(), // Convert Unix timestamp to ISO string
+          remaining,
+        },
+        { status: 429 } // Too Many Requests
+      );
+    }
+    console.log(`[Rate Limit OK] Type: ${type}, Remaining: ${remaining}/${limit}`);
+    // --- Rate Limiting End ---
+
     const apiKey = process.env.OPENROUTESERVICE_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
