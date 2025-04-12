@@ -120,7 +120,7 @@ export async function geocodeLocationAction(
 ): Promise<ActionState<GeocodingResult>> {
   try {
     console.log('Geocoding address:', address);
-    const apiKey = process.env.NEXT_PUBLIC_LOCATIONIQ_KEY;
+    const apiKey = process.env.LOCATIONIQ_KEY;
     if (!apiKey) {
       console.error('LocationIQ API key is missing');
       return {
