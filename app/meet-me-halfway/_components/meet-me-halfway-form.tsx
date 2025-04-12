@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
+import { debounce } from 'lodash'
 import { Location } from "@/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -51,33 +52,72 @@ export default function MeetMeHalfwayForm({
   const [isSavingStart, setIsSavingStart] = useState(false)
   const [isSavingEnd, setIsSavingEnd] = useState(false)
 
-  // Effect to read query parameters on mount *only if rerunning*
+  // --- Debounce Logic (Revised) ---
+  // Debounce only the potential side-effect trigger, not the primary state update
+  const debouncedStartAddressSideEffect = useCallback(
+    debounce((value: string) => {
+      console.log('[Debounce] Start Address settled:', value);
+      // Future: Trigger autocomplete API call here if needed
+    }, 300),
+    [] // No dependencies needed if only logging or calling external functions
+  );
+
+  const debouncedEndAddressSideEffect = useCallback(
+    debounce((value: string) => {
+      console.log('[Debounce] End Address settled:', value);
+      // Future: Trigger autocomplete API call here if needed
+    }, 300),
+    [] // No dependencies needed
+  );
+
+  // Handlers now update state immediately for responsiveness
+  // and call the debounced function for potential side effects.
+  const handleStartAddressChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setStartAddress(value); // Update state immediately
+    setStartLocationId("custom"); // Assume custom input if typing
+    debouncedStartAddressSideEffect(value); // Trigger debounced effect
+  };
+
+  const handleEndAddressChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setEndAddress(value); // Update state immediately
+    setEndLocationId("custom"); // Assume custom input if typing
+    debouncedEndAddressSideEffect(value); // Trigger debounced effect
+  };
+  // --- Debounce Logic End ---
+
+  // Effect to read query parameters on mount
   useEffect(() => {
-    const shouldRerun = searchParams.get('rerun') === 'true';
+    // Removed the check for `rerun=true` to allow repopulation from URL directly
+    // const shouldRerun = searchParams.get('rerun') === 'true';
     const startQuery = searchParams.get('start');
     const endQuery = searchParams.get('end');
 
-    let populated = false;
-    if (shouldRerun && startQuery) {
+    let updated = false;
+    // Only populate if the query param exists and the current state is empty
+    // to avoid overwriting user input or selected saved locations unnecessarily.
+    if (startQuery && !startAddress) {
+      console.log('[Form Init] Populating start address from query param:', startQuery);
       setStartAddress(startQuery);
-      setStartLocationId('custom');
-      populated = true;
+      setStartLocationId('custom'); // Assume it's a custom address if from query param
+      updated = true;
     }
-    if (shouldRerun && endQuery) {
+    if (endQuery && !endAddress) {
+      console.log('[Form Init] Populating end address from query param:', endQuery);
       setEndAddress(endQuery);
-      setEndLocationId('custom');
-      populated = true;
+      setEndLocationId('custom'); // Assume it's a custom address if from query param
+      updated = true;
     }
 
-    // Clean up the URL parameters after reading them 
-    // if we actually populated the fields from them.
-    if (populated) {
-      // Use router.replace to update URL without adding to history
-      router.replace(pathname, { scroll: false }); 
-    }
-  // IMPORTANT: Run only when searchParams *object identity* changes,
-  // which happens on navigation, not on every render.
-  }, [searchParams, router, pathname]);
+    // We might not need to clear the params here anymore, as they represent the current state.
+    // Leaving the clear logic commented out for now, might remove later if confirms unnecessary.
+    // if (updated) {
+    //   router.replace(pathname, { scroll: false }); 
+    // }
+
+  // Dependency array: Rerun if searchParams identity changes OR if address state becomes empty later
+  }, [searchParams, router, pathname, startAddress, endAddress]);
 
   // Effect to set initial locations (remains the same)
   useEffect(() => {
@@ -89,12 +129,11 @@ export default function MeetMeHalfwayForm({
 
     if (locationId === "custom") {
       setStartAddress("")
-      return
-    }
-
-    const location = locations.find(loc => loc.id === locationId)
-    if (location) {
-      setStartAddress(location.address)
+    } else {
+      const location = locations.find(loc => loc.id === locationId)
+      if (location) {
+        setStartAddress(location.address)
+      }
     }
   }
 
@@ -103,12 +142,11 @@ export default function MeetMeHalfwayForm({
 
     if (locationId === "custom") {
       setEndAddress("")
-      return
-    }
-
-    const location = locations.find(loc => loc.id === locationId)
-    if (location) {
-      setEndAddress(location.address)
+    } else {
+      const location = locations.find(loc => loc.id === locationId)
+      if (location) {
+        setEndAddress(location.address)
+      }
     }
   }
 
@@ -173,8 +211,10 @@ export default function MeetMeHalfwayForm({
         // Optionally, select the newly saved location
         if (type === "start") {
           setStartLocationId(saveResult.data!.id)
+          setStartAddress(saveResult.data!.address) // Update input field as well
         } else {
           setEndLocationId(saveResult.data!.id)
+          setEndAddress(saveResult.data!.address) // Update input field as well
         }
       } else {
         toast.error(
@@ -203,11 +243,11 @@ export default function MeetMeHalfwayForm({
     let startData, endData
 
     try {
-      // Use existing location data if selected
+      // Use existing location data if selected (re-geocode if custom was typed)
       const selectedStart = locations.find(loc => loc.id === startLocationId)
       const selectedEnd = locations.find(loc => loc.id === endLocationId)
 
-      if (selectedStart) {
+      if (selectedStart && selectedStart.address === startAddress) {
         startData = {
           lat: selectedStart.latitude,
           lon: selectedStart.longitude,
@@ -223,7 +263,7 @@ export default function MeetMeHalfwayForm({
         startData = startResult.data
       }
 
-      if (selectedEnd) {
+      if (selectedEnd && selectedEnd.address === endAddress) {
         endData = {
           lat: selectedEnd.latitude,
           lon: selectedEnd.longitude,
@@ -238,8 +278,6 @@ export default function MeetMeHalfwayForm({
         }
         endData = endResult.data
       }
-
-      // *** Recent Search saving is moved to meet-me-halfway-app.tsx ***
 
       onFindMidpoint({
         startLat: startData.lat,
@@ -256,16 +294,14 @@ export default function MeetMeHalfwayForm({
           lng: parseFloat(endData.lon),
           display_name: endData.display_name || endAddress
         }
-      })
+      });
+
+      // Clear searchParams related to rerun after successful submission
+      router.replace(pathname, { scroll: false });
+
     } catch (error) {
-      console.error("Error processing form:", error)
-      if (error instanceof Error) {
-        toast.error(`Error: ${error.message}`)
-      } else {
-        toast.error(
-          "An unexpected error occurred while processing your request"
-        )
-      }
+      console.error("Error during midpoint calculation:", error)
+      toast.error("An error occurred while finding the midpoint.")
     } finally {
       setIsLoading(false)
     }
@@ -274,120 +310,121 @@ export default function MeetMeHalfwayForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Find a Midpoint</CardTitle>
+        <CardTitle>Find Your Midpoint</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="startLocation">Location 1</Label>
-              {locations.length > 0 && (
-                <Select
-                  value={startLocationId}
-                  onValueChange={handleStartLocationSelect}
+          {/* Start Location Section - Reverted Structure */}
+          <div className="space-y-2">
+            <Label htmlFor="start-location-input">Start Location</Label>
+            {locations.length > 0 && (
+              <Select
+                value={startLocationId}
+                onValueChange={handleStartLocationSelect}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select saved or enter custom" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="custom">Enter custom location</SelectItem>
-                    {locations.map(location => (
-                      <SelectItem key={location.id} value={location.id}>
-                        {location.name} ({location.address.substring(0, 30)}...)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <div className="flex items-center gap-2">
-                <Input
-                  id="startLocation"
-                  placeholder="Enter location 1 address"
-                  value={startAddress}
-                  onChange={e => setStartAddress(e.target.value)}
-                  required
-                  disabled={startLocationId !== "custom" && !!startLocationId}
-                />
-                {isSignedIn && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleSaveLocation("start")}
-                    disabled={isSavingStart || !startAddress}
-                    title="Save this location"
-                  >
-                    {isSavingStart ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Bookmark className="size-4" />
-                    )}
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="endLocation">Location 2</Label>
-              {locations.length > 0 && (
-                <Select
-                  value={endLocationId}
-                  onValueChange={handleEndLocationSelect}
+                <SelectTrigger id="start-location-select">
+                  <SelectValue placeholder="Select saved or enter address below" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="custom">Use address below</SelectItem>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name} ({loc.address.substring(0, 30)}...)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+             )}
+            <div className="flex space-x-2 items-center pt-2">
+              <Input
+                id="start-location-input"
+                placeholder="Enter start address or select saved"
+                value={startAddress}
+                onChange={handleStartAddressChange}
+                disabled={isLoading || isSavingStart}
+                className="flex-grow"
+                required
+              />
+              {isSignedIn && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handleSaveLocation("start")}
+                  disabled={!startAddress || isLoading || isSavingStart}
+                  aria-label="Save start location"
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select saved or enter custom" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="custom">Enter custom location</SelectItem>
-                    {locations.map(location => (
-                      <SelectItem key={location.id} value={location.id}>
-                        {location.name} ({location.address.substring(0, 30)}...)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  {isSavingStart ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Bookmark className="h-4 w-4" />
+                  )}
+                </Button>
               )}
-              <div className="flex items-center gap-2">
-                <Input
-                  id="endLocation"
-                  placeholder="Enter location 2 address"
-                  value={endAddress}
-                  onChange={e => setEndAddress(e.target.value)}
-                  required
-                  disabled={endLocationId !== "custom" && !!endLocationId}
-                />
-                {isSignedIn && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleSaveLocation("end")}
-                    disabled={isSavingEnd || !endAddress}
-                    title="Save this location"
-                  >
-                    {isSavingEnd ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Bookmark className="size-4" />
-                    )}
-                  </Button>
-                )}
-              </div>
             </div>
           </div>
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
+          {/* End Location Section - Reverted Structure */}
+          <div className="space-y-2">
+            <Label htmlFor="end-location-input">End Location</Label>
+             {locations.length > 0 && (
+               <Select
+                 value={endLocationId}
+                 onValueChange={handleEndLocationSelect}
+               >
+                 <SelectTrigger id="end-location-select">
+                   <SelectValue placeholder="Select saved or enter address below" />
+                 </SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value="custom">Use address below</SelectItem>
+                   {locations.map((loc) => (
+                     <SelectItem key={loc.id} value={loc.id}>
+                       {loc.name} ({loc.address.substring(0, 30)}...)
+                     </SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+             )}
+            <div className="flex space-x-2 items-center pt-2">
+              <Input
+                id="end-location-input"
+                placeholder="Enter end address or select saved"
+                value={endAddress}
+                onChange={handleEndAddressChange}
+                disabled={isLoading || isSavingEnd}
+                className="flex-grow"
+                required
+              />
+              {isSignedIn && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handleSaveLocation("end")}
+                  disabled={!endAddress || isLoading || isSavingEnd}
+                  aria-label="Save end location"
+                >
+                  {isSavingEnd ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Bookmark className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <Button type="submit" disabled={isLoading} className="w-full">
             {isLoading ? (
-              <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
-                Finding Midpoint...
-              </>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              "Find Midpoint"
+              <MapPin className="mr-2 h-4 w-4" />
             )}
+            Find Midpoint
           </Button>
         </form>
       </CardContent>
     </Card>
-  )
+  );
 }
