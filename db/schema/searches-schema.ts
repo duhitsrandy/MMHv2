@@ -1,4 +1,10 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import {
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  index,
+} from "drizzle-orm/pg-core"
 
 export const searchesTable = pgTable("searches", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -16,6 +22,10 @@ export const searchesTable = pgTable("searches", {
     .defaultNow()
     .notNull()
     .$onUpdate(() => new Date())
+}, (table) => {
+  return {
+    userIdx: index("searches_user_id_idx").on(table.userId),
+  }
 })
 
 export type InsertSearch = typeof searchesTable.$inferInsert

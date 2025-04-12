@@ -97,6 +97,7 @@
     "@types/node": "^20",
     "@types/react": "18.2.0",
     "@types/react-dom": "18.2.0",
+    "@vitest/ui": "^3.1.1",
     "dotenv": "^16.4.7",
     "drizzle-kit": "^0.24.2",
     "eslint": "^8",
@@ -104,11 +105,14 @@
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-tailwindcss": "^3.17.5",
     "husky": "^9.1.6",
+    "jsdom": "^26.0.0",
     "kill-port": "^2.0.1",
     "postcss": "^8",
     "prettier": "^3.3.3",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.1.1"
   },
   "overrides": {
     "react": "18.2.0",

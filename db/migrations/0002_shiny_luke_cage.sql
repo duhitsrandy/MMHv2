@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS "locations_user_id_idx" ON "locations" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "searches_user_id_idx" ON "searches" USING btree ("user_id");

@@ -1,4 +1,10 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import {
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  index,
+} from "drizzle-orm/pg-core"
 
 export const locationsTable = pgTable("locations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -12,6 +18,10 @@ export const locationsTable = pgTable("locations", {
     .defaultNow()
     .notNull()
     .$onUpdate(() => new Date())
+}, (table) => {
+  return {
+    userIdx: index("locations_user_id_idx").on(table.userId),
+  }
 })
 
 export type InsertLocation = typeof locationsTable.$inferInsert
