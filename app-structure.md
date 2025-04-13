@@ -17,9 +17,9 @@ Meet Me Halfway is a Next.js application that helps users find a convenient meet
 ### 3. Search Interface (`app/meet-me-halfway/_components/search-interface.tsx`)
 - Provides the main search form for two locations.
 - Features:
-  - Address input fields.
+  - Address input fields with **debouncing** to limit API calls during typing.
   - Geocoding via LocationIQ (`geocodeLocationAction`).
-  - Form validation.
+  - Form validation (likely using `react-hook-form` and potentially Zod).
   - Loading states and user feedback.
   - Callback (`onFindMidpoint`) to trigger results display.
 
@@ -133,30 +133,51 @@ Meet Me Halfway is a Next.js application that helps users find a convenient meet
 
 ## Tech Stack Breakdown (Summary)
 
-- **Frontend**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS, shadcn/ui, react-leaflet
+- **Frontend**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS, shadcn/ui, react-leaflet, react-hook-form, next-themes
 - **Backend/APIs**: Next.js Server Actions, LocationIQ, OSRM Demo, OpenRouteService
-- **(Potential Future)**: Database (e.g., Supabase), Authentication (e.g., Clerk)
+- **Database**: Supabase (PostgreSQL) with Drizzle ORM
+- **Authentication**: Clerk
+- **Rate Limiting**: Upstash Redis with @upstash/ratelimit
+- **State Management**: React Context (for Theme, potentially Auth), Server State via Server Actions, Local Component State, `react-hook-form` for forms.
 
-## Directory Structure (Simplified)
+## Directory Structure (Enhanced)
 
 ```
-├── actions/                  # Server Actions for API calls
+├── actions/                  # Server Actions for API calls & DB interactions
 │   ├── locationiq-actions.ts # Geocoding, OSRM Routing, POI Search
-│   └── ors-actions.ts      # ORS Matrix API calls
+│   └── ors-actions.ts        # ORS Matrix API calls
 ├── app/
-│   └── meet-me-halfway/
-│       ├── _components/      # UI Components
-│       │   ├── map-component.tsx
-│       │   ├── points-of-interest.tsx
-│       │   ├── results-map.tsx
-│       │   ├── search-interface.tsx
-│       │   └── meet-me-halfway-app.tsx
-│       └── page.tsx          # Page entry point
-├── lib/                      # Utilities, Hooks (if any)
+│   └── (main routes like /meet-me-halfway/, /login, /profile, etc.)
+│       └── meet-me-halfway/
+│           ├── _components/      # Specific UI Components for this route
+│           │   ├── map-component.tsx
+│           │   ├── points-of-interest.tsx
+│           │   ├── results-map.tsx
+│           │   ├── search-interface.tsx
+│           │   └── meet-me-halfway-app.tsx
+│           └── page.tsx          # Page entry point
+├── components/
+│   ├── providers/           # Context Providers (Theme, Auth?)
+│   └── ui/                  # Reusable UI Components (shadcn/ui based)
+├── db/
+│   ├── migrations/           # Drizzle migration files
+│   └── schema/               # Drizzle schema definitions
+│       ├── profiles-schema.ts
+│       ├── locations-schema.ts
+│       ├── searches-schema.ts
+│       └── (other schemas like pois-schema.ts if exist)
+├── hooks/                    # Custom React Hooks
+├── lib/                      # Utilities
+│   ├── rate-limit.ts         # Rate Limiting logic
+│   └── utils.ts              # General utility functions
+├── logs/                     # Log files (if configured)
+├── public/                   # Static assets
 ├── types/                    # TypeScript types
-├── public/
-│   └── leaflet/            # Leaflet assets (e.g., marker icons)
-├── .env.local              # Environment variables (API keys)
+├── .env.local                # Local environment variables
+├── middleware.ts             # Clerk auth and Rate Limiting middleware
+├── drizzle.config.ts         # Drizzle configuration
+├── next.config.mjs           # Next.js configuration
+├── package.json
 └── README.md
 ```
 
@@ -280,5 +301,41 @@ NEXT_PUBLIC_LOCATIONIQ_KEY=your_locationiq_api_key_here
 - **API Key**: The LocationIQ key is public (`NEXT_PUBLIC_`). While necessary for client-side use in some scenarios, ideally, sensitive API calls (especially if paid) should be proxied through Server Actions or API routes to hide the key.
 - **Rate Limiting**: Currently not implemented for OSRM/ORS calls but recommended for production, especially if using paid services.
 - **Input Validation**: Basic validation exists, but robust server-side validation in actions is crucial.
+
+## Authentication (Clerk)
+
+- **Integration**: Uses `@clerk/nextjs` for frontend and backend integration.
+- **Middleware (`middleware.ts`)**: Protects routes based on authentication status. Public routes are explicitly defined, and all others require login.
+- **UI Components**: Leverages Clerk components like `<SignIn />`, `<SignUp />`, `<UserButton />` for login, registration, and user profile management.
+- **Hooks**: Uses hooks like `useAuth()` and `useUser()` to access authentication state and user information in client components.
+- **Server Actions**: Clerk helpers (`auth()`) are used within Server Actions to get the `userId` and protect actions requiring authentication.
+
+## Database (Supabase & Drizzle)
+
+- **Provider**: Supabase (PostgreSQL) provides the database hosting.
+- **ORM**: Drizzle ORM is used for type-safe database access and schema definition.
+- **Schema (`db/schema/`)**: Defines the database tables:
+    - `profiles-schema.ts`: Stores user profile information, likely linked to Clerk users via `userId`.
+    - `locations-schema.ts`: Stores geocoded location data (latitude, longitude, address string).
+    - `searches-schema.ts`: Stores historical search records, linking two locations (`locationAId`, `locationBId`) to a user (`userId`) and potentially storing midpoint/route information.
+    - `pois-schema.ts`: (Potentially) Stores cached or specific Point of Interest data if needed beyond transient search results.
+- **Migrations**: `drizzle-kit` is used to generate and manage SQL migration files (`db/migrations/`) based on schema changes. Migrations are applied using `npm run db:migrate`.
+- **Interaction**: Server Actions use Drizzle query builder functions (e.g., `db.select().from(...)`, `db.insert(...)`) to interact with the Supabase database.
+
+## Rate Limiting (Upstash Redis)
+
+- **Provider**: Upstash Redis provides a serverless Redis instance.
+- **Library**: `@upstash/ratelimit` is used to implement rate limiting logic.
+- **Implementation (`lib/rate-limit.ts`)**: Contains the core rate limiting function, likely configured with different limits (anonymous, authenticated, special) based on environment variables.
+- **Usage (`middleware.ts`)**: The rate limiting function is called within the middleware for requests targeting `/api/` routes, using the user's IP address or potentially `userId` (if available and authenticated) as the identifier. It returns appropriate 429 responses if limits are exceeded.
+
+## State Management
+
+- **Route State**: `mainRoute`, `alternateRoute` (containing geometry, duration, distance).
+- **Midpoint State**: `currentMidpoint`, `alternateMidpoint` (calculated `{lat, lng}` coordinates).
+- **POI State**: 
+    - `initialPois`: Raw POIs fetched from LocationIQ for both midpoints, deduplicated.
+    - `combinedPois`: Enriched POIs after processing with ORS travel time matrix data.
+- **Loading State**: `isMapDataLoading` (for routes/initial POIs), `isPoiTravelTimeLoading` (for ORS matrix calculation).
 
 This documentation serves as a comprehensive guide reflecting the current state of the Meet-Me-Halfway application. 

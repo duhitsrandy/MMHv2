@@ -85,44 +85,44 @@ RATE_LIMIT_REQUESTS_SPECIAL=100
 RATE_LIMIT_WINDOW_SPECIAL=60
 ```
 
-4. Run the development server:
+4. Set up the database schema:
+```bash
+npm run db:migrate
+# or npx drizzle-kit migrate
+```
+
+5. Run the development server:
 ```bash
 npm run dev
 ```
 
-5. Open [http://localhost:3000](http://localhost:3000) in your browser.
+6. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Project Structure
 
 ```
-├── actions/                  # Server Actions for API calls
-│   ├── locationiq-actions.ts # Geocoding, OSRM Routing, POI Search
-│   └── ors-actions.ts        # ORS Matrix API calls
-├── app/
-│   └── meet-me-halfway/
-│       ├── _components/      # UI Components
-│       │   ├── map-component.tsx
-│       │   ├── points-of-interest.tsx
-│       │   ├── results-map.tsx
-│       │   ├── search-interface.tsx
-│       │   └── meet-me-halfway-app.tsx
-│       └── page.tsx          # Page entry point
+├── actions/                  # Server Actions
+├── app/                      # Next.js App Router pages & layouts
+│   └── meet-me-halfway/      # Example route
+│       ├── _components/      # Route-specific components
+│       └── page.tsx
 ├── components/
-│   ├── providers/           # Context Providers
-│   │   ├── auth-provider.tsx
-│   │   └── theme-provider.tsx
-│   └── ui/                  # Reusable UI Components
+│   ├── providers/            # Context Providers (Theme, etc.)
+│   └── ui/                   # Reusable UI (shadcn/ui)
 ├── db/
-│   └── schema/             # Database Schema
-│       ├── profiles-schema.ts
-│       ├── searches-schema.ts
-│       ├── pois-schema.ts
-│       └── locations-schema.ts
-├── lib/                    # Utilities
-│   └── rate-limit.ts      # Rate Limiting
-├── public/
-│   └── leaflet/           # Leaflet assets
-└── types/                 # TypeScript types
+│   ├── migrations/           # Drizzle migration files
+│   └── schema/               # Drizzle schema definitions
+├── hooks/                    # Custom React Hooks
+├── lib/                      # Utilities (rate-limit, utils)
+├── logs/                     # Log files (if used)
+├── public/                   # Static assets
+├── types/                    # TypeScript types
+├── .env.local                # Local environment variables
+├── middleware.ts             # Auth & Rate Limiting Middleware
+├── drizzle.config.ts         # Drizzle configuration
+├── next.config.mjs           # Next.js configuration
+├── package.json
+└── README.md
 ```
 
 ## Documentation

@@ -161,64 +161,11 @@ interface TravelTimeMatrixResponse {
 }
 ```
 
-## Internal API Routes
+## Backend Logic (Server Actions)
 
-### 1. Authentication Routes
+Backend operations, including interactions with the external APIs documented above and database operations (using Drizzle with Supabase), are primarily handled via **Next.js Server Actions**. These actions are defined in the `actions/` directory (e.g., `locationiq-actions.ts`, `ors-actions.ts`) and can be called directly from React Server Components or Client Components.
 
-#### Login (`/api/auth/login`)
-```typescript
-export async function POST(req: Request) {
-  // Implementation
-}
-```
-
-#### Signup (`/api/auth/signup`)
-```typescript
-export async function POST(req: Request) {
-  // Implementation
-}
-```
-
-### 2. User Routes
-
-#### Profile (`/api/user/profile`)
-```typescript
-export async function GET(req: Request) {
-  // Implementation
-}
-
-export async function PATCH(req: Request) {
-  // Implementation
-}
-```
-
-#### Saved Locations (`/api/user/locations`)
-```typescript
-export async function GET(req: Request) {
-  // Implementation
-}
-
-export async function POST(req: Request) {
-  // Implementation
-}
-
-export async function DELETE(req: Request) {
-  // Implementation
-}
-```
-
-### 3. Search Routes
-
-#### Search History (`/api/search/history`)
-```typescript
-export async function GET(req: Request) {
-  // Implementation
-}
-
-export async function POST(req: Request) {
-  // Implementation
-}
-```
+Refer to the `app-structure.md` document and the files within the `actions/` directory for detailed information on specific Server Actions and their functionality.
 
 ## Rate Limiting
 
