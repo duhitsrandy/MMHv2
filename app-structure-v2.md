@@ -34,38 +34,44 @@ Meet Me Halfway is a Next.js application that helps users find a convenient meet
 ### 4. API Security & Rate Limiting
 - **Rate Limiting** (`lib/rate-limit.ts`):
   - Three-tier system (anonymous, authenticated, special)
-  - Upstash Redis implementation
+  - Upstash Redis implementation (`@upstash/ratelimit`)
   - Configurable limits via environment variables
 - **API Protection** (`lib/api-protection.ts`):
-  - Request validation
-  - Security headers
-  - Error handling
+  - Provides utilities for securing API endpoints (e.g., checking methods, headers).
+- **Security Utilities** (`lib/security.ts`):
+  - General security-related helper functions.
+- **Input Validation** (`lib/validation.ts`):
+  - Zod schemas and functions for validating request inputs.
 
 ### 5. Meet Me Halfway Core Feature
-- **Main App Component** (`app/meet-me-halfway/page.tsx`):
-  - Entry point for the core feature
-  - Manages search and results views
-- **Search Interface** (`app/meet-me-halfway/_components/search-interface.tsx`):
-  - Address input and validation
-  - Geocoding via LocationIQ
-  - User feedback and loading states
-- **Results Map** (`app/meet-me-halfway/_components/results-map.tsx`):
-  - Orchestrates map and POI data display
-  - Manages loading states and data flow
+- **Main App Wrapper** (`app/meet-me-halfway/_components/meet-me-halfway-app.tsx`):
+  - Likely orchestrates the overall feature state and components.
+- **Main App Page** (`app/meet-me-halfway/page.tsx`):
+  - Entry point for the `/meet-me-halfway` route.
+  - Renders the main application component (`MeetMeHalfwayApp`).
+- **Search Form** (`app/meet-me-halfway/_components/meet-me-halfway-form.tsx`):
+  - Handles address inputs, geocoding requests (via actions), and form state.
+- **Results Map Wrapper** (`app/meet-me-halfway/_components/results-map.tsx`):
+  - Manages the display logic for the map and POI data.
+  - Handles loading states and coordinates data flow between map and POIs.
 - **Map Component** (`app/meet-me-halfway/_components/map-component.tsx`):
-  - Interactive map rendering
-  - Route and POI visualization
-  - User interaction handling
-- **Points of Interest** (`app/meet-me-halfway/_components/points-of-interest.tsx`):
-  - POI list display
-  - Selection and interaction
-  - Travel time information
+  - Renders the interactive Leaflet map.
+  - Visualizes routes, midpoints, and POI markers.
+- **Points of Interest List** (`app/meet-me-halfway/_components/points-of-interest.tsx`):
+  - Displays the list of found POIs.
+  - Shows travel time information.
+  - Handles POI selection and interaction with the map.
+- **Supporting Components**:
+  - `saved-locations.tsx`: Component for handling saved user locations.
+  - `recent-searches.tsx`: Component for displaying recent searches.
+  - `results-skeleton.tsx`, `meet-me-halfway-skeleton.tsx`: Loading state placeholders.
+  - `leaflet.css`: Custom styles for the Leaflet map.
 
 ### 6. Payment & Subscription
 - **Stripe Integration**:
-  - Subscription management
-  - Payment processing
-  - Webhook handling
+  - Server Actions (`actions/stripe-actions.ts`) likely handle creating checkout sessions, managing subscriptions.
+  - API Routes (`app/api/stripe/`) likely handle Stripe webhooks for events like successful payments or subscription updates.
+  - Utility functions might exist in `lib/stripe.ts`.
 - **Membership Levels**:
   - Free and Pro tiers
   - Feature access control
@@ -81,19 +87,18 @@ Meet Me Halfway is a Next.js application that helps users find a convenient meet
 
 ### 2. Location Services
 - **LocationIQ**:
-  - Geocoding (`geocodeLocationAction`)
-  - POI Search (`searchPoisAction`)
-- **OSRM**:
-  - Main route calculation (`getRouteAction`)
-  - Alternate routes (`getAlternateRouteAction`)
-- **OpenRouteService**:
-  - Travel time matrix (`getTravelTimeMatrixAction`)
+  - Geocoding (`locationiq-actions.ts` -> `geocodeLocationAction`)
+  - POI Search (`locationiq-actions.ts` -> `searchPoisAction`)
+- **OSRM** (*Note: Specific OSRM actions/routes not listed, may be integrated within ORS/LocationIQ actions or replaced*):
+  - Potentially used for route calculations.
+- **OpenRouteService (ORS)**:
+  - Travel time matrix (`ors-actions.ts` -> `getTravelTimeMatrixAction`)
+  - Route calculation (`ors-actions.ts` -> `getRouteAction` - *potentially replacing OSRM*)
 
 ### 3. Payment APIs
 - **Stripe**:
-  - Subscription management
-  - Payment processing
-  - Customer portal
+  - Checkout sessions, subscription management (via `actions/stripe-actions.ts`).
+  - Webhook handling (via `app/api/stripe/`).
 
 ## State Management
 
@@ -138,35 +143,62 @@ Meet Me Halfway is a Next.js application that helps users find a convenient meet
 - Database access control
 
 ## Directory Structure
-
+*Note: This is a simplified representation. Some directories may contain more files/subdirectories.*
 ```
 ├── actions/                  # Server Actions
-│   ├── locationiq-actions.ts # LocationIQ API calls
-│   ├── ors-actions.ts       # ORS API calls
-│   └── db/                  # Database operations
+│   ├── locationiq-actions.ts # LocationIQ API calls (Geocoding, POI Search)
+│   ├── ors-actions.ts       # ORS API calls (Routing, Travel Matrix)
+│   ├── stripe-actions.ts    # Stripe actions (Checkout, Subscriptions)
+│   ├── db/                  # Database interaction actions
+│   └── ...                  # Other specific or test actions
 ├── app/
-│   ├── (auth)/             # Authentication routes
+│   ├── (auth)/             # Authentication routes (Clerk managed)
 │   │   ├── login/
 │   │   └── signup/
-│   ├── api/                # API routes
-│   │   ├── ors/           # ORS endpoints
-│   │   ├── stripe/        # Payment endpoints
-│   │   └── test/          # Testing endpoints
-│   └── meet-me-halfway/    # Core feature
-│       ├── _components/    # UI Components
-│       └── page.tsx        # Feature entry point
+│   ├── api/                # API routes (e.g., for webhooks, specific endpoints)
+│   │   ├── ors/           # ORS related endpoints (if any)
+│   │   ├── stripe/        # Stripe webhook handler
+│   │   ├── route/         # Potential routing related endpoints
+│   │   └── ...            # Other API routes (e.g., testing)
+│   ├── (main)/             # Main application pages/layouts
+│   │   ├── meet-me-halfway/# Core feature route
+│   │   │   ├── _components/ # Feature-specific UI Components
+│   │   │   │   ├── meet-me-halfway-app.tsx
+│   │   │   │   ├── meet-me-halfway-form.tsx
+│   │   │   │   ├── results-map.tsx
+│   │   │   │   ├── map-component.tsx
+│   │   │   │   ├── points-of-interest.tsx
+│   │   │   │   └── ... (skeletons, css, etc.)
+│   │   │   └── page.tsx     # Feature entry point
+│   │   └── ...              # Other main pages (e.g., dashboard, settings)
+│   ├── layout.tsx          # Root layout
+│   └── globals.css         # Global styles & CSS variables
 ├── components/
-│   ├── auth/              # Authentication components
-│   └── providers/         # Theme and auth providers
+│   ├── auth/               # Authentication UI components (e.g., user button)
+│   ├── providers/          # Context providers (Theme, Auth, Query, etc.)
+│   ├── ui/                 # Shared UI components (shadcn/ui based)
+│   └── ...                 # Other shared components
 ├── db/
-│   ├── migrations/        # Database migrations
-│   └── schema/           # Database schemas
-├── lib/
-│   ├── rate-limit.ts     # Rate limiting
-│   ├── validation.ts     # Input validation
-│   └── security.ts       # Security utilities
-├── public/               # Static assets
-└── types/               # TypeScript types
+│   ├── migrations/         # Drizzle database migration files
+│   └── schema/             # Drizzle schema definitions (*-schema.ts)
+├── lib/                    # Shared libraries, utilities, hooks
+│   ├── rate-limit.ts       # Rate limiting logic
+│   ├── validation.ts       # Zod validation schemas/functions
+│   ├── security.ts         # Security helper functions
+│   ├── api-protection.ts   # API endpoint security helpers
+│   ├── schemas.ts          # Shared Zod schemas (distinct from validation?)
+│   ├── utils.ts            # General utility functions (e.g., cn)
+│   ├── hooks/              # Custom React hooks
+│   ├── clerk.ts            # Clerk related utilities (if any)
+│   └── stripe.ts           # Stripe related utilities
+├── public/                 # Static assets (images, fonts, etc.)
+├── types/                  # Global TypeScript type definitions
+├── .env.local              # Local environment variables (DO NOT COMMIT)
+├── middleware.ts           # Next.js middleware (Auth, Rate Limiting)
+├── next.config.mjs         # Next.js configuration
+├── tailwind.config.ts      # Tailwind CSS configuration
+├── tsconfig.json           # TypeScript configuration
+└── package.json            # Project dependencies & scripts
 ```
 
 ## Environment Variables

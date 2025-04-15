@@ -36,10 +36,13 @@
 - [ ] Ensure all sensitive keys are properly secured in production environment
 
 ### Rate Limiting
-- [ ] Review and adjust rate limits for production load:
-  - Current: 10 requests per 10 seconds
-  - Consider different limits for authenticated vs unauthenticated users
-  - Consider different limits for different API endpoints
+- [ ] Review and adjust rate limit values for production load:
+  - Current defaults (via ENV vars):
+    - Anonymous: 10 req / 10 sec (`RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW`)
+    - Authenticated: 50 req / 60 sec (`RATE_LIMIT_REQUESTS_AUTH` / `RATE_LIMIT_WINDOW_AUTH`)
+    - Special (Geocode/Route): 100 req / 60 sec (`RATE_LIMIT_REQUESTS_SPECIAL` / `RATE_LIMIT_WINDOW_SPECIAL`)
+  - Verify these defaults are suitable for expected production traffic.
+  - Monitor Upstash usage and adjust ENV variables as needed.
 
 ### Error Handling
 - [ ] Implement production error logging strategy
