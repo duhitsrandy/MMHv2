@@ -1,3 +1,4 @@
+import 'dotenv-safe/config'
 import withBundleAnalyzer from '@next/bundle-analyzer'
 
 /*
