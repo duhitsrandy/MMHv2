@@ -21,6 +21,11 @@ const publicRoutes = createRouteMatcher([
   "/api/(.*)"
 ])
 
+// Define routes accessible only by admins
+const adminRoutes = createRouteMatcher([
+  "/admin(.*)"
+])
+
 // Define rate limit types for different API routes
 const RATE_LIMIT_TYPES: Record<string, 'anonymous' | 'authenticated' | 'special'> = {
   GEOCODING: 'special', // Higher limits for geocoding
@@ -45,7 +50,14 @@ function getRateLimitType(pathname: string): 'anonymous' | 'authenticated' | 'sp
 
 // Combine auth middleware with rate limiting
 export default clerkMiddleware(async (auth, req) => {
-  // Check if the request is for an API route
+  // 1. Check if it's an admin route first
+  if (adminRoutes(req)) {
+    // Protect admin routes, requiring the 'admin' role
+    auth().protect((has) => has({ role: 'admin' }));
+    // If protect() doesn't throw/redirect, proceed to rate limiting for API routes
+  }
+
+  // 2. Check if the request is for an API route (rate limiting)
   if (req.nextUrl.pathname.startsWith('/api/')) {
     // Get the appropriate rate limit type based on the route
     const rateLimitType = getRateLimitType(req.nextUrl.pathname)
@@ -54,6 +66,16 @@ export default clerkMiddleware(async (auth, req) => {
     const rateLimitResult = await rateLimit({ type: rateLimitType })
     
     if (!rateLimitResult.success) {
+      // Log the rate limit violation
+      console.warn(`Rate limit exceeded for ${rateLimitType} user`, {
+        pathname: req.nextUrl.pathname,
+        ip: req.ip,
+        userId: auth().userId, // Will be null for anonymous users
+        limit: rateLimitResult.limit,
+        remaining: rateLimitResult.remaining,
+        reset: new Date(rateLimitResult.reset * 1000).toISOString(), // Convert ms to ISO string
+      });
+
       return new NextResponse(JSON.stringify({
         error: rateLimitResult.message,
         limit: rateLimitResult.limit,
@@ -72,9 +94,12 @@ export default clerkMiddleware(async (auth, req) => {
     }
   }
 
-  if (!publicRoutes(req)) {
-    await auth().protect()
+  // 3. Protect non-public routes if they aren't admin routes (already handled)
+  if (!publicRoutes(req) && !adminRoutes(req)) {
+    auth().protect()
   }
+
+  // 4. Allow the request to proceed if no protection rules applied or passed
   return NextResponse.next()
 })
 

@@ -1,16 +1,15 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useAuth } from "@clerk/nextjs"
-import { getLocationsAction } from "@/actions/db/locations-actions"
-import { getSearchesAction } from "@/actions/db/searches-actions"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { History } from "lucide-react"
 import dynamic from "next/dynamic"
 import { Location } from "@/types"
 import { Search } from "@/types"
-import { toast } from "sonner"
-import { createSearchAction } from "@/actions/db/searches-actions"
+import { useUserData } from "../_hooks/useUserData"
+import { useSearchSaver } from "../_hooks/useSearchSaver"
 import MeetMeHalfwayForm from "./meet-me-halfway-form"
 import SavedLocations from "./saved-locations"
 import RecentSearches from "./recent-searches"
@@ -42,51 +41,29 @@ export default function MeetMeHalfwayApp() {
   const { isLoaded, userId, isSignedIn } = useAuth()
   const [appState, setAppState] = useState<AppState>("input")
   const [appData, setAppData] = useState<AppData>({})
-  const [locations, setLocations] = useState<Location[]>([])
-  const [searches, setSearches] = useState<Search[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+
+  // Use the custom hook to manage user data
+  const { locations, searches, isLoading, error: userDataError, setSearches } = useUserData(isLoaded ? userId : undefined);
+
+  // Callback for the search saver hook to update local state
+  const handleSearchSaved = useCallback((newSearch: Search) => {
+    setSearches((prevSearches) => [newSearch, ...prevSearches]);
+  }, [setSearches]);
+
+  // Use the search saver hook
+  const { saveSearch, isSaving: isSavingSearch, error: searchSaveError } = useSearchSaver({
+    userId,
+    onSearchSaved: handleSearchSaved
+  });
 
   // Load user data on mount
   useEffect(() => {
-    async function loadUserData() {
-      if (!userId) {
-        setLocations([])
-        setSearches([])
-        return
-      }
-
-      setIsLoading(true)
-      try {
-        const [locationsRes, searchesRes] = await Promise.all([
-          getLocationsAction(userId),
-          getSearchesAction(userId)
-        ])
-
-        if (!locationsRes.isSuccess) {
-          console.error("Failed to load locations:", locationsRes.message)
-          toast.error("Failed to load saved locations")
-        } else {
-          setLocations(locationsRes.data || [])
-        }
-
-        if (!searchesRes.isSuccess) {
-          console.error("Failed to load searches:", searchesRes.message)
-          toast.error("Failed to load recent searches")
-        } else {
-          setSearches(searchesRes.data || [])
-        }
-      } catch (error) {
-        console.error("Error loading user data:", error)
-        toast.error("Failed to load user data")
-      } finally {
-        setIsLoading(false)
-      }
+    if (userDataError) {
+      // Toast is already handled in the hook, maybe just log here
+      console.error("User data loading error:", userDataError);
+      // Or display a persistent error message in the UI
     }
-
-    if (isLoaded) {
-      loadUserData()
-    }
-  }, [isLoaded, userId])
+  }, [userDataError]);
 
   // Handle form submission
   const handleFindMidpoint = async (data: {
@@ -98,50 +75,27 @@ export default function MeetMeHalfwayApp() {
     endAddress: { lat: number; lng: number; display_name?: string }
   }) => {
     console.log("[App] handleFindMidpoint called with data:", data);
-    setAppData(data)
-    setAppState("results")
+    setAppData(data); // Set data needed for results view
+    setAppState("results"); // Switch view
 
-    // Save search history if user is signed in
-    console.log(`[App] Checking if user is signed in: ${isSignedIn}, userId: ${userId}`);
-    if (isSignedIn && userId) {
-      console.log("[App] User is signed in. Attempting to save search...");
-      try {
-        const newSearchData = {
-          userId: userId,
-          startLocationAddress: data.startAddress.display_name || "",
-          startLocationLat: data.startLat,
-          startLocationLng: data.startLng,
-          endLocationAddress: data.endAddress.display_name || "",
-          endLocationLat: data.endLat,
-          endLocationLng: data.endLng,
-          // Midpoint will be calculated and potentially saved later
-          // For now, we save the search request itself
-          midpointLat: "0", 
-          midpointLng: "0"
-        };
-        
-        console.log("[App] Calling createSearchAction with:", newSearchData);
-        const result = await createSearchAction(newSearchData);
-        console.log("[App] createSearchAction result:", result);
-        
-        if (result.isSuccess && result.data) {
-          // Add the new search to the top of the local state
-          setSearches(prevSearches => [result.data!, ...prevSearches]);
-          toast.success("Search saved to history.");
-          console.log("[App] Search saved successfully.");
-        } else {
-          console.error("Failed to save search:", result.message);
-          toast.error("Failed to save search to history.");
-          console.error(`[App] Failed to save search: ${result.message || "Unknown error"}`);
-        }
-      } catch (error) {
-        console.error("Error creating search record:", error);
-        toast.error("Failed to save search to history due to an unexpected error.");
-        console.error("[App] CATCH Error saving search:", error);
-      }
-    } else {
-      console.log("[App] User not signed in or userId missing, skipping search save.");
-    }
+    // Prepare data for the hook (excluding userId, as the hook adds it)
+    const newSearchData = {
+      startLocationAddress: data.startAddress.display_name || "",
+      startLocationLat: data.startLat,
+      startLocationLng: data.startLng,
+      endLocationAddress: data.endAddress.display_name || "",
+      endLocationLat: data.endLat,
+      endLocationLng: data.endLng,
+      // Hook expects these fields, even if temporary
+      midpointLat: "0", 
+      midpointLng: "0" 
+    };
+
+    // Call the saveSearch function from the hook (it handles the isSignedIn check)
+    await saveSearch(newSearchData); 
+    // Note: We don't need to manually update state here, 
+    // the onSearchSaved callback handles it.
+    // Error handling/toast is also done within the hook.
   }
 
   // Handle back to input
@@ -149,12 +103,44 @@ export default function MeetMeHalfwayApp() {
     setAppState("input")
   }
 
+  // Use isLoading from the hook, wait for Clerk to be loaded too
   if (!isLoaded || isLoading) {
+    // Show Skeleton UI while loading
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-muted-foreground text-lg">Loading...</div>
+      <div className="container mx-auto max-w-7xl px-4 py-8">
+        <div className="mb-8 flex items-center justify-between">
+          <Skeleton className="h-9 w-64" /> {/* Title Skeleton */}
+          <Skeleton className="h-10 w-48" /> {/* Button Skeleton */}
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-4">
+            {/* Form Skeletons */}
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-1/3" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-1/3" />
+            <Skeleton className="h-12 w-48 mt-4" /> {/* Submit Button Skeleton */}
+          </div>
+
+          <div className="space-y-8">
+            {/* Saved Locations Skeleton */}
+            <div>
+              <Skeleton className="h-6 w-40 mb-4" />
+              <Skeleton className="h-8 w-full mb-2" />
+              <Skeleton className="h-8 w-full" />
+            </div>
+            {/* Recent Searches Skeleton */}
+            <div>
+              <Skeleton className="h-6 w-40 mb-4" />
+              <Skeleton className="h-8 w-full mb-2" />
+              <Skeleton className="h-8 w-full" />
+            </div>
+          </div>
+        </div>
       </div>
-    )
+    );
   }
 
   return (

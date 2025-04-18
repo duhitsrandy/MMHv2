@@ -27,7 +27,7 @@ export interface Search {
   midpointLat: string
   midpointLng: string
   createdAt: Date
-  updatedAt: Date
+  updatedAt?: Date
 }
 
 export interface Poi {

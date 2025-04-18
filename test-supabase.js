@@ -1,10 +1,16 @@
 require('dotenv').config({ path: '.env.local' });
 const { createClient } = require('@supabase/supabase-js');
 
-// Get the Supabase URL and key from the Supabase dashboard
-// Project Settings > API
-const SUPABASE_URL = 'https://jjccofelynyxckfaxbge.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqY2NvZmVseW55eGNrZmF4YmdlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE3ODk0ODgsImV4cCI6MjA1NzM2NTQ4OH0.ICS9UHpoFRvjkKZ4JbnR008n5WyzBuG9_oOIOCkp-S8';
+// Get the Supabase URL and key from environment variables
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Check if the environment variables are loaded
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error('Error: Supabase URL or Anon Key not found in environment variables.');
+  console.error('Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set in your .env.local file.');
+  process.exit(1); // Exit the script if variables are missing
+}
 
 async function testSupabase() {
   try {
