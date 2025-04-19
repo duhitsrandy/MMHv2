@@ -17,6 +17,7 @@ A modern web application that helps users find the perfect meeting point between
 - **Rate Limiting**: API protection using Upstash Redis
 - **Database Integration**: User profiles and search history with Supabase
 - **Responsive Design**: Mobile-friendly interface with Tailwind CSS
+- **Analytics & Monitoring**: Backend and frontend event tracking with PostHog
 
 ## Tech Stack
 
@@ -33,6 +34,7 @@ A modern web application that helps users find the perfect meeting point between
 - **ORM**: Drizzle
 - **Rate Limiting**: Upstash Redis
 - **External APIs**: LocationIQ, OSRM, OpenRouteService
+- **Analytics/Monitoring**: PostHog (server and client), file logging (dev only)
 
 ## Getting Started
 
@@ -43,6 +45,7 @@ A modern web application that helps users find the perfect meeting point between
 - Clerk account
 - Upstash Redis account
 - API keys for LocationIQ and OpenRouteService
+- PostHog account (for analytics)
 
 ### Installation
 
@@ -58,6 +61,7 @@ npm install
 ```
 
 3. Set up environment variables:
+See `.env.example` for all required variables and descriptions. Example:
 ```env
 # Authentication
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
@@ -75,6 +79,12 @@ UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_token
 # API Keys
 NEXT_PUBLIC_LOCATIONIQ_KEY=your_locationiq_key
 OPENROUTESERVICE_API_KEY=your_ors_key
+
+# Analytics
+POSTHOG_API_KEY=your_posthog_key
+POSTHOG_HOST=https://app.posthog.com
+NEXT_PUBLIC_POSTHOG_KEY=your_posthog_key
+NEXT_PUBLIC_POSTHOG_HOST=https://app.posthog.com
 
 # Rate Limiting Configuration
 RATE_LIMIT_REQUESTS=10
@@ -133,6 +143,47 @@ npm run dev
 - [Theme System](theme-docs.md)
 - [Database Schema](db-schema-docs.md)
 - [API Integration](api-docs.md)
+- [Production Checklist](PRODUCTION.md)
+- [Potential Future Features](POTENTIAL_FUTURE_FEATURES.md)
+
+## Analytics & Monitoring
+
+- **Backend:** Events (API usage, errors, performance) are tracked using PostHog via `trackApiEvent` in `app/lib/monitoring.ts`. File logging is used as a backup in development.
+- **Frontend:** User interactions and page views are tracked with PostHog using the public key.
+- **How to view events:** Log in to your PostHog dashboard and filter by event name (e.g., `api_event`, `api_error`).
+- **How to add new events:** See [MONITORING.md](MONITORING.md) for details.
+- **Troubleshooting:** If events are missing, check API keys, network access, and server logs for `[PostHog Debug]` messages.
+
+## Testing
+
+- **Unit/Integration Tests:** (Add details here if you have a test suite. Example:)
+  - Run all tests: `npm test`
+  - Add new tests in the `__tests__/` directory or alongside components/actions.
+- **Database Tests:** See [db-schema-docs.md](db-schema-docs.md) for migration and seeding instructions.
+- **API Tests:** See [api-docs.md](api-docs.md) for API testing examples.
+
+## Troubleshooting
+
+- **Common Issues:**
+  - Missing environment variables: Check `.env.example` and ensure all required keys are set.
+  - Database connection errors: Verify Supabase credentials and network access.
+  - Clerk authentication issues: Check Clerk dashboard and environment variables.
+  - Rate limit errors: See [rate-limit-docs.md](rate-limit-docs.md) and Upstash dashboard.
+  - Analytics not working: Check PostHog keys, network, and server logs.
+- **Where to get help:**
+  - Review the relevant documentation files above.
+  - Check server logs for error messages.
+  - Search the [issues](https://github.com/yourusername/mmhv2/issues) or open a new one.
+
+## Rebuilding from Scratch Checklist
+
+1. Clone the repository and install dependencies
+2. Set up all environment variables as described in `.env.example`
+3. Set up the database schema and run migrations
+4. Configure Clerk, Supabase, Upstash, LocationIQ, OpenRouteService, and PostHog accounts
+5. Run the development server and verify all features (auth, API, analytics, etc.)
+6. Review and update documentation as needed
+7. (Optional) Run tests to verify setup
 
 ## Features in Detail
 

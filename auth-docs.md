@@ -174,64 +174,35 @@ export async function GET(req: Request) {
 ```
 *Key Point: For most API routes, the primary authentication enforcement and rate limiting happens in the middleware. Direct checks within the route handler are for more granular authorization or when middleware protection is bypassed.* 
 
-### 4. Authentication Flow
+### 4. Clerk Webhooks & User Sync with Supabase
 
-1. **Initial Setup**
-   - Clerk provider wraps the application
-   - Theme integration configured
-   - Public routes defined
+To keep user profiles in sync between Clerk and Supabase, set up Clerk webhooks to listen for user creation, update, and deletion events. On each event, update the corresponding row in the Supabase `profiles` table.
 
-2. **User Authentication**
-   - Sign in/sign up pages available
-   - Multiple authentication methods supported
-   - Session management handled by Clerk
+#### Example Clerk Webhook Handler (API Route)
+```typescript
+import { NextApiRequest, NextApiResponse } from 'next';
+import { supabase } from '@/lib/supabase';
 
-3. **Route Protection**
-   - Middleware checks authentication status
-   - Public routes accessible without auth
-   - Protected routes require authentication
-   - API routes protected with rate limiting
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method === 'POST') {
+    const event = req.body;
+    if (event.type === 'user.created') {
+      // Insert new profile
+      await supabase.from('profiles').insert({
+        user_id: event.data.id,
+        email: event.data.email_addresses[0].email_address,
+        // ...other fields
+      });
+    }
+    // Handle user.updated, user.deleted, etc.
+    res.status(200).json({ received: true });
+  } else {
+    res.status(405).end();
+  }
+}
+```
 
-4. **Profile Management**
-   - User profiles stored in Supabase
-   - Membership status tracked
-   - Subscription information maintained
-
-### 5. Security Measures
-
-1. **Session Security**
-   - Secure session handling
-   - Token-based authentication
-   - Session expiration management
-
-2. **API Protection**
-   - Rate limiting on API routes
-   - Authentication checks
-   - Error handling
-
-3. **Data Protection**
-   - Secure profile storage
-   - Encrypted credentials
-   - Access control
-
-### 6. Integration Points
-
-1. **Theme System**
-   - Dark/light mode support
-   - Clerk appearance customization
-   - Consistent UI across auth flows
-
-2. **Database**
-   - Profile data storage
-   - Membership tracking
-   - User preferences
-
-3. **Payment System**
-   - Subscription management
-   - Membership upgrades
-   - Payment processing
-
-### 7. Usage Examples
+### 5. Usage Examples
 
 #### Protected Route Component
 ```typescript
@@ -239,54 +210,53 @@ import { auth } from "@clerk/nextjs"
 
 export default async function ProtectedPage() {
   const { userId } = auth()
-  
   if (!userId) {
     return <div>Please sign in to access this page</div>
   }
-
   return <div>Protected Content</div>
 }
 ```
 
-#### API Route Protection
+#### Role/Permission Check in API Route
 ```typescript
-import { auth } from "@clerk/nextjs"
-import { rateLimit } from "@/lib/rate-limit"
+import { auth } from "@clerk/nextjs/server"
+import { NextResponse } from 'next/server'
 
 export async function GET(req: Request) {
-  const { userId } = auth()
-  
+  const { userId, sessionClaims } = auth()
   if (!userId) {
-    return new Response("Unauthorized", { status: 401 })
+    return new NextResponse("Unauthorized", { status: 401 })
   }
-
-  const rateLimitResult = await rateLimit({ type: 'authenticated' })
-  if (!rateLimitResult.success) {
-    return new Response("Too many requests", { status: 429 })
+  // Example: Check for admin role
+  if (sessionClaims?.metadata?.role !== 'admin') {
+    return new NextResponse("Forbidden", { status: 403 })
   }
-
-  // Handle request
+  // Handle authorized request...
+  return NextResponse.json({ message: `Hello admin ${userId}` })
 }
 ```
 
-### 8. Best Practices
+### 6. Troubleshooting Clerk Integration
+- **Issue:** Users can't sign in or sign up
+  - **Solution:** Check Clerk dashboard for errors, verify environment variables, and ensure correct redirect URLs.
+- **Issue:** Session not persisting
+  - **Solution:** Ensure cookies are enabled, check domain settings, and verify Clerk is initialized in `_app.tsx` or root layout.
+- **Issue:** Webhooks not firing
+  - **Solution:** Check Clerk webhook settings, ensure endpoint is reachable, and check server logs for errors.
+- **Issue:** Profile not syncing to Supabase
+  - **Solution:** Check webhook handler, Supabase connection, and database permissions.
 
-1. **Security**
-   - Always validate user sessions
-   - Use rate limiting for API routes
-   - Implement proper error handling
-   - Follow least privilege principle
+### 7. Security Best Practices
+- Never expose `CLERK_SECRET_KEY` to the frontend
+- Use HTTPS in production
+- Regularly rotate Clerk keys and secrets
+- Limit access to sensitive routes using middleware and role checks
 
-2. **User Experience**
-   - Provide clear authentication flows
-   - Handle errors gracefully
-   - Maintain consistent UI
-   - Support multiple auth methods
-
-3. **Development**
-   - Test authentication flows
-   - Monitor rate limits
-   - Log security events
-   - Keep dependencies updated
+### 8. References & Cross-Links
+- [Clerk Docs](https://clerk.com/docs)
+- [Supabase Docs](https://supabase.com/docs)
+- [Rate Limiting](rate-limit-docs.md)
+- [API Docs](api-docs.md)
+- [Production Checklist](PRODUCTION.md)
 
 This documentation provides a comprehensive guide to the authentication and authorization system in the Meet Me Halfway application. 

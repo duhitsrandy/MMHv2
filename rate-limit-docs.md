@@ -3,6 +3,59 @@
 ## Overview
 The Meet Me Halfway application implements a comprehensive rate limiting system using Upstash Redis (`@upstash/ratelimit`) to protect API endpoints and ensure fair usage of resources. The system supports different rate limits for anonymous users, authenticated users, and specific high-traffic API routes.
 
+## Rate Limiting Setup Checklist (From Scratch)
+1. Set all required environment variables (see `.env.example`)
+2. Create an Upstash Redis database and obtain REST URL/token
+3. Configure rate limit values in `.env.local` as needed
+4. Integrate the `rateLimit` function in `lib/rate-limit.ts` and middleware
+5. Test rate limiting by making rapid API requests and observing 429 responses
+6. Monitor usage in the Upstash dashboard and PostHog (see below)
+
+## Monitoring Rate Limit Usage
+- **Upstash Dashboard:**
+  - Log in to Upstash and view your Redis database analytics for request counts, errors, and usage patterns.
+  - Monitor for spikes or unusual activity.
+- **PostHog Events:**
+  - Rate limit warnings and violations are tracked as events in PostHog (see [MONITORING.md](MONITORING.md)).
+  - Filter for `api_error` events with `status: 429` or custom `rateLimit` properties.
+- **Server Logs:**
+  - Rate limit violations are logged in the server logs and (optionally) in `logs/warnings.log`.
+  - Look for `[Rate Limit]` or `[POI Search] Overpass API Error 429` messages.
+
+## Troubleshooting Rate Limiting
+- **Issue:** Receiving 429 Too Many Requests
+  - **Solution:** Slow down requests, check rate limit headers (`X-RateLimit-Remaining`), and review Upstash/PostHog dashboards.
+- **Issue:** Rate limiting not working as expected
+  - **Solution:** Check environment variables, ensure Upstash credentials are correct, and verify middleware integration.
+- **Issue:** All users are rate limited too quickly
+  - **Solution:** Adjust rate limit values in `.env.local` to better match expected traffic.
+- **Issue:** Upstash errors or downtime
+  - **Solution:** Check Upstash status, retry requests, and consider fallback logic if needed.
+
+## Environment Variables
+```env
+# Upstash Redis for Rate Limiting
+UPSTASH_REDIS_REST_URL=your_upstash_redis_url
+UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_token
+
+# Rate Limiting Configuration
+RATE_LIMIT_REQUESTS=10 # Max requests per window (anonymous)
+RATE_LIMIT_WINDOW=10 # Window in seconds (anonymous)
+RATE_LIMIT_REQUESTS_AUTH=50 # Max requests per window (authenticated)
+RATE_LIMIT_WINDOW_AUTH=60 # Window in seconds (authenticated)
+RATE_LIMIT_REQUESTS_SPECIAL=100 # Max requests per window (special endpoints)
+RATE_LIMIT_WINDOW_SPECIAL=60 # Window in seconds (special endpoints)
+```
+
+## Cross-References
+- [Authentication & Authorization](auth-docs.md)
+- [Monitoring & Analytics](MONITORING.md)
+- [Production Checklist](PRODUCTION.md)
+- [API Docs](api-docs.md)
+
+## Example Usage
+// ... (existing code and examples remain unchanged) ...
+
 ## Implementation Details
 
 ### 1. Rate Limiter Configuration (`lib/rate-limit.ts`)

@@ -1,7 +1,202 @@
 # API Documentation
 
 ## Overview
-The Meet Me Halfway application integrates with several external APIs for geocoding, routing, and points of interest services. This documentation covers the API endpoints, request/response formats, and integration details.
+The Meet Me Halfway application integrates with several external APIs for geocoding, routing, and points of interest services. This documentation covers the API endpoints, request/response formats, authentication, error handling, and integration details.
+
+## API Setup Checklist (From Scratch)
+1. Set up all required environment variables (see `.env.example`)
+2. Ensure Supabase, Clerk, Upstash, LocationIQ, OpenRouteService, and PostHog accounts are configured
+3. Run database migrations
+4. Start the development server (`npm run dev`)
+5. Test endpoints using curl, Postman, or the provided examples below
+6. Review [auth-docs.md](auth-docs.md), [rate-limit-docs.md](rate-limit-docs.md), and [MONITORING.md](MONITORING.md) for security, rate limiting, and analytics details
+
+## Authentication & Authorization
+- Most API endpoints require authentication via Clerk (see [auth-docs.md](auth-docs.md)).
+- Some endpoints are public, but rate-limited.
+- Use the `Authorization` header with a valid Clerk session token for protected endpoints.
+- Rate limiting is enforced on all endpoints (see [rate-limit-docs.md](rate-limit-docs.md)).
+
+## Endpoints
+
+### 1. Geocoding (`geocodeLocationAction`)
+**Description:** Convert an address to coordinates using LocationIQ.
+**Auth:** Required (Clerk)
+**Rate Limit:** Special (see ENV)
+
+#### Request Example (curl):
+```bash
+curl -X POST https://yourdomain.com/api/geocode \
+  -H 'Authorization: Bearer <clerk_token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"location": "New York, NY"}'
+```
+#### Request Example (fetch):
+```js
+fetch('/api/geocode', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer <clerk_token>',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ location: 'New York, NY' })
+})
+```
+#### Response Example (JSON):
+```json
+{
+  "isSuccess": true,
+  "message": "Location geocoded successfully",
+  "data": {
+    "lat": "40.7128",
+    "lon": "-74.0060",
+    "display_name": "New York, NY, USA"
+  }
+}
+```
+
+### 2. POI Search (`searchPoisAction`)
+**Description:** Find points of interest around a location.
+**Auth:** Required (Clerk)
+**Rate Limit:** Authenticated
+
+#### Request Example (curl):
+```bash
+curl -X POST https://yourdomain.com/api/poi \
+  -H 'Authorization: Bearer <clerk_token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"lat": "40.7128", "lon": "-74.0060", "radius": 1000}'
+```
+#### Response Example (JSON):
+```json
+{
+  "isSuccess": true,
+  "message": "Successfully found points of interest",
+  "data": [
+    {
+      "id": "123456",
+      "name": "Central Park",
+      "type": "park",
+      "lat": "40.7851",
+      "lon": "-73.9683",
+      "address": { "city": "New York", "country": "USA" },
+      "tags": { "amenity": "park" }
+    }
+  ]
+}
+```
+
+### 3. Main Route (`getRouteAction`)
+**Description:** Calculate the main driving route between two points using OSRM.
+**Auth:** Required (Clerk)
+**Rate Limit:** Special
+
+#### Request Example (curl):
+```bash
+curl -X POST https://yourdomain.com/api/route \
+  -H 'Authorization: Bearer <clerk_token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"start": {"lat": "40.7128", "lon": "-74.0060"}, "end": {"lat": "40.7306", "lon": "-73.9352"}}'
+```
+#### Response Example (JSON):
+```json
+{
+  "isSuccess": true,
+  "message": "Route calculated successfully",
+  "data": {
+    "distance": 5000,
+    "duration": 900,
+    "geometry": { "coordinates": [[-74.0060, 40.7128], [-73.9352, 40.7306]], "type": "LineString" }
+  }
+}
+```
+
+### 4. Alternate Routes (`getAlternateRouteAction`)
+**Description:** Get alternate driving routes between two points.
+**Auth:** Required (Clerk)
+**Rate Limit:** Special
+
+#### Request Example (curl):
+```bash
+curl -X POST https://yourdomain.com/api/route/alternate \
+  -H 'Authorization: Bearer <clerk_token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"start": {"lat": "40.7128", "lon": "-74.0060"}, "end": {"lat": "40.7306", "lon": "-73.9352"}}'
+```
+#### Response Example (JSON):
+```json
+{
+  "isSuccess": true,
+  "message": "Alternate route calculated successfully",
+  "data": {
+    "distance": 5200,
+    "duration": 950,
+    "geometry": { "coordinates": [[-74.0060, 40.7128], [-73.9352, 40.7306]], "type": "LineString" }
+  }
+}
+```
+
+### 5. Travel Time Matrix (`getTravelTimeMatrixAction`)
+**Description:** Calculate travel times between multiple points using OpenRouteService.
+**Auth:** Required (Clerk)
+**Rate Limit:** Authenticated
+
+#### Request Example (curl):
+```bash
+curl -X POST https://yourdomain.com/api/travel-time-matrix \
+  -H 'Authorization: Bearer <clerk_token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"sources": [{"lat": "40.7128", "lon": "-74.0060"}], "destinations": [{"lat": "40.7851", "lon": "-73.9683"}]}'
+```
+#### Response Example (JSON):
+```json
+{
+  "isSuccess": true,
+  "message": "Travel time matrix calculated successfully",
+  "data": {
+    "durations": [[900]],
+    "distances": [[5000]]
+  }
+}
+```
+
+## Error Handling
+
+### Error Response Format
+```json
+{
+  "isSuccess": false,
+  "message": "Error message",
+  "code": "ERROR_CODE",
+  "details": {}
+}
+```
+
+### Common Error Codes
+- `400`: Bad Request (invalid input)
+- `401`: Unauthorized (missing/invalid token)
+- `403`: Forbidden (insufficient permissions)
+- `404`: Not Found (resource does not exist)
+- `429`: Too Many Requests (rate limited)
+- `500`: Internal Server Error (unexpected failure)
+
+### Troubleshooting
+- Check the response `message` and `code` for details
+- For 401/403 errors, ensure you are authenticated and have the right permissions
+- For 429 errors, review rate limit headers and slow down requests
+- For 500 errors, check server logs and [MONITORING.md](MONITORING.md)
+
+## API Testing
+- Use curl, Postman, or the provided fetch examples to test endpoints
+- Automated tests can be added in the `__tests__/` directory or alongside actions/components
+- See [README.md](README.md) for general testing instructions
+
+## Cross-References
+- [Authentication & Authorization](auth-docs.md)
+- [Rate Limiting](rate-limit-docs.md)
+- [Monitoring & Analytics](MONITORING.md)
+- [Production Checklist](PRODUCTION.md)
+- [Potential Future Features](POTENTIAL_FUTURE_FEATURES.md)
 
 ## External APIs
 

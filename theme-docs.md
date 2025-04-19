@@ -3,6 +3,79 @@
 ## Overview
 The Meet Me Halfway application implements a comprehensive theme system that supports both light and dark modes, with automatic system preference detection. The theme system is integrated with Clerk's appearance settings, uses shadcn/ui components for consistent styling, and is configured via Tailwind CSS.
 
+## Theme Setup Checklist (From Scratch)
+1. Install and configure `next-themes` for theme context
+2. Set up Tailwind CSS with custom color variables for light/dark modes
+3. Integrate shadcn/ui components for consistent UI
+4. Wrap your app with the `ThemeProvider` (see below)
+5. Integrate theme with Clerk (see [auth-docs.md](auth-docs.md))
+6. Add a theme toggle component to your UI
+7. Test theme switching and persistence across reloads
+
+## Environment Variables
+```env
+# Theme Configuration (optional, for advanced setups)
+NEXT_THEME_ATTRIBUTE=class
+NEXT_THEME_DEFAULT=system
+NEXT_THEME_ENABLE_SYSTEM=true
+```
+
+## Real-World Usage Examples
+
+### Theme Toggle Component
+```typescript
+import { useTheme } from "next-themes"
+import { Button } from "@/components/ui/button"
+import { Sun, Moon } from "lucide-react"
+
+export function ThemeToggle() {
+  const { setTheme } = useTheme()
+  return (
+    <Button onClick={() => setTheme("dark")}>Dark</Button>
+    // Add more UI for light/system as needed
+  )
+}
+```
+
+### Theme-Aware Custom Component
+```typescript
+import { useTheme } from "next-themes"
+
+export function ThemedBox() {
+  const { theme } = useTheme()
+  return (
+    <div className={theme === "dark" ? "bg-gray-900 text-white" : "bg-white text-black"}>
+      This box changes with the theme!
+    </div>
+  )
+}
+```
+
+### Clerk Integration Example
+See [auth-docs.md](auth-docs.md) for how to pass the current theme to Clerk's `ClerkProvider` for consistent auth UI theming.
+
+## Troubleshooting Theme Issues
+- **Dark mode not working:**
+  - Ensure `ThemeProvider` wraps your app and `attribute="class"` is set
+  - Check Tailwind config for `darkMode: ["class"]`
+  - Verify CSS variables are set for both `:root` and `.dark`
+- **Theme not persisting:**
+  - Make sure `next-themes` is installed and configured
+  - Check for localStorage errors in the browser console
+- **Theme toggle not updating UI:**
+  - Ensure you are using the `useTheme` hook from `next-themes`
+  - Check for React hydration mismatches (see Next.js docs)
+- **Clerk auth UI not matching app theme:**
+  - Pass the current theme to `ClerkProvider` as shown in [auth-docs.md](auth-docs.md)
+
+## Cross-References
+- [App Structure](app-structure.md)
+- [Authentication](auth-docs.md)
+- [Production Checklist](PRODUCTION.md)
+
+## Tailwind & CSS Variables
+// ... (existing Tailwind and CSS variable documentation remains unchanged) ...
+
 ## Implementation Details
 
 ### 1. Theme Provider (`components/providers/theme-provider.tsx`)
@@ -30,40 +103,7 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
 ```
 *Note: The component shown is a simplified example. The actual implementation might have additional props or logic.*
 
-#### Environment Variables
-```env
-# Theme Configuration
-NEXT_THEME_ATTRIBUTE=class
-NEXT_THEME_DEFAULT=system
-NEXT_THEME_ENABLE_SYSTEM=true
-```
-
-### 2. Theme Integration with Clerk
-
-#### Auth Provider Integration
-```typescript
-export function AuthProvider({ children }: AuthProviderProps) {
-  const { theme } = useTheme()
-
-  return (
-    <ClerkProvider
-      appearance={{
-        baseTheme: theme === "dark" ? dark : undefined,
-        elements: {
-          formButtonPrimary: "bg-primary text-primary-foreground hover:bg-primary/90",
-          footerActionLink: "text-primary hover:text-primary/90",
-          card: "shadow-none",
-        },
-      }}
-      // ... other props
-    >
-      {children}
-    </ClerkProvider>
-  )
-}
-```
-
-### 3. Theme Configuration
+### 2. Theme Configuration
 
 #### Theme Types
 ```typescript
@@ -76,39 +116,7 @@ export type Theme = "light" | "dark" | "system"
 - System preference is detected using `prefers-color-scheme` media query (handled by `next-themes`).
 - Changes are synchronized across tabs/windows (handled by `next-themes`).
 
-### 4. Usage Examples
-
-#### Theme Toggle Component (`components/theme-toggle.tsx` - *Example path*)
-```typescript
-// ... imports: Button, DropdownMenu components, Moon, Sun icons, useTheme ...
-
-export function ThemeToggle() {
-  const { setTheme } = useTheme()
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon">
-          <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          <span className="sr-only">Toggle theme</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => setTheme("light")}>
-          Light
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("dark")}>
-          Dark
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("system")}>
-          System
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-```
+### 3. Usage Examples
 
 #### Theme-Aware Component
 ```typescript
@@ -128,7 +136,7 @@ export function ThemeAwareComponent() {
 }
 ```
 
-### 5. Theme Variables and Styling
+### 4. Theme Variables and Styling
 
 #### CSS Variables (`app/globals.css`)
 Tailwind CSS is configured to use CSS variables for theming. These variables define the color palette for both light and dark modes.

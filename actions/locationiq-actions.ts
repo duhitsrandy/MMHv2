@@ -4,6 +4,7 @@ import { ActionState } from "@/types"
 import { PoiResponse } from "@/types/poi-types"
 import { OsrmRoute } from "@/types/meet-me-halfway-types"
 import { rateLimit } from "@/lib/rate-limit"
+import { Redis } from '@upstash/redis'
 import { z } from 'zod';
 import {
   AddressSchema,
@@ -11,84 +12,118 @@ import {
   RouteCoordinatesSchema,
 } from '@/lib/schemas';
 import { formatZodError } from '@/lib/utils';
+import {
+  OSRM_API_BASE,
+  OVERPASS_API_URL,
+  LOCATIONIQ_API_BASE,
+  NOMINATIM_API_BASE,
+  CACHE_TTL_SECONDS,
+  DEFAULT_POI_RADIUS,
+  DEFAULT_USER_AGENT
+} from '@/lib/constants'; // Import constants
+import { trackApiEvent } from '../app/lib/monitoring'; // <-- Import monitoring function (Corrected Path)
+import { auth } from "@clerk/nextjs/server"; // <-- Add Clerk auth import
 
-// Simple in-memory cache
-const apiCache: Record<string, { data: any, timestamp: number }> = {};
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+// Initialize Redis client for caching
+const redisCache = Redis.fromEnv();
+
+// Remove the old in-memory cache object
+// const apiCache: Record<string, { data: any, timestamp: number }> = {};
+// const CACHE_TTL_SECONDS = 24 * 60 * 60; // Moved to constants.ts
 
 // Helper function to enforce rate limiting with retry logic
 export async function rateLimitedFetch(
   url: string,
   options?: RequestInit,
   maxRetries = 3,
-  cacheKey?: string // Add optional cacheKey parameter
+  cacheKey?: string,
+  timeoutMs = 30000,
+  initialBackoffMs = 1000 // Add initial backoff delay parameter
 ): Promise<Response> {
-  const effectiveCacheKey = cacheKey || url; // Use custom key if provided, else URL
+  const effectiveCacheKey = `api_cache:${cacheKey || url}`;
 
-  // Check cache first using the effective key
-  if (apiCache[effectiveCacheKey] && (Date.now() - apiCache[effectiveCacheKey].timestamp) < CACHE_TTL) {
-    console.log(`[Cache] HIT for Key: ${effectiveCacheKey}`); // Log cache hit
-    const cachedData = apiCache[effectiveCacheKey].data;
-    return new Response(JSON.stringify(cachedData), {
-      status: 200,
-      statusText: 'OK (Cached)',
-      headers: { 'Content-Type': 'application/json' }
-    });
+  // --- Check Redis cache first ---
+  try {
+    const cachedData = await redisCache.get(effectiveCacheKey);
+    if (cachedData) {
+      console.log(`[Redis Cache] HIT for Key: ${effectiveCacheKey}`);
+      // Assuming cached data is stored as a JSON string
+      return new Response(JSON.stringify(cachedData), { // Re-stringify for the Response object
+        status: 200,
+        statusText: 'OK (Cached)',
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  } catch (redisError) {
+    console.error(`[Redis Cache] Error getting key ${effectiveCacheKey}:`, redisError);
+    // Proceed without cache if Redis fails
   }
+  // --- End Redis cache check ---
 
-  console.log(`[Cache] MISS for Key: ${effectiveCacheKey}`); // Log cache miss
+  console.log(`[Redis Cache] MISS for Key: ${effectiveCacheKey}`);
   let retries = 0;
   let lastError: Error | null = null;
 
   while (retries < maxRetries) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
       // Check rate limit before making request
-      const rateLimitResult = await rateLimit({ type: 'authenticated' });
+      const rateLimitResult = await rateLimit({ type: 'authenticated' }); // Consider making type configurable if needed
       if (!rateLimitResult.success) {
+        clearTimeout(timeoutId); // Clear timeout before throwing
         throw new Error('Rate limit exceeded. Please try again later.');
       }
 
-      // Make the request
-      // Pass through any provided fetch options (headers, method, body, etc.)
+      // Make the request with AbortSignal
       const mergedOptions = {
-        ...options, // Spread provided options
+        ...options,
+        signal: controller.signal,
         headers: {
-          'User-Agent': 'Meet-Me-Halfway/1.0',
+          // Use User-Agent from constants
+          'User-Agent': DEFAULT_USER_AGENT,
           'Accept-Language': 'en-US,en;q=0.9',
-          ...(options?.headers || {}), // Merge headers from options
+          ...(options?.headers || {}),
         }
       };
-      console.log(`[Fetch] Making request to ${url} with options:`, mergedOptions);
+      console.log(`[Fetch] Making request to ${url} (timeout: ${timeoutMs}ms) with options:`, mergedOptions);
       const response = await fetch(url, mergedOptions);
+      clearTimeout(timeoutId);
 
-      // Cache successful responses using the effective key
+      // Cache successful responses in Redis using the effective key
       if (response.ok) {
         try {
-            const data = await response.clone().json(); // Clone before reading
-            apiCache[effectiveCacheKey] = {
-              data,
-              timestamp: Date.now()
-            };
-            console.log(`[Cache] Stored response for Key: ${effectiveCacheKey}`);
+          const data = await response.clone().json();
+          // Use TTL from constants
+          await redisCache.setex(effectiveCacheKey, CACHE_TTL_SECONDS, data);
+          console.log(`[Redis Cache] Stored response for Key: ${effectiveCacheKey} with TTL ${CACHE_TTL_SECONDS}s`);
         } catch (jsonError) {
-            // Handle cases where response is OK but not JSON (rare for APIs we use)
-            console.warn(`[Cache] Response for ${effectiveCacheKey} was OK but not valid JSON.`);
-            // Decide whether to cache non-JSON or not. Currently not caching.
+          console.warn(`[Cache] Response for ${effectiveCacheKey} was OK but not valid JSON. Not caching.`);
         }
       }
-
-      // Return the original response object (not the clone)
       return response;
     } catch (error) {
-      lastError = error as Error;
-      retries++;
-      if (retries < maxRetries) {
-        // Wait before retrying (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retries) * 1000));
+      clearTimeout(timeoutId); // Clear timeout if fetch failed
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        lastError = new Error(`Request timed out after ${timeoutMs}ms`);
+        // Don't retry on timeout, break the loop
+        break; 
+      } else {
+        lastError = error as Error;
+        retries++;
+        if (retries < maxRetries) {
+          // Use initialBackoffMs in delay calculation
+          const delay = Math.pow(2, retries - 1) * initialBackoffMs; // Adjusted formula for clarity
+          console.log(`[Fetch] Retrying (${retries}/${maxRetries}) after ${delay}ms error: ${lastError.message}`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
     }
   }
 
+  console.error(`[Fetch] Failed after ${maxRetries} retries for ${url}: ${lastError?.message}`);
   throw lastError || new Error('Failed to fetch after retries');
 }
 
@@ -104,20 +139,23 @@ async function fallbackGeocodeAction(
 ): Promise<ActionState<GeocodingResult>> {
   try {
     console.log('Using fallback geocoding service (Nominatim)');
-    // Using OpenStreetMap Nominatim as a fallback
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-      address
-    )}&format=json&limit=1`;
+    // Use Nominatim base URL from constants
+    const url = `${NOMINATIM_API_BASE}/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
 
+    // Use User-Agent from constants
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Meet-Me-Halfway/1.0',
+        'User-Agent': DEFAULT_USER_AGENT,
         'Accept-Language': 'en-US,en;q=0.9'
       }
     });
 
     if (!response.ok) {
-      throw new Error(`Nominatim API error: ${response.statusText}`);
+      const errorText = await response.text().catch(() => 'Could not read error body');
+      // Log the detailed error before throwing
+      console.error(`[Fallback Geocode] Nominatim API Error ${response.status} (${response.statusText}): ${errorText}`);
+      // Throw a generic error for the user, but log the specific one
+      throw new Error(`Nominatim API error: ${response.statusText}`); 
     }
 
     const data = await response.json();
@@ -147,67 +185,131 @@ async function fallbackGeocodeAction(
 export async function geocodeLocationAction(
   address: string
 ): Promise<ActionState<GeocodingResult>> {
-  // --- Validation Start ---
-  const validationResult = AddressSchema.safeParse(address);
-  if (!validationResult.success) {
-    const errorMessage = formatZodError(validationResult.error);
-    console.error("Validation failed for geocodeLocationAction:", errorMessage);
-    return {
-      isSuccess: false,
-      message: `Invalid input: ${errorMessage}`,
-    };
-  }
-  const validatedAddress = validationResult.data;
-  // --- Validation End ---
+  const startTime = Date.now(); // <-- Start timer
+  let status = 500; // <-- Default status (error)
+  let errorMsg: string | undefined = undefined; // <-- Error message holder
+  let result: ActionState<GeocodingResult> | null = null; // <-- Result holder
+  let primaryServiceUsed = 'LocationIQ'; // Track which service was ultimately used
+  const { userId } = auth(); // <-- Get userId from Clerk
 
   try {
+    // --- Validation Start ---
+    const validationResult = AddressSchema.safeParse(address);
+    if (!validationResult.success) {
+      const errorMessage = formatZodError(validationResult.error);
+      console.error("Validation failed for geocodeLocationAction:", errorMessage);
+      // Set specific status for validation error
+      status = 400;
+      errorMsg = `Invalid input: ${errorMessage}`;
+      result = { isSuccess: false, message: errorMsg };
+      // Don't proceed further if validation fails
+      return result; 
+    }
+    const validatedAddress = validationResult.data;
+    // --- Validation End ---
+
+    // --- Main Logic Start (Moved inside the main try block) ---
     console.log('Geocoding address:', validatedAddress);
     const apiKey = process.env.LOCATIONIQ_KEY;
     if (!apiKey) {
       console.error('LocationIQ API key is missing');
-      return {
-        isSuccess: false,
-        message: "LocationIQ API key is not configured"
-      };
+      status = 500;
+      errorMsg = "LocationIQ API key is not configured";
+      result = { isSuccess: false, message: errorMsg };
+      return result;
     }
 
-    const url = `https://us1.locationiq.com/v1/search.php?key=${apiKey}&q=${encodeURIComponent(
-      validatedAddress
-    )}&format=json&limit=1`;
+    const url = `${LOCATIONIQ_API_BASE}/search.php?key=${apiKey}&q=${encodeURIComponent(validatedAddress)}&format=json&limit=1`;
 
     try {
       const response = await rateLimitedFetch(url);
-      console.log('LocationIQ API response status:', response.status);
+      status = response.status; // Capture status from primary attempt
+      console.log('LocationIQ API response status:', status);
 
       if (!response.ok) {
-        console.warn(`LocationIQ API error: ${response.statusText}. Trying fallback.`);
-        return fallbackGeocodeAction(validatedAddress);
-      }
-
-      const data = await response.json();
-      console.log('LocationIQ API response:', data);
-
-      if (!data || data.length === 0) {
-        console.warn('No results from LocationIQ. Trying fallback.');
-        return fallbackGeocodeAction(validatedAddress);
-      }
-
-      return {
-        isSuccess: true,
-        message: "Location geocoded successfully",
-        data: {
-          lat: data[0].lat,
-          lon: data[0].lon,
-          display_name: data[0].display_name
+        const errorText = await response.text().catch(() => 'Could not read error body');
+        console.warn(`LocationIQ API error ${response.status} (${response.statusText}): ${errorText}. Trying fallback.`);
+        // Note: status variable already holds the LocationIQ error status
+        primaryServiceUsed = 'Nominatim (Fallback)';
+        result = await fallbackGeocodeAction(validatedAddress);
+        // Update status based on fallback result
+        status = result.isSuccess ? 200 : 500; // Assuming fallback gives 200 on success
+        if (!result.isSuccess) {
+          errorMsg = result.message; // Capture fallback error message
         }
-      };
+      } else {
+        const data = await response.json();
+        console.log('LocationIQ API response:', data);
+
+        if (!data || data.length === 0) {
+          console.warn('No results from LocationIQ. Trying fallback.');
+          status = 404; // Indicate LocationIQ found nothing
+          primaryServiceUsed = 'Nominatim (Fallback)';
+          result = await fallbackGeocodeAction(validatedAddress);
+          // Update status based on fallback result
+          status = result.isSuccess ? 200 : 500; // Assuming fallback gives 200 on success
+          if (!result.isSuccess) {
+            errorMsg = result.message; // Capture fallback error message
+          }
+        } else {
+          // Success with LocationIQ
+          result = {
+            isSuccess: true,
+            message: "Location geocoded successfully",
+            data: {
+              lat: data[0].lat,
+              lon: data[0].lon,
+              display_name: data[0].display_name
+            }
+          };
+          status = 200; // Explicitly set success status
+        }
+      }
     } catch (error) {
-      console.warn("Error with primary geocoding service:", error);
-      return fallbackGeocodeAction(validatedAddress);
+      // This catches errors during the rateLimitedFetch call itself (e.g., network, timeout)
+      console.warn("Error with primary geocoding service (fetch level):", error);
+      status = 500; // Indicate fetch/network error
+      errorMsg = error instanceof Error ? error.message : 'Unknown error during primary fetch';
+      primaryServiceUsed = 'Nominatim (Fallback)';
+      result = await fallbackGeocodeAction(validatedAddress);
+      // Update status based on fallback result
+      status = result.isSuccess ? 200 : 500;
+      if (!result.isSuccess) {
+        errorMsg = result.message; // Overwrite with fallback error if it also failed
+      }
     }
+    // --- Main Logic End ---
+
+    // If result is still null here, something went wrong before returning
+    if (!result) { 
+      throw new Error("Geocoding result was unexpectedly null.");
+    }
+    return result;
+
   } catch (error) {
-    console.error("Error geocoding location:", error);
-    return { isSuccess: false, message: "Failed to geocode location" };
+    // This catches errors *outside* the main logic try-catch (e.g., validation, API key check, unexpected errors)
+    console.error("Outer error in geocodeLocationAction:", error);
+    errorMsg = error instanceof Error ? error.message : "Failed to geocode location due to an unexpected error";
+    // Status is already likely 400 or 500 if caught here
+    // Ensure result is set for the finally block
+    if (!result) {
+      result = { isSuccess: false, message: errorMsg };
+    }
+    // Make sure to return the error result
+    return result; 
+  } finally {
+    // --- Monitoring Call ---
+    const duration = Date.now() - startTime;
+    await trackApiEvent({
+      endpoint: 'geocodeLocationAction',
+      method: 'ACTION',
+      status: result?.isSuccess ? status : (status === 200 ? 500 : status), // Ensure error status if not success
+      duration: duration,
+      error: result?.isSuccess ? undefined : errorMsg,
+      userId: userId ?? 'anonymous', // <-- Add userId to event
+      serviceUsed: primaryServiceUsed // <-- Pass serviceUsed directly
+      // Rate limit details omitted as they are not easily available here
+    });
   }
 }
 
@@ -221,182 +323,235 @@ export async function searchPoisAction(
     types?: string[];
   }
 ): Promise<ActionState<PoiResponse[]>> {
-
-  // --- Validation Start ---
-  // Provide default radius if not present before validation
-  const paramsWithDefaults = {
-    ...params,
-    radius: params.radius ?? 1500, // Default radius: 1500m
-  };
-  const validationResult = PoiSearchSchema.safeParse(paramsWithDefaults);
-
-  if (!validationResult.success) {
-    const errorMessage = formatZodError(validationResult.error);
-    console.error("Validation failed for searchPoisAction:", errorMessage);
-    return {
-      isSuccess: false,
-      message: `Invalid input: ${errorMessage}`,
-    };
-  }
-  const { lat, lon, radius, types } = validationResult.data;
-  // --- Validation End ---
-
-  console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
-  const overpassApiUrl = "https://overpass-api.de/api/interpreter";
-
-  // --- Build Overpass Query ---
-  // Removed the types parameter check as the schema handles optionality
-  // Keep the comprehensive query structure
-  const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "marketplace", "fast_food", "pub", "community_centre", "police", "post_office", "townhall", "ice_cream"];
-  const leisureTypes = ["park", "garden", "playground", "sports_centre", "pitch", "track"]; // Added pitch, track
-  const tourismTypes = ["museum", "hotel", "gallery", "attraction", "viewpoint", "picnic_site"]; // Added picnic_site
-  const shopTypes = ["supermarket", "mall", "department_store", "bakery", "convenience", "books", "clothes", "gift"]; // Added clothes, gift
-
-  const query = `
-      [out:json][timeout:60];
-      (
-        node["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
-        way["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
-        relation["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
-
-        node["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
-        way["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
-        relation["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
-
-        node["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
-        way["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
-        relation["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
-
-        node["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
-        way["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
-        relation["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
-      );
-      out center;
-    `;
-  // --- End Overpass Query ---
+  const startTime = Date.now();
+  const { userId } = auth();
+  let result: ActionState<PoiResponse[]> | null = null;
+  let errorMsg: string | undefined = undefined;
+  // --> Variables to capture success data
+  let capturedPoiCount: number | undefined = undefined;
+  const inputRadius = params.radius ?? DEFAULT_POI_RADIUS; // Capture input radius
 
   try {
-    console.log(`[POI Search] Overpass Query Body: ${query.substring(0, 100)}...`); // Log query snippet
+    // --- Validation Start ---
+    const paramsWithDefaults = {
+      ...params,
+      radius: params.radius ?? DEFAULT_POI_RADIUS,
+    };
+    const validationResult = PoiSearchSchema.safeParse(paramsWithDefaults);
 
-    // --- Use rateLimitedFetch for Overpass API call ---
-    // Create a specific cache key for this POI search
-    const poiCacheKey = `poi_${lat}_${lon}_${radius}`;
+    if (!validationResult.success) {
+      const errorMessage = formatZodError(validationResult.error);
+      console.error("Validation failed for searchPoisAction:", errorMessage);
+      errorMsg = `Invalid input: ${errorMessage}`;
+      result = { isSuccess: false, message: errorMsg };
+      return result;
+    }
+    const { lat, lon, radius, types } = validationResult.data;
+    // --- Validation End ---
 
-    const response = await rateLimitedFetch(
+    console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
+    const overpassApiUrl = OVERPASS_API_URL;
+
+    // --- Build Overpass Query ---
+    const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "marketplace", "fast_food", "pub", "community_centre", "police", "post_office", "townhall", "ice_cream"];
+    const leisureTypes = ["park", "garden", "playground", "sports_centre", "pitch", "track"]; // Added pitch, track
+    const tourismTypes = ["museum", "hotel", "gallery", "attraction", "viewpoint", "picnic_site"]; // Added picnic_site
+    const shopTypes = ["supermarket", "mall", "department_store", "bakery", "convenience", "books", "clothes", "gift"]; // Added clothes, gift
+
+    const query = `
+        [out:json][timeout:60];
+        (
+          node["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
+          way["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
+          relation["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
+
+          node["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
+          way["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
+          relation["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
+
+          node["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
+          way["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
+          relation["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
+
+          node["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
+          way["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
+          relation["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
+        );
+        out center;
+      `;
+    // --- End Overpass Query ---
+
+    // --- Main Logic Try Block Starts Here ---
+    try {
+      console.log(`[POI Search] Overpass Query Body: ${query.substring(0, 100)}...`);
+
+      const poiCacheKey = `poi_${lat}_${lon}_${radius}`;
+      const overpassTimeoutMs = 45000;
+
+      const response = await rateLimitedFetch(
         overpassApiUrl,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: `data=${encodeURIComponent(query)}`,
         },
-        3, // maxRetries (default)
-        poiCacheKey // Provide the specific cache key
-    );
-    // --- End fetch modification ---
+        3, poiCacheKey, overpassTimeoutMs
+      );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[POI Search] Overpass API Error ${response.status}: ${errorText}`);
-      throw new Error(`Overpass API error: ${response.statusText}`);
-    }
+      if (!response.ok) {
+        let errorDetail = await response.text();
+        try {
+          // Try parsing as JSON in case Overpass returns structured errors
+          const errorJson = JSON.parse(errorDetail);
+          errorDetail = JSON.stringify(errorJson, null, 2); 
+        } catch { 
+          // Ignore if not JSON, keep original text
+        }
 
-    const data = await response.json();
-    
-    // Create a Set to track unique POIs by their coordinates
-    const uniquePois = new Set<string>();
-    
-    // Process POIs with relaxed filtering and deduplication
-    const pois = data.elements
-      .filter((poi: any) => {
-        const lat = poi.lat || poi.center?.lat;
-        const lon = poi.lon || poi.center?.lon;
-        const hasValidCoords = lat && lon;
-        
-        // Create a unique key for this POI
-        const poiKey = `${lat},${lon}`;
-        const isUnique = !uniquePois.has(poiKey);
-        
-        if (isUnique) {
-          uniquePois.add(poiKey);
+        let userMessage = `Overpass API error: ${response.statusText}`;
+        let logMessage = `[POI Search] Overpass API Error ${response.status} (${response.statusText}): ${errorDetail}`;
+
+        switch (response.status) {
+          case 400:
+            userMessage = "Overpass API Error: Invalid query constructed.";
+            logMessage = `[POI Search] Overpass API Error 400 (Bad Request): Potentially invalid query syntax. Detail: ${errorDetail}`;
+            break;
+          case 429:
+            userMessage = "Overpass API Error: Too many requests. Please try again later.";
+            logMessage = `[POI Search] Overpass API Error 429 (Too Many Requests). Detail: ${errorDetail}`;
+            // Note: Our internal rate limiter should ideally catch this first.
+            break;
+          case 504:
+            userMessage = "Overpass API Error: The server timed out. Please try again later.";
+            logMessage = `[POI Search] Overpass API Error 504 (Gateway Timeout). Detail: ${errorDetail}`;
+            break;
         }
         
-        return hasValidCoords && isUnique;
-      })
-      .map((poi: any) => {
-        const poiLat = poi.lat || poi.center?.lat || 0;
-        const poiLon = poi.lon || poi.center?.lon || 0;
-        
-        // Determine the type from tags
-        const poiType = 
-          poi.tags?.amenity || 
-          poi.tags?.leisure || 
-          poi.tags?.tourism || 
-          poi.tags?.shop || 
-          'place';
-        
-        return {
-          id: poi.id.toString(),
-          osm_id: poi.id.toString(),
-          name: poi.tags?.name || poi.tags?.['addr:housename'] || 'Unnamed Location',
-          type: poiType,
-          lat: poiLat.toString(),
-          lon: poiLon.toString(),
-          address: {
-            street: poi.tags?.['addr:street'] || '',
-            city: poi.tags?.['addr:city'] || '',
-            state: poi.tags?.['addr:state'] || '',
-            country: poi.tags?.['addr:country'] || '',
-            postal_code: poi.tags?.['addr:postcode'] || ''
-          },
-          tags: poi.tags
-        };
-      });
-    
-    console.log(`[POI Search] Found ${pois.length} unique POIs near ${lat},${lon}`);
-    
-    // Calculate distances and sort by closest to the specified point
-    const sortedPois = pois
-      .sort((a: PoiResponse, b: PoiResponse) => {
-        // Prioritize named locations
-        if (a.name !== 'Unnamed Location' && b.name === 'Unnamed Location') return -1;
-        if (a.name === 'Unnamed Location' && b.name !== 'Unnamed Location') return 1;
-        
-        // Then sort by distance
-        const distanceA = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(a.lat), parseFloat(a.lon));
-        const distanceB = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(b.lat), parseFloat(b.lon));
-        return distanceA - distanceB;
-      })
-      .slice(0, 20); // Increase limit to 20 POIs
-    
-    console.log(`[POI Search] Returning ${sortedPois.length} sorted POIs:`, {
-      types: sortedPois.reduce((acc: any, poi: PoiResponse) => {
-        acc[poi.type] = (acc[poi.type] || 0) + 1;
-        return acc;
-      }, {})
-    });
-    
-    return {
-      isSuccess: true,
-      message: "Successfully found points of interest",
-      data: sortedPois
-    };
+        console.error(logMessage);
+        // Use the more specific userMessage if available
+        throw new Error(userMessage); 
+      }
 
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      console.error("[POI Search] Search timed out after 30 seconds");
-      return {
-        isSuccess: false,
-        message: "POI search timed out after 30 seconds",
-        data: undefined
+      const data = await response.json();
+      
+      // Create a Set to track unique POIs by their coordinates
+      const uniquePois = new Set<string>();
+      
+      // Process POIs with relaxed filtering and deduplication
+      const pois = data.elements
+        .filter((poi: any) => {
+          const lat = poi.lat || poi.center?.lat;
+          const lon = poi.lon || poi.center?.lon;
+          const hasValidCoords = lat && lon;
+          
+          // Create a unique key for this POI
+          const poiKey = `${lat},${lon}`;
+          const isUnique = !uniquePois.has(poiKey);
+          
+          if (isUnique) {
+            uniquePois.add(poiKey);
+          }
+          
+          return hasValidCoords && isUnique;
+        })
+        .map((poi: any) => {
+          const poiLat = poi.lat || poi.center?.lat || 0;
+          const poiLon = poi.lon || poi.center?.lon || 0;
+          
+          // Determine the type from tags
+          const poiType = 
+            poi.tags?.amenity || 
+            poi.tags?.leisure || 
+            poi.tags?.tourism || 
+            poi.tags?.shop || 
+            'place';
+          
+          return {
+            id: poi.id.toString(),
+            osm_id: poi.id.toString(),
+            name: poi.tags?.name || poi.tags?.['addr:housename'] || 'Unnamed Location',
+            type: poiType,
+            lat: poiLat.toString(),
+            lon: poiLon.toString(),
+            address: {
+              street: poi.tags?.['addr:street'] || '',
+              city: poi.tags?.['addr:city'] || '',
+              state: poi.tags?.['addr:state'] || '',
+              country: poi.tags?.['addr:country'] || '',
+              postal_code: poi.tags?.['addr:postcode'] || ''
+            },
+            tags: poi.tags
+          };
+        });
+      
+      console.log(`[POI Search] Found ${pois.length} unique POIs near ${lat},${lon}`);
+      
+      // Calculate distances and sort by closest to the specified point
+      const sortedPois = pois
+        .sort((a: PoiResponse, b: PoiResponse) => {
+          // Prioritize named locations
+          if (a.name !== 'Unnamed Location' && b.name === 'Unnamed Location') return -1;
+          if (a.name === 'Unnamed Location' && b.name !== 'Unnamed Location') return 1;
+          
+          // Then sort by distance
+          const distanceA = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(a.lat), parseFloat(a.lon));
+          const distanceB = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(b.lat), parseFloat(b.lon));
+          return distanceA - distanceB;
+        })
+        .slice(0, 20); // Increase limit to 20 POIs
+      
+      console.log(`[POI Search] Returning ${sortedPois.length} sorted POIs:`, {
+        types: sortedPois.reduce((acc: any, poi: PoiResponse) => {
+          acc[poi.type] = (acc[poi.type] || 0) + 1;
+          return acc;
+        }, {})
+      });
+      
+      // ---> Capture success data here
+      capturedPoiCount = sortedPois.length;
+      result = {
+        isSuccess: true,
+        message: "Successfully found points of interest",
+        data: sortedPois
       };
+      return result;
+
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.error("[POI Search] Search timed out after 30 seconds");
+        errorMsg = "POI search timed out after 30 seconds";
+        result = { isSuccess: false, message: errorMsg, data: undefined };
+        return result;
+      }
+      
+      console.error("[POI Search] Error:", error);
+      errorMsg = error instanceof Error ? error.message : "Failed to search for points of interest";
+      result = { isSuccess: false, message: errorMsg, data: undefined };
+      return result;
     }
-    
-    console.error("[POI Search] Error:", error);
-    return {
-      isSuccess: false,
-      message: error instanceof Error ? error.message : "Failed to search for points of interest",
-      data: undefined
-    };
+    // --- Main Logic Try Block Ends Here ---
+
+  } catch (outerError) { // Catch outer errors (e.g., validation - though already handled)
+    console.error("Outer error in searchPoisAction:", outerError);
+    errorMsg = outerError instanceof Error ? outerError.message : "Unexpected error in POI search";
+    // Ensure result is set if not already
+    if (!result) {
+      result = { isSuccess: false, message: errorMsg };
+    }
+    return result;
+  } finally {
+    const duration = Date.now() - startTime;
+    await trackApiEvent({
+      endpoint: 'searchPoisAction',
+      method: 'ACTION',
+      status: result?.isSuccess ? 200 : (result?.message?.includes('timed out') ? 504 : (result?.message?.includes('Invalid input') ? 400 : 500)),
+      duration: duration,
+      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown POI search error'),
+      userId: userId ?? 'anonymous',
+      // ---> Use captured variables
+      poiCount: capturedPoiCount,
+      radius: inputRadius
+    });
   }
 }
 
@@ -427,116 +582,191 @@ export async function getRouteAction(
     endLon: string;
   }
 ): Promise<ActionState<OsrmRoute>> {
+  const startTime = Date.now();
+  const { userId } = auth();
+  let result: ActionState<OsrmRoute> | null = null;
+  let errorMsg: string | undefined = undefined;
+  let status = 500; // Default status
+  // --> Variables to capture success data
+  let capturedRouteDistance: number | undefined = undefined;
+  let capturedRouteDuration: number | undefined = undefined;
+  let capturedUsedFallback: boolean = false;
 
-  // --- Validation Start ---
-  const validationResult = RouteCoordinatesSchema.safeParse(params);
-  if (!validationResult.success) {
-    const errorMessage = formatZodError(validationResult.error);
-    console.error("Validation failed for getRouteAction:", errorMessage);
-    return {
-      isSuccess: false,
-      message: `Invalid input: ${errorMessage}`,
-    };
-  }
-  const { startLat, startLon, endLat, endLon } = validationResult.data;
-  // --- Validation End ---
-
-  console.log(`[Route Calculation] Calculating route from (${startLat},${startLon}) to (${endLat},${endLon})`);
-  
-  // Validate coordinates
-  if (!startLat || !startLon || !endLat || !endLon) {
-    console.error('[Route Calculation] Missing coordinates');
-    return {
-      isSuccess: false as const,
-      message: "Missing coordinates for route calculation"
+  try {
+    // --- Validation Start ---
+    const validationResult = RouteCoordinatesSchema.safeParse(params);
+    if (!validationResult.success) {
+      const errorMessage = formatZodError(validationResult.error);
+      console.error("Validation failed for getRouteAction:", errorMessage);
+      errorMsg = `Invalid input: ${errorMessage}`;
+      status = 400;
+      result = { isSuccess: false, message: errorMsg };
+      return result;
     }
-  }
-  
-  // Ensure coordinates are valid numbers
-  const coords = [
-    parseFloat(startLat), parseFloat(startLon),
-    parseFloat(endLat), parseFloat(endLon)
-  ];
-  
-  if (coords.some(isNaN)) {
-    console.error('[Route Calculation] Invalid coordinates:', coords);
-    return {
-      isSuccess: false as const,
-      message: "Invalid coordinates for route calculation"
-    }
-  }
-  
-  // Using OSRM for routing
-  const url = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`
-  console.log('[Route Calculation] Requesting route from OSRM:', url);
+    const { startLat, startLon, endLat, endLon } = validationResult.data;
+    // --- Validation End ---
 
-  const response = await rateLimitedFetch(url)
-  if (!response.ok) {
-    console.warn(`[Route Calculation] OSRM API error: ${response.statusText}. Using fallback route data.`);
+    console.log(`[Route Calculation] Calculating route from (${startLat},${startLon}) to (${endLat},${endLon})`);
     
-    // Return a fallback route with estimated data
-    const directDistance = calculateDistance(
+    // Validate coordinates
+    if (!startLat || !startLon || !endLat || !endLon) {
+      console.error('[Route Calculation] Missing coordinates');
+      return {
+        isSuccess: false as const,
+        message: "Missing coordinates for route calculation"
+      }
+    }
+    
+    // Ensure coordinates are valid numbers
+    const coords = [
       parseFloat(startLat), parseFloat(startLon),
       parseFloat(endLat), parseFloat(endLon)
-    );
+    ];
     
-    // Estimate duration based on distance (assuming average speed of 50 km/h)
-    // 50 km/h = 13.89 m/s
-    const estimatedDuration = directDistance / 13.89;
+    if (coords.some(isNaN)) {
+      console.error('[Route Calculation] Invalid coordinates:', coords);
+      return {
+        isSuccess: false as const,
+        message: "Invalid coordinates for route calculation"
+      }
+    }
     
-    const fallbackRoute: ActionState<OsrmRoute> = {
-      isSuccess: true as const,
-      message: "Route estimated (API error)",
-      data: {
-        distance: directDistance,
-        duration: estimatedDuration,
-        geometry: {
-          coordinates: [
-            [parseFloat(startLon), parseFloat(startLat)],
-            [parseFloat(endLon), parseFloat(endLat)]
-          ],
-          type: "LineString"
+    // Use OSRM base URL from constants
+    const url = `${OSRM_API_BASE}/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`
+    console.log('[Route Calculation] Requesting route from OSRM:', url);
+
+    const routeCacheKey = `route_${startLat}_${startLon}_${endLat}_${endLon}`;
+    const osrmTimeoutMs = 30000; // 30 seconds timeout for OSRM
+
+    // --- Main Logic Try Block Starts Here ---
+    try {
+      const response = await rateLimitedFetch(
+        url,
+        undefined, // No specific options needed beyond default headers
+        3, // Default retries
+        routeCacheKey, // Cache key
+        osrmTimeoutMs // OSRM Timeout
+      );
+      status = response.status; // Capture actual API status
+      console.log('OSRM API response status:', status);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Could not read error body');
+        console.warn(`[Route Calculation] OSRM API error ${response.status} (${response.statusText}): ${errorText}. Using fallback route data.`);
+        
+        // Return a fallback route with estimated data
+        const directDistance = calculateDistance(
+          parseFloat(startLat), parseFloat(startLon),
+          parseFloat(endLat), parseFloat(endLon)
+        );
+        
+        // Estimate duration based on distance (assuming average speed of 50 km/h)
+        // 50 km/h = 13.89 m/s
+        const estimatedDuration = directDistance / 13.89;
+        
+        const fallbackRoute: ActionState<OsrmRoute> = {
+          isSuccess: true as const,
+          message: "Route estimated (API error)",
+          data: {
+            distance: directDistance,
+            duration: estimatedDuration,
+            geometry: {
+              coordinates: [
+                [parseFloat(startLon), parseFloat(startLat)],
+                [parseFloat(endLon), parseFloat(endLat)]
+              ],
+              type: "LineString"
+            }
+          }
+        };
+        
+        console.log('[Route Calculation] Returning fallback route:', fallbackRoute);
+        // ---> Capture fallback data
+        capturedRouteDistance = fallbackRoute.data?.distance;
+        capturedRouteDuration = fallbackRoute.data?.duration;
+        capturedUsedFallback = true;
+        status = 200; // Set status to 200 because we provide fallback data
+        return fallbackRoute;
+      }
+
+      const data = await response.json()
+      console.log('[Route Calculation] OSRM response:', data);
+      
+      if (!data || !data.routes || data.routes.length === 0) {
+        console.error('[Route Calculation] No route found in OSRM response');
+        return {
+          isSuccess: false as const,
+          message: "No route found between the provided locations"
         }
       }
-    };
-    
-    console.log('[Route Calculation] Returning fallback route:', fallbackRoute);
-    return fallbackRoute;
-  }
 
-  const data = await response.json()
-  console.log('[Route Calculation] OSRM response:', data);
-  
-  if (!data || !data.routes || data.routes.length === 0) {
-    console.error('[Route Calculation] No route found in OSRM response');
-    return {
-      isSuccess: false as const,
-      message: "No route found between the provided locations"
-    }
-  }
+      // Ensure the route data has the correct structure
+      const routeData = data.routes[0];
+      if (!routeData.distance || !routeData.duration) {
+        console.error('[Route Calculation] Route data missing required fields:', routeData);
+        return {
+          isSuccess: false as const,
+          message: "Route data is incomplete"
+        }
+      }
 
-  // Ensure the route data has the correct structure
-  const routeData = data.routes[0];
-  if (!routeData.distance || !routeData.duration) {
-    console.error('[Route Calculation] Route data missing required fields:', routeData);
-    return {
-      isSuccess: false as const,
-      message: "Route data is incomplete"
+      // ---> Capture success data here
+      capturedRouteDistance = routeData.distance;
+      capturedRouteDuration = routeData.duration;
+      const route: ActionState<OsrmRoute> = {
+        isSuccess: true as const,
+        message: "Route calculated successfully",
+        data: {
+          distance: routeData.distance,
+          duration: routeData.duration,
+          geometry: routeData.geometry
+        }
+      };
+      
+      console.log('[Route Calculation] Returning calculated route:', route);
+      status = 200;
+      return route;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.error("[Route Calculation] Search timed out after 30 seconds");
+        errorMsg = "Route search timed out after 30 seconds";
+        status = 504; // Timeout
+        console.error("[Route Calculation] " + errorMsg);
+        result = { isSuccess: false, message: errorMsg, data: undefined };
+        return result;
+      }
+      
+      console.error("[Route Calculation] Error:", error);
+      errorMsg = error instanceof Error ? error.message : "Failed to search for route";
+      status = 500; // General fetch/processing error
+      result = { isSuccess: false, message: errorMsg, data: undefined };
+      return result;
     }
-  }
+    // --- Main Logic Try Block Ends Here ---
 
-  const route: ActionState<OsrmRoute> = {
-    isSuccess: true as const,
-    message: "Route calculated successfully",
-    data: {
-      distance: routeData.distance,
-      duration: routeData.duration,
-      geometry: routeData.geometry
+  } catch (outerError) { // Catch outer errors (validation, coord parsing)
+    console.error("Outer error in getRouteAction:", outerError);
+    // errorMsg and status should already be set by the specific checks
+    // Ensure result is set if somehow missed
+    if (!result) {
+      result = { isSuccess: false, message: errorMsg || "Unexpected error getting route" };
     }
-  };
-  
-  console.log('[Route Calculation] Returning calculated route:', route);
-  return route;
+    return result;
+  } finally {
+    const duration = Date.now() - startTime;
+    await trackApiEvent({
+      endpoint: 'getRouteAction',
+      method: 'ACTION',
+      status: result?.isSuccess ? status : (status !== 500 ? status : (result?.message?.includes('timed out') ? 504 : (result?.message?.includes('Invalid input') ? 400 : 500))),
+      duration: duration,
+      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown route action error'),
+      userId: userId ?? 'anonymous',
+      // ---> Use captured variables
+      routeDistance: capturedRouteDistance,
+      routeDuration: capturedRouteDuration,
+      usedFallback: capturedUsedFallback,
+    });
+  }
 }
 
 export async function calculateMidpointAction(
@@ -548,93 +778,117 @@ export async function calculateMidpointAction(
     endLon: string;
   }
 ): Promise<ActionState<{ lat: string; lon: string }>> {
+  const startTime = Date.now();
+  const { userId } = auth();
+  let result: ActionState<{ lat: string; lon: string }> | null = null;
+  let errorMsg: string | undefined = undefined;
+  let status = 500; // Default status
 
-  // --- Validation Start ---
-  const validationResult = RouteCoordinatesSchema.safeParse(params);
-  if (!validationResult.success) {
-    const errorMessage = formatZodError(validationResult.error);
-    console.error("Validation failed for calculateMidpointAction:", errorMessage);
-    return {
-      isSuccess: false,
-      message: `Invalid input: ${errorMessage}`,
-    };
-  }
-  const { startLat, startLon, endLat, endLon } = validationResult.data;
-  // --- Validation End ---
-
-  console.log(`[Midpoint Calc] Calculating midpoint between (${startLat}, ${startLon}) and (${endLat}, ${endLon})`);
   try {
-    // Get the route first
-    const routeResult = await getRouteAction({ startLat, startLon, endLat, endLon })
-    
-    if (!routeResult.isSuccess) {
+    // --- Validation Start ---
+    const validationResult = RouteCoordinatesSchema.safeParse(params);
+    if (!validationResult.success) {
+      const errorMessage = formatZodError(validationResult.error);
+      console.error("Validation failed for calculateMidpointAction:", errorMessage);
+      errorMsg = `Invalid input: ${errorMessage}`;
+      status = 400;
+      result = { isSuccess: false, message: errorMsg };
+      return result;
+    }
+    const { startLat, startLon, endLat, endLon } = validationResult.data;
+    // --- Validation End ---
+
+    console.log(`[Midpoint Calc] Calculating midpoint between (${startLat}, ${startLon}) and (${endLat}, ${endLon})`);
+    try {
+      // Get the route first
+      const routeResult = await getRouteAction({ startLat, startLon, endLat, endLon })
+      
+      if (!routeResult.isSuccess) {
+        return {
+          isSuccess: false,
+          message: routeResult.message
+        }
+      }
+      
+      const route = routeResult.data
+      
+      // Extract the coordinates from the route
+      const coordinates = route.geometry.coordinates
+      
+      if (!coordinates || coordinates.length < 2) {
+        return {
+          isSuccess: false,
+          message: "Route has insufficient points for midpoint calculation"
+        }
+      }
+      
+      // Calculate the total distance of the route
+      let totalDistance = 0
+      const distances = []
+      
+      for (let i = 1; i < coordinates.length; i++) {
+        const segmentDistance = calculateDistance(
+          coordinates[i-1][1], coordinates[i-1][0], 
+          coordinates[i][1], coordinates[i][0]
+        )
+        distances.push(segmentDistance)
+        totalDistance += segmentDistance
+      }
+      
+      // Find the midpoint (50% of the total distance)
+      const halfDistance = totalDistance / 2
+      let distanceCovered = 0
+      let midpointIndex = 0
+      
+      for (let i = 0; i < distances.length; i++) {
+        distanceCovered += distances[i]
+        if (distanceCovered >= halfDistance) {
+          midpointIndex = i
+          break
+        }
+      }
+      
+      // Calculate the exact midpoint using linear interpolation
+      const segmentStart = coordinates[midpointIndex]
+      const segmentEnd = coordinates[midpointIndex + 1]
+      
+      // Calculate how far along the segment the midpoint is
+      const distanceBeforeSegment = distanceCovered - distances[midpointIndex]
+      const segmentFraction = (halfDistance - distanceBeforeSegment) / distances[midpointIndex]
+      
+      // Interpolate the coordinates
+      const midpointLon = segmentStart[0] + segmentFraction * (segmentEnd[0] - segmentStart[0])
+      const midpointLat = segmentStart[1] + segmentFraction * (segmentEnd[1] - segmentStart[1])
+      
       return {
-        isSuccess: false,
-        message: routeResult.message
+        isSuccess: true,
+        message: "Midpoint calculated successfully",
+        data: {
+          lat: midpointLat.toString(),
+          lon: midpointLon.toString()
+        }
       }
+    } catch (error) {
+      console.error("Error calculating midpoint:", error)
+      return { isSuccess: false, message: "Failed to calculate midpoint" }
     }
-    
-    const route = routeResult.data
-    
-    // Extract the coordinates from the route
-    const coordinates = route.geometry.coordinates
-    
-    if (!coordinates || coordinates.length < 2) {
-      return {
-        isSuccess: false,
-        message: "Route has insufficient points for midpoint calculation"
-      }
+  } catch (outerError) {
+    console.error("Outer error in calculateMidpointAction:", outerError);
+    // errorMsg and status should be set by validation
+    if (!result) {
+      result = { isSuccess: false, message: errorMsg || "Unexpected error calculating midpoint" };
     }
-    
-    // Calculate the total distance of the route
-    let totalDistance = 0
-    const distances = []
-    
-    for (let i = 1; i < coordinates.length; i++) {
-      const segmentDistance = calculateDistance(
-        coordinates[i-1][1], coordinates[i-1][0], 
-        coordinates[i][1], coordinates[i][0]
-      )
-      distances.push(segmentDistance)
-      totalDistance += segmentDistance
-    }
-    
-    // Find the midpoint (50% of the total distance)
-    const halfDistance = totalDistance / 2
-    let distanceCovered = 0
-    let midpointIndex = 0
-    
-    for (let i = 0; i < distances.length; i++) {
-      distanceCovered += distances[i]
-      if (distanceCovered >= halfDistance) {
-        midpointIndex = i
-        break
-      }
-    }
-    
-    // Calculate the exact midpoint using linear interpolation
-    const segmentStart = coordinates[midpointIndex]
-    const segmentEnd = coordinates[midpointIndex + 1]
-    
-    // Calculate how far along the segment the midpoint is
-    const distanceBeforeSegment = distanceCovered - distances[midpointIndex]
-    const segmentFraction = (halfDistance - distanceBeforeSegment) / distances[midpointIndex]
-    
-    // Interpolate the coordinates
-    const midpointLon = segmentStart[0] + segmentFraction * (segmentEnd[0] - segmentStart[0])
-    const midpointLat = segmentStart[1] + segmentFraction * (segmentEnd[1] - segmentStart[1])
-    
-    return {
-      isSuccess: true,
-      message: "Midpoint calculated successfully",
-      data: {
-        lat: midpointLat.toString(),
-        lon: midpointLon.toString()
-      }
-    }
-  } catch (error) {
-    console.error("Error calculating midpoint:", error)
-    return { isSuccess: false, message: "Failed to calculate midpoint" }
+    return result;
+  } finally {
+    const duration = Date.now() - startTime;
+    await trackApiEvent({
+      endpoint: 'calculateMidpointAction',
+      method: 'ACTION',
+      status: result?.isSuccess ? status : (status !== 500 ? status : (result?.message?.includes('Invalid input') ? 400 : 500)),
+      duration: duration,
+      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown midpoint calculation error'),
+      userId: userId ?? 'anonymous',
+    });
   }
 }
 
@@ -730,104 +984,167 @@ export async function getAlternateRouteAction(
     endLon: string;
   }
 ): Promise<ActionState<OsrmRoute>> {
-
-  // --- Validation Start ---
-  const validationResult = RouteCoordinatesSchema.safeParse(params);
-  if (!validationResult.success) {
-    const errorMessage = formatZodError(validationResult.error);
-    console.error("Validation failed for getAlternateRouteAction:", errorMessage);
-    return {
-      isSuccess: false,
-      message: `Invalid input: ${errorMessage}`,
-    };
-  }
-  const { startLat, startLon, endLat, endLon } = validationResult.data;
-  // --- Validation End ---
-
-  console.log(`[OSRM Alt Route] Requesting alternate routes from (${startLat}, ${startLon}) to (${endLat}, ${endLon})`);
-  const profile = "driving";
+  const startTime = Date.now();
+  const { userId } = auth();
+  let result: ActionState<OsrmRoute> | null = null;
+  let errorMsg: string | undefined = undefined;
+  let status = 500; // Default status
+  // --> Variables to capture success data
+  let capturedRouteDistance: number | undefined = undefined;
+  let capturedRouteDuration: number | undefined = undefined;
+  let capturedUsedFallback: boolean = false;
 
   try {
-    // Request route with up to 2 alternatives using OSRM
-    const url = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson&alternatives=3`
-
-    const response = await rateLimitedFetch(url)
-    if (!response.ok) {
-      console.warn(`OSRM API error for alternate route: ${response.statusText}. Using fallback route data.`);
-      return createFallbackRoute(startLat, startLon, endLat, endLon);
+    // --- Validation Start ---
+    const validationResult = RouteCoordinatesSchema.safeParse(params);
+    if (!validationResult.success) {
+      const errorMessage = formatZodError(validationResult.error);
+      console.error("Validation failed for getAlternateRouteAction:", errorMessage);
+      errorMsg = `Invalid input: ${errorMessage}`;
+      status = 400;
+      result = { isSuccess: false, message: errorMsg };
+      return result;
     }
+    const { startLat, startLon, endLat, endLon } = validationResult.data;
+    // --- Validation End ---
 
-    const data = await response.json()
-    // Ensure we have routes and at least a main route
-    if (!data || !data.routes || data.routes.length === 0) {
-      console.warn(`OSRM returned no routes. Using fallback.`);
-      return createFallbackRoute(startLat, startLon, endLat, endLon);
-    }
+    console.log(`[OSRM Alt Route] Requesting alternate routes from (${startLat}, ${startLon}) to (${endLat}, ${endLon})`);
+    const profile = "driving";
 
-    // Cast response routes to the correct type
-    const mainRoute = data.routes[0] as OsrmRoute;
-    const potentialAlternatives = (data.routes.slice(1) as OsrmRoute[]) || [];
+    const url = `${OSRM_API_BASE}/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson&alternatives=3`;
+    const altRouteCacheKey = `alt_route_${startLat}_${startLon}_${endLat}_${endLon}`;
+    const osrmTimeoutMs = 30000;
 
-    // Filter for reasonable alternatives
-    const reasonableAlternatives = potentialAlternatives.filter((route: OsrmRoute) => 
-      route.distance <= mainRoute.distance * 1.4 && // Max 40% longer distance
-      route.duration <= mainRoute.duration * 1.5   // Max 50% longer duration
-    );
+    // --- Main Logic Try Block Starts Here ---
+    try {
+      const response = await rateLimitedFetch(
+        url, undefined, 3, altRouteCacheKey, osrmTimeoutMs
+      );
+      status = response.status; // Capture API status
+      console.log('[Alt Route] OSRM API response status:', status);
 
-    let selectedAlternative: OsrmRoute | null = null;
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Could not read error body');
+        console.warn(`[Alt Route] OSRM API error ${response.status} (${response.statusText}): ${errorText}. Using fallback route data.`);
+        errorMsg = `OSRM API error ${status}. Using fallback.`;
+        result = createFallbackRoute(startLat, startLon, endLat, endLon); // Fallback marks success
+        status = 200; // Set status to 200 because we provide fallback data
+        return result;
+      }
 
-    if (reasonableAlternatives.length === 0) {
-      console.log("No reasonable alternatives found. Using fallback.");
-      return createFallbackRoute(startLat, startLon, endLat, endLon);
-    } else if (reasonableAlternatives.length === 1) {
-      console.log("One reasonable alternative found.");
-      selectedAlternative = reasonableAlternatives[0];
-    } else {
-      console.log("Multiple reasonable alternatives found. Selecting the most geographically different.");
-      // Find the one whose midpoint is furthest from the main route's midpoint
-      const mainMidpoint = getMidpoint(mainRoute);
-      if (!mainMidpoint) {
-         console.warn("Could not calculate main route midpoint. Selecting the first reasonable alternative.");
-         selectedAlternative = reasonableAlternatives[0];
+      const data = await response.json();
+      if (!data || !data.routes || data.routes.length === 0) {
+        console.warn(`OSRM returned no routes. Using fallback.`);
+        errorMsg = "OSRM returned no routes. Using fallback.";
+        result = createFallbackRoute(startLat, startLon, endLat, endLon);
+        status = 200; // Fallback success
+        return result;
+      }
+
+      const mainRoute = data.routes[0] as OsrmRoute; // Assuming structure is valid if routes exist
+      const potentialAlternatives = (data.routes.slice(1) as OsrmRoute[]) || [];
+
+      const reasonableAlternatives = potentialAlternatives.filter((route: OsrmRoute) =>
+        route.distance <= mainRoute.distance * 1.4 &&
+        route.duration <= mainRoute.duration * 1.5
+      );
+
+      let selectedAlternative: OsrmRoute | null = null;
+
+      if (reasonableAlternatives.length === 0) {
+        console.log("No reasonable alternatives found. Using fallback.");
+        errorMsg = "No reasonable alternatives found. Using fallback.";
+        result = createFallbackRoute(startLat, startLon, endLat, endLon);
+        status = 200; // Fallback success
+        return result;
+      } else if (reasonableAlternatives.length === 1) {
+        console.log("One reasonable alternative found.");
+        selectedAlternative = reasonableAlternatives[0];
       } else {
-        let maxMidpointDistance = -1;
-        reasonableAlternatives.forEach(alt => {
-          const altMidpoint = getMidpoint(alt);
-          if (altMidpoint) {
-            const distance = calculateDistance(
-              mainMidpoint.lat, mainMidpoint.lng, 
-              altMidpoint.lat, altMidpoint.lng
-            );
-            if (distance > maxMidpointDistance) {
-              maxMidpointDistance = distance;
-              selectedAlternative = alt;
-            }
-          } else {
-             console.warn("Could not calculate midpoint for an alternative route.");
-          }
-        });
-        // Fallback if midpoints couldn't be calculated for any alternatives
-        if (!selectedAlternative) {
-           console.warn("Could not determine most different alternative based on midpoints. Selecting first reasonable.");
+        console.log("Multiple reasonable alternatives found. Selecting the most geographically different.");
+        const mainMidpoint = getMidpoint(mainRoute);
+        if (!mainMidpoint) {
+           console.warn("Could not calculate main route midpoint. Selecting the first reasonable alternative.");
            selectedAlternative = reasonableAlternatives[0];
+        } else {
+          let maxMidpointDistance = -1;
+          reasonableAlternatives.forEach(alt => {
+            const altMidpoint = getMidpoint(alt);
+            if (altMidpoint) {
+              const distance = calculateDistance(mainMidpoint.lat, mainMidpoint.lng, altMidpoint.lat, altMidpoint.lng);
+              if (distance > maxMidpointDistance) {
+                maxMidpointDistance = distance;
+                selectedAlternative = alt;
+              }
+            } else {
+               console.warn("Could not calculate midpoint for an alternative route.");
+            }
+          });
+          if (!selectedAlternative) {
+             console.warn("Could not determine most different alternative based on midpoints. Selecting first reasonable.");
+             selectedAlternative = reasonableAlternatives[0];
+          }
         }
       }
-    }
 
-    if (selectedAlternative) {
-      return {
-        isSuccess: true as const,
-        message: "Alternate route calculated successfully",
-        data: selectedAlternative
+      if (selectedAlternative) {
+        // ---> Capture success data here
+        capturedRouteDistance = selectedAlternative.distance;
+        capturedRouteDuration = selectedAlternative.duration;
+        result = {
+          isSuccess: true,
+          message: "Alternate route calculated successfully",
+          data: selectedAlternative
+        };
+        status = 200; // Explicit success
+        return result;
+      } else {
+        console.log("Failed to select an alternative. Using fallback.");
+        errorMsg = "Failed to select an alternative. Using fallback.";
+        result = createFallbackRoute(startLat, startLon, endLat, endLon);
+        status = 200; // Fallback success
+        return result;
       }
-    } else {
-      // This case should theoretically be covered by the initial checks, but as a safeguard:
-      console.log("Failed to select an alternative. Using fallback.");
-      return createFallbackRoute(startLat, startLon, endLat, endLon);
+    } catch (error) { // Catch errors from fetch or processing
+      if (error instanceof Error && error.name === 'AbortError') {
+          errorMsg = `OSRM request timed out after ${osrmTimeoutMs}ms. Using fallback.`;
+          status = 504;
+          console.error(`[Alt Route] ${errorMsg}`);
+          result = createFallbackRoute(startLat, startLon, endLat, endLon);
+          status = 200; // Fallback success despite timeout
+          return result;
+      } else {
+          errorMsg = error instanceof Error ? error.message : "Unknown error fetching alternate route. Using fallback.";
+          status = 500; // Keep 500 for internal error, though fallback is returned
+          console.error("Error fetching alternate route:", error);
+          result = createFallbackRoute(startLat, startLon, endLat, endLon);
+          status = 200; // Fallback success
+          return result;
+      }
     }
-  } catch (error) {
-    console.error("Error calculating alternate route:", error)
-    return createFallbackRoute(startLat, startLon, endLat, endLon);
+    // --- Main Logic Try Block Ends Here ---
+
+  } catch (outerError) { // Catch outer errors (validation)
+    console.error("Outer error in getAlternateRouteAction:", outerError);
+    // errorMsg and status should be set by validation
+    if (!result) {
+      result = { isSuccess: false, message: errorMsg || "Unexpected error getting alternate route" };
+    }
+    return result;
+  } finally {
+    const duration = Date.now() - startTime;
+    await trackApiEvent({
+      endpoint: 'getAlternateRouteAction',
+      method: 'ACTION',
+      status: result?.isSuccess ? status : (status !== 500 ? status : (result?.message?.includes('timed out') ? 504 : (result?.message?.includes('Invalid input') ? 400 : 500))),
+      duration: duration,
+      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown alternate route action error'),
+      userId: userId ?? 'anonymous',
+      // ---> Use captured variables
+      routeDistance: capturedRouteDistance,
+      routeDuration: capturedRouteDuration,
+      usedFallback: capturedUsedFallback,
+    });
   }
 }
 
@@ -887,92 +1204,122 @@ export async function calculateAlternateMidpointAction(
     endLon: string;
   }
 ): Promise<ActionState<{ lat: string; lon: string }>> {
+  const startTime = Date.now();
+  const { userId } = auth();
+  let result: ActionState<{ lat: string; lon: string }> | null = null;
+  let errorMsg: string | undefined = undefined;
+  let status = 500; // Default status
 
-  // --- Validation Start ---
-  const validationResult = RouteCoordinatesSchema.safeParse(params);
-  if (!validationResult.success) {
-    const errorMessage = formatZodError(validationResult.error);
-    console.error("Validation failed for calculateAlternateMidpointAction:", errorMessage);
-    return {
-      isSuccess: false,
-      message: `Invalid input: ${errorMessage}`,
-    };
-  }
-  const { startLat, startLon, endLat, endLon } = validationResult.data;
-  // --- Validation End ---
-
-  console.log(`[Alt Midpoint Calc] Calculating alt midpoint between (${startLat}, ${startLon}) and (${endLat}, ${endLon})`);
   try {
-    // Get the alternate route first
-    const routeResult = await getAlternateRouteAction({ startLat, startLon, endLat, endLon })
-    
-    if (!routeResult.isSuccess) {
-      return {
-        isSuccess: false,
-        message: routeResult.message
+    // --- Validation Start ---
+    const validationResult = RouteCoordinatesSchema.safeParse(params);
+    if (!validationResult.success) {
+      const errorMessage = formatZodError(validationResult.error);
+      console.error("Validation failed for calculateAlternateMidpointAction:", errorMessage);
+      errorMsg = `Invalid input: ${errorMessage}`;
+      status = 400;
+      result = { isSuccess: false, message: errorMsg };
+      return result;
+    }
+    const { startLat, startLon, endLat, endLon } = validationResult.data;
+    // --- Validation End ---
+
+    console.log(`[Alt Midpoint Calc] Calculating alt midpoint between (${startLat}, ${startLon}) and (${endLat}, ${endLon})`);
+
+    // --- Main Logic Try Block Starts Here ---
+    try {
+      // Get the alternate route first
+      const routeResult = await getAlternateRouteAction({ startLat, startLon, endLat, endLon });
+
+      if (!routeResult.isSuccess) {
+          // Even if getAlternateRouteAction used fallback (isSuccess=true), if it failed internally before fallback, use its message.
+          errorMsg = routeResult.message;
+          status = 500; // Assume internal error if alt route failed fundamentally
+          result = { isSuccess: false, message: errorMsg };
+          return result;
       }
-    }
-    
-    const route = routeResult.data
-    
-    // Extract the coordinates from the route
-    const coordinates = route.geometry.coordinates
-    
-    if (!coordinates || coordinates.length < 2) {
-      return {
-        isSuccess: false,
-        message: "Route has insufficient points for midpoint calculation"
+
+      const route = routeResult.data;
+      const coordinates = route.geometry.coordinates;
+
+      if (!coordinates || coordinates.length < 2) {
+          errorMsg = "Alternate route has insufficient points for midpoint calculation";
+          status = 400; // Bad data from alt route
+          result = { isSuccess: false, message: errorMsg };
+          return result;
       }
-    }
-    
-    // Calculate the total distance of the route
-    let totalDistance = 0
-    const distances = []
-    
-    for (let i = 1; i < coordinates.length; i++) {
-      const segmentDistance = calculateDistance(
-        coordinates[i-1][1], coordinates[i-1][0], 
-        coordinates[i][1], coordinates[i][0]
-      )
-      distances.push(segmentDistance)
-      totalDistance += segmentDistance
-    }
-    
-    // Find the midpoint (50% of the total distance)
-    const halfDistance = totalDistance / 2
-    let distanceCovered = 0
-    let midpointIndex = 0
-    
-    for (let i = 0; i < distances.length; i++) {
-      distanceCovered += distances[i]
-      if (distanceCovered >= halfDistance) {
-        midpointIndex = i
-        break
+
+      // Calculate the total distance of the route
+      let totalDistance = 0;
+      const distances = [];
+      for (let i = 1; i < coordinates.length; i++) {
+          const segmentDistance = calculateDistance(coordinates[i-1][1], coordinates[i-1][0], coordinates[i][1], coordinates[i][0]);
+          distances.push(segmentDistance);
+          totalDistance += segmentDistance;
       }
-    }
-    
-    // Calculate the exact midpoint using linear interpolation
-    const segmentStart = coordinates[midpointIndex]
-    const segmentEnd = coordinates[midpointIndex + 1]
-    
-    // Calculate how far along the segment the midpoint is
-    const distanceBeforeSegment = distanceCovered - distances[midpointIndex]
-    const segmentFraction = (halfDistance - distanceBeforeSegment) / distances[midpointIndex]
-    
-    // Interpolate the coordinates
-    const midpointLon = segmentStart[0] + segmentFraction * (segmentEnd[0] - segmentStart[0])
-    const midpointLat = segmentStart[1] + segmentFraction * (segmentEnd[1] - segmentStart[1])
-    
-    return {
-      isSuccess: true,
-      message: "Alternate midpoint calculated successfully",
-      data: {
-        lat: midpointLat.toString(),
-        lon: midpointLon.toString()
+
+      // Find the midpoint
+      const halfDistance = totalDistance / 2;
+      let distanceCovered = 0;
+      let midpointIndex = 0;
+      for (let i = 0; i < distances.length; i++) {
+          distanceCovered += distances[i];
+          if (distanceCovered >= halfDistance) {
+              midpointIndex = i;
+              break;
+          }
       }
+
+      // Interpolate the midpoint coordinates
+      const segmentStart = coordinates[midpointIndex];
+      const segmentEnd = coordinates[midpointIndex + 1];
+      // Handle edge case
+      if (!segmentEnd) {
+          console.warn("[Alt Midpoint Calc] Midpoint index out of bounds, using last point.");
+          result = { isSuccess: true, message: "Alternate midpoint calculated successfully (at end point)", data: { lat: segmentStart[1].toString(), lon: segmentStart[0].toString() } };
+          status = 200;
+          return result;
+      }
+
+      const distanceBeforeSegment = distanceCovered - distances[midpointIndex];
+      const segmentFraction = distances[midpointIndex] === 0 ? 0 : (halfDistance - distanceBeforeSegment) / distances[midpointIndex];
+
+      const midpointLon = segmentStart[0] + segmentFraction * (segmentEnd[0] - segmentStart[0]);
+      const midpointLat = segmentStart[1] + segmentFraction * (segmentEnd[1] - segmentStart[1]);
+
+      result = {
+        isSuccess: true,
+        message: "Alternate midpoint calculated successfully",
+        data: { lat: midpointLat.toString(), lon: midpointLon.toString() }
+      };
+      status = 200;
+      return result;
+
+    } catch (error) { // Catch calculation errors
+      errorMsg = error instanceof Error ? error.message : "Failed to calculate alternate midpoint";
+      status = 500;
+      console.error("Error calculating alternate midpoint:", error);
+      result = { isSuccess: false, message: errorMsg };
+      return result;
     }
-  } catch (error) {
-    console.error("Error calculating alternate midpoint:", error)
-    return { isSuccess: false, message: "Failed to calculate alternate midpoint" }
+    // --- Main Logic Try Block Ends Here ---
+
+  } catch (outerError) { // Catch outer errors (validation)
+    console.error("Outer error in calculateAlternateMidpointAction:", outerError);
+    // errorMsg and status should be set by validation
+    if (!result) {
+      result = { isSuccess: false, message: errorMsg || "Unexpected error calculating alternate midpoint" };
+    }
+    return result;
+  } finally {
+    const duration = Date.now() - startTime;
+    await trackApiEvent({
+      endpoint: 'calculateAlternateMidpointAction',
+      method: 'ACTION',
+      status: result?.isSuccess ? status : (status !== 500 ? status : (result?.message?.includes('Invalid input') ? 400 : 500)),
+      duration: duration,
+      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown alternate midpoint calculation error'),
+      userId: userId ?? 'anonymous',
+    });
   }
 } 

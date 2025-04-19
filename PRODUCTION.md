@@ -25,6 +25,9 @@
     });
   }
   ```
+- [ ] Verify PostHog events are being sent from both backend and frontend (see [MONITORING.md](MONITORING.md))
+- [ ] If PostHog is unavailable, ensure file logging fallback is enabled for critical events (see `app/lib/monitoring.ts`)
+- [ ] Troubleshoot analytics by checking server logs for `[PostHog Debug]` messages and reviewing the PostHog dashboard
 
 ### Environment Variables
 - [ ] Update environment variables:
@@ -34,6 +37,11 @@
   ```
 - [ ] Remove development-only environment variables
 - [ ] Ensure all sensitive keys are properly secured in production environment
+
+### Secret & API Key Rotation
+- [ ] Regularly rotate API keys and secrets (Clerk, Supabase, Upstash, LocationIQ, OpenRouteService, PostHog)
+- [ ] Use a secrets manager or environment variable best practices
+- [ ] Document the rotation process and update `.env.example` as needed
 
 ### Rate Limiting
 - [ ] Review and adjust rate limit values for production load:
@@ -77,6 +85,7 @@
 - [ ] Configure alert thresholds
 - [ ] Set up logging aggregation
 - [ ] Create monitoring dashboards
+- [ ] Review analytics/monitoring setup in [MONITORING.md](MONITORING.md)
 
 ### CI/CD
 - [ ] Set up automated testing in CI pipeline
@@ -88,6 +97,7 @@
 - [ ] Document deployment process
 - [ ] Create incident response playbook
 - [ ] Document monitoring and alerting procedures
+- [ ] Cross-link to [README.md](README.md), [MONITORING.md](MONITORING.md), and other docs
 
 ### Database Security
 - [ ] Review and test Row Level Security (RLS) policies in production
@@ -122,7 +132,14 @@
 - [ ] Set up A/B testing capabilities
 - [ ] Document feature flag states
 
+### Disaster Recovery
+- [ ] Document and test database restore procedures
+- [ ] Document and test restoring from backup for all critical services (Supabase, Upstash, etc.)
+- [ ] Document what to do if a critical service (Clerk, PostHog, LocationIQ, etc.) is down
+- [ ] Ensure all backups are scheduled and tested regularly
+
 ## Notes
 - Current development monitoring uses file-based logging in `logs/` directory
 - Production should use proper monitoring services instead of file logs
-- Consider implementing different monitoring strategies for different environments (staging vs production) 
+- Consider implementing different monitoring strategies for different environments (staging vs production)
+- See [README.md](README.md) and [MONITORING.md](MONITORING.md) for more details on analytics and monitoring setup 

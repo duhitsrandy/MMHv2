@@ -3,6 +3,30 @@
 ## Overview
 The Meet Me Halfway application uses Supabase with PostgreSQL and Drizzle ORM for data storage. The database schema includes tables for user profiles, search history, points of interest (POIs), and saved locations.
 
+---
+
+## Database Setup Checklist (From Scratch)
+1. Set up a new Supabase project and obtain your project URL and anon/service keys
+2. Configure your `.env` file with all required database environment variables (see below)
+3. Run `npm install` to ensure Drizzle and Supabase dependencies are installed
+4. Generate the initial schema and migration files with `npm run db:generate`
+5. Apply migrations to your Supabase database with `npm run db:migrate`
+6. (Optional) Seed the database with example data (see below)
+7. Test connectivity and run a sample query
+
+---
+
+## Environment Variables
+```env
+# Database Configuration
+DATABASE_URL=postgresql://user:password@host:port/database
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key # Keep this secure, not in frontend env
+```
+
+---
+
 ## Schema Definitions
 
 ### 1. User Profiles (`db/schema/profiles-schema.ts`)
@@ -245,14 +269,103 @@ npm run db:migrate
 - Review generated SQL migration files before applying.
 - Document schema changes within migration files or related documentation.
 
-## Environment Variables
+## Example Data
 
-```env
-# Database Configuration (Example placeholders)
-DATABASE_URL=postgresql://user:password@host:port/database
-NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-# SUPABASE_SERVICE_ROLE_KEY=your-service-role-key # Keep this secure, not in frontend env
+### User Profile Example
+```json
+{
+  "user_id": "user_123",
+  "membership": "free",
+  "stripe_customer_id": null,
+  "stripe_subscription_id": null,
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
 ```
+
+### Search Example
+```json
+{
+  "id": "uuid-1",
+  "user_id": "user_123",
+  "start_location_address": "123 Main St, City, State",
+  "start_location_lat": "40.7128",
+  "start_location_lng": "-74.0060",
+  "end_location_address": "456 Elm St, City, State",
+  "end_location_lat": "40.7306",
+  "end_location_lng": "-73.9352",
+  "midpoint_lat": "40.7217",
+  "midpoint_lng": "-73.9706",
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+```
+
+### POI Example
+```json
+{
+  "id": "uuid-2",
+  "search_id": "uuid-1",
+  "name": "Central Park Cafe",
+  "address": "789 Park Ave, City, State",
+  "latitude": "40.7851",
+  "longitude": "-73.9683",
+  "type": "cafe",
+  "travel_time_from_start": "15",
+  "travel_time_from_end": "10",
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+```
+
+### Location Example
+```json
+{
+  "id": "uuid-3",
+  "user_id": "user_123",
+  "name": "Home",
+  "address": "123 Main St, City, State",
+  "latitude": "40.7128",
+  "longitude": "-74.0060",
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+```
+
+## Seeding & Resetting the Database
+
+### Seeding Example Data
+- Create a script (e.g., `scripts/seed.ts`) that inserts example data into each table using Drizzle ORM or Supabase client.
+- Run the script with `npx tsx scripts/seed.ts` or similar.
+- Use the example data above as a template.
+
+### Resetting the Database
+- Use Supabase dashboard to truncate tables or drop/recreate them as needed.
+- Alternatively, write a script to delete all rows from each table for a clean slate.
+- Always back up production data before resetting!
+
+## Troubleshooting Database Issues
+- **Migrations fail or hang:**
+  - Check your `DATABASE_URL` and Supabase project status
+  - Ensure you have network access to the database
+  - Review migration SQL for errors or conflicts
+- **Permission denied errors:**
+  - Verify your service role key and RLS (Row Level Security) policies
+  - Check Supabase dashboard for table permissions
+- **Data not appearing as expected:**
+  - Confirm successful migration and seeding
+  - Check for typos in column names or types
+- **Foreign key constraint errors:**
+  - Ensure referenced records exist before inserting dependent rows
+  - Review schema for correct foreign key definitions
+- **Performance issues:**
+  - Add indexes for slow queries
+  - Consider changing data types for coordinates or travel times if needed
+
+## Cross-References
+- [Production Checklist](PRODUCTION.md)
+- [API Documentation](api-docs.md)
+- [Authentication](auth-docs.md)
+- [Rate Limiting](rate-limit-docs.md)
 
 This documentation provides a comprehensive guide to the database schema in the Meet Me Halfway application, based on the Drizzle schema definitions. 
