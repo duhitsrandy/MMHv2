@@ -14,17 +14,20 @@ import { Button } from "@/components/ui/button"
 import { Loader2, MapPin, Route } from "lucide-react"
 import dynamic from "next/dynamic"
 import "leaflet/dist/leaflet.css"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Terminal } from "lucide-react"
 import { PoiResponse } from "@/types/poi-types"
 import { ActionState } from "@/types"
+import { OsrmRoute } from "@/types/meet-me-halfway-types"
 
 interface MapComponentProps {
-  mainRoute?: any
-  alternateRoute?: any
-  pois?: any[]
+  mainRoute?: OsrmRoute | null
+  alternateRoute?: OsrmRoute | null
+  pois?: PoiResponse[]
   midpoint?: { lat: number; lng: number } | null
   alternateMidpoint?: { lat: number; lng: number } | null
-  startAddress: any
-  endAddress: any
+  startAddress: string
+  endAddress: string
   startLat: string | number
   startLng: string | number
   endLat: string | number
@@ -56,19 +59,6 @@ interface ResultsMapProps {
   }
 }
 
-interface RouteData {
-  geometry: {
-    coordinates: [number, number][]
-    type?: string
-  }
-  duration: number
-  distance: number
-  midpoint?: {
-    lat: number
-    lng: number
-  }
-}
-
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371e3
   const φ1 = lat1 * Math.PI / 180
@@ -84,7 +74,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c
 }
 
-function getMidpoint(route: RouteData | null): { lat: number; lng: number } | null {
+function getMidpoint(route: OsrmRoute | null): { lat: number; lng: number } | null {
   if (!route?.geometry?.coordinates || route.geometry.coordinates.length < 2) return null
 
   const coordinates = route.geometry.coordinates
@@ -113,8 +103,8 @@ function getMidpoint(route: RouteData | null): { lat: number; lng: number } | nu
 }
 
 function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddress }: ResultsMapProps) {
-  const [mainRoute, setMainRoute] = useState<RouteData | null>(null)
-  const [alternateRoute, setAlternateRoute] = useState<RouteData | null>(null)
+  const [mainRoute, setMainRoute] = useState<OsrmRoute | null>(null)
+  const [alternateRoute, setAlternateRoute] = useState<OsrmRoute | null>(null)
   const [mainRoutePois, setMainRoutePois] = useState<PoiResponse[]>([])
   const [alternateRoutePois, setAlternateRoutePois] = useState<PoiResponse[]>([])
   const [currentMidpoint, setCurrentMidpoint] = useState<{ lat: number; lng: number } | null>(null)
@@ -123,11 +113,18 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
   const [initialPois, setInitialPois] = useState<PoiResponse[]>([])
   const [isMapDataLoading, setIsMapDataLoading] = useState(true)
   const [isPoiTravelTimeLoading, setIsPoiTravelTimeLoading] = useState(false)
+  const [routeError, setRouteError] = useState<string | null>(null)
+  const [poiError, setPoiError] = useState<string | null>(null)
+  const [matrixError, setMatrixError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchMapData = async () => {
       setIsMapDataLoading(true)
       setIsPoiTravelTimeLoading(false)
+      setRouteError(null)
+      setPoiError(null)
+      setMatrixError(null)
+
       setCombinedPois([])
       setInitialPois([])
       setMainRoute(null)
@@ -135,8 +132,8 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
       setCurrentMidpoint(null)
       setAlternateMidpoint(null)
 
-      let fetchedMainRoute: RouteData | null = null
-      let fetchedAlternateRoute: RouteData | null = null
+      let fetchedMainRoute: OsrmRoute | null = null
+      let fetchedAlternateRoute: OsrmRoute | null = null
       let mainMidpoint: { lat: number; lng: number } | null = null
       let altMidpoint: { lat: number; lng: number } | null = null
 
@@ -155,6 +152,7 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
           console.log('[MapData Debug] Main Route:', fetchedMainRoute ? 'Exists' : 'null', 'Midpoint:', mainMidpoint)
         } else {
           console.error('[MapData] Failed to fetch main route:', mainRouteRes.message)
+          setRouteError(mainRouteRes.message || "Failed to fetch main route.")
         }
 
         if (alternateRouteRes.isSuccess && alternateRouteRes.data) {
@@ -163,115 +161,145 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
           setAlternateRoute(fetchedAlternateRoute)
           if (altMidpoint) setAlternateMidpoint(altMidpoint)
           console.log('[MapData Debug] Alternate Route:', fetchedAlternateRoute ? 'Exists' : 'null', 'Alt Midpoint:', altMidpoint)
+          if (!fetchedMainRoute) {
+            setRouteError(alternateRouteRes.message || "Failed to fetch alternate route.")
+          }
         } else {
           console.error('[MapData] Failed to fetch alternate route:', alternateRouteRes.message)
+          if (!fetchedMainRoute) {
+            setRouteError(alternateRouteRes.message || "Failed to fetch alternate route.")
+          }
         }
 
-        if (mainMidpoint || altMidpoint) {
-          console.log('[MapData] Fetching initial POIs...')
-          const searchPromises: Promise<ActionState<PoiResponse[]>>[] = []
-          if (mainMidpoint) {
-            console.log('[ResultsMap] Searching POIs around main midpoint:', mainMidpoint)
-            searchPromises.push(searchPoisAction({ lat: mainMidpoint.lat.toString(), lon: mainMidpoint.lng.toString(), radius: 1500 }))
-          } else {
-            searchPromises.push(Promise.resolve({ isSuccess: false, message: "No main midpoint" }))
-          }
-          if (altMidpoint && altMidpoint !== mainMidpoint) {
-            console.log('[ResultsMap] Searching POIs around alternate midpoint:', altMidpoint)
-            searchPromises.push(searchPoisAction({ lat: altMidpoint.lat.toString(), lon: altMidpoint.lng.toString(), radius: 1500 }))
-          } else {
-            searchPromises.push(Promise.resolve({ isSuccess: false, message: "No alternate/distinct midpoint" }))
-          }
+        if (fetchedMainRoute || fetchedAlternateRoute) {
+          mainMidpoint = mainMidpoint || getMidpoint(fetchedAlternateRoute)
+          altMidpoint = altMidpoint || getMidpoint(fetchedMainRoute)
 
-          const [mainPoisResult, altPoisResult] = await Promise.all(searchPromises)
+          if (mainMidpoint || altMidpoint) {
+            console.log('[MapData] Fetching initial POIs...')
+            const searchPromises: Promise<ActionState<PoiResponse[]>>[] = []
+            if (mainMidpoint) {
+              console.log('[ResultsMap] Searching POIs around main midpoint:', mainMidpoint)
+              searchPromises.push(searchPoisAction({ lat: mainMidpoint.lat.toString(), lon: mainMidpoint.lng.toString(), radius: 1500 }))
+            }
+            if (altMidpoint && (!mainMidpoint || (mainMidpoint.lat !== altMidpoint.lat || mainMidpoint.lng !== altMidpoint.lng))) {
+              console.log('[ResultsMap] Searching POIs around alternate midpoint:', altMidpoint)
+              searchPromises.push(searchPoisAction({ lat: altMidpoint.lat.toString(), lon: altMidpoint.lng.toString(), radius: 1500 }))
+            }
 
-          const mainPois = mainPoisResult.isSuccess ? mainPoisResult.data || [] : []
-          const altPois = altPoisResult.isSuccess ? altPoisResult.data || [] : []
-          setMainRoutePois(mainPois)
-          setAlternateRoutePois(altPois)
+            if (searchPromises.length === 0) {
+              console.log('[MapData] No valid midpoints found to search for POIs.')
+              setIsMapDataLoading(false)
+              return;
+            }
 
-          const allPois = [...mainPois, ...altPois]
-          const uniqueInitialPois = allPois.filter((poi, index, self) =>
-            poi.lat && poi.lon && index === self.findIndex((p) => p.osm_id === poi.osm_id)
-          )
-          setInitialPois(uniqueInitialPois)
-          console.log(`[MapData] Initial POIs fetched: ${uniqueInitialPois.length}`)
-          if (uniqueInitialPois.length > 0) {
-            console.log('[MapData Debug] Sample Initial POI:', uniqueInitialPois[0])
-          }
+            const poiResults = await Promise.all(searchPromises)
 
-          setIsMapDataLoading(false)
+            let combinedFetchedPois: PoiResponse[] = []
+            let poiErrorMessage: string | null = null
 
-          if (uniqueInitialPois.length > 0) {
-            setIsPoiTravelTimeLoading(true)
-            console.log('[MapData] Calculating POI travel times using matrix...')
-
-            try {
-              const poiCoords = uniqueInitialPois.map(p => `${p.lon},${p.lat}`)
-              const allCoordinates = [
-                `${startAddress.lng},${startAddress.lat}`,
-                `${endAddress.lng},${endAddress.lat}`,
-                ...poiCoords
-              ].join(';')
-
-              const sources = "0;1"
-              const destinations = uniqueInitialPois.map((_, i) => i + 2).join(';')
-
-              const matrixResult = await getTravelTimeMatrixAction(allCoordinates, sources, destinations)
-              console.log('[MapData Debug] Matrix Result:', matrixResult)
-
-              if (matrixResult.isSuccess && matrixResult.data) {
-                console.log('[MapData] Travel time matrix received.')
-                const { durations, distances } = matrixResult.data
-                console.log('[MapData Debug] Matrix Durations (sample):', durations?.[0]?.slice(0, 5))
-                console.log('[MapData Debug] Matrix Distances (sample):', distances?.[0]?.slice(0, 5))
-
-                const poisWithTravelTime = uniqueInitialPois.map((poi, index) => {
-                  const matrixIndex = index
-                  const travelTimeFromStart = durations?.[0]?.[matrixIndex]
-                  const travelTimeFromEnd = durations?.[1]?.[matrixIndex]
-                  const distanceFromStart = distances?.[0]?.[matrixIndex]
-                  const distanceFromEnd = distances?.[1]?.[matrixIndex]
-                  
-                  const isValidTime = travelTimeFromStart != null && travelTimeFromEnd != null
-
-                  const poiWithTimes = {
-                    ...poi,
-                    distanceFromStart,
-                    distanceFromEnd,
-                    travelTimeFromStart,
-                    travelTimeFromEnd,
-                    travelTimeDifference: isValidTime ? Math.abs(travelTimeFromStart - travelTimeFromEnd) : undefined,
-                    totalTravelTime: isValidTime ? travelTimeFromStart + travelTimeFromEnd : undefined,
-                    isFavorite: false,
-                  }
-                  if (index === 0) {
-                    console.log('[MapData Debug] First POI processed with times:', poiWithTimes)
-                  }
-                  return poiWithTimes
-                })
-                setCombinedPois(poisWithTravelTime)
-                console.log('[MapData] POIs updated with travel times from matrix.')
+            poiResults.forEach((result, index) => {
+              if (result.isSuccess && result.data) {
+                combinedFetchedPois.push(...result.data)
               } else {
-                console.error('[MapData] Failed to calculate travel time matrix:', matrixResult.message)
-                const fallbackPois = uniqueInitialPois.map(p => ({...p, isFavorite: false}))
-                setCombinedPois(fallbackPois)
-                if (fallbackPois.length > 0) {
-                  console.log('[MapData Debug] Setting fallback POIs (sample):', fallbackPois[0])
+                const source = index === 0 && mainMidpoint ? "main midpoint" : "alternate midpoint"
+                console.error(`[MapData] Failed to fetch POIs for ${source}:`, result.message)
+                if (!poiErrorMessage) {
+                  poiErrorMessage = result.message || `Failed to fetch POIs near ${source}.`
                 }
               }
-            } catch (matrixError) {
-              console.error('[MapData] Error during matrix calculation process:', matrixError)
-              const errorFallbackPois = uniqueInitialPois.map(p => ({...p, isFavorite: false}))
-              setCombinedPois(errorFallbackPois)
-              if (errorFallbackPois.length > 0) {
-                console.log('[MapData Debug] Setting error fallback POIs (sample):', errorFallbackPois[0])
+            })
+
+            if (poiErrorMessage) {
+              setPoiError(poiErrorMessage)
+            }
+
+            const uniqueInitialPois = combinedFetchedPois.filter((poi, index, self) =>
+              poi.lat && poi.lon && index === self.findIndex((p) => p.osm_id === poi.osm_id)
+            )
+            setInitialPois(uniqueInitialPois)
+            console.log(`[MapData] Initial POIs fetched: ${uniqueInitialPois.length}`)
+            if (uniqueInitialPois.length > 0) {
+              console.log('[MapData Debug] Sample Initial POI:', uniqueInitialPois[0])
+            }
+
+            setIsMapDataLoading(false)
+
+            if (uniqueInitialPois.length > 0) {
+              setIsPoiTravelTimeLoading(true)
+              console.log('[MapData] Calculating POI travel times using matrix...')
+
+              try {
+                const poiCoords = uniqueInitialPois.map(p => `${p.lon},${p.lat}`)
+                const allCoordinates = [
+                  `${startAddress.lng},${startAddress.lat}`,
+                  `${endAddress.lng},${endAddress.lat}`,
+                  ...poiCoords
+                ].join(';')
+
+                const sources = "0;1"
+                const destinations = uniqueInitialPois.map((_, i) => i + 2).join(';')
+
+                const matrixResult = await getTravelTimeMatrixAction(allCoordinates, sources, destinations)
+                console.log('[MapData Debug] Matrix Result:', matrixResult)
+
+                if (matrixResult.isSuccess && matrixResult.data) {
+                  console.log('[MapData] Travel time matrix received.')
+                  const { durations, distances } = matrixResult.data
+                  console.log('[MapData Debug] Matrix Durations (sample):', durations?.[0]?.slice(0, 5))
+                  console.log('[MapData Debug] Matrix Distances (sample):', distances?.[0]?.slice(0, 5))
+
+                  const poisWithTravelTime = uniqueInitialPois.map((poi, index) => {
+                    const matrixIndex = index
+                    const travelTimeFromStart = durations?.[0]?.[matrixIndex]
+                    const travelTimeFromEnd = durations?.[1]?.[matrixIndex]
+                    const distanceFromStart = distances?.[0]?.[matrixIndex]
+                    const distanceFromEnd = distances?.[1]?.[matrixIndex]
+                    
+                    const isValidTime = travelTimeFromStart != null && travelTimeFromEnd != null
+
+                    const poiWithTimes = {
+                      ...poi,
+                      distanceFromStart,
+                      distanceFromEnd,
+                      travelTimeFromStart,
+                      travelTimeFromEnd,
+                      travelTimeDifference: isValidTime ? Math.abs(travelTimeFromStart - travelTimeFromEnd) : undefined,
+                      totalTravelTime: isValidTime ? travelTimeFromStart + travelTimeFromEnd : undefined,
+                      isFavorite: false,
+                    }
+                    if (index === 0) {
+                      console.log('[MapData Debug] First POI processed with times:', poiWithTimes)
+                    }
+                    return poiWithTimes
+                  })
+                  setCombinedPois(poisWithTravelTime)
+                  console.log('[MapData] POIs updated with travel times from matrix.')
+                } else {
+                  console.error('[MapData] Failed to calculate travel time matrix:', matrixResult.message)
+                  const fallbackPois = uniqueInitialPois.map(p => ({...p, isFavorite: false}))
+                  setCombinedPois(fallbackPois)
+                  setMatrixError(matrixResult.message || "Failed to calculate travel times for POIs.")
+                  if (fallbackPois.length > 0) {
+                    console.log('[MapData Debug] Setting fallback POIs (sample):', fallbackPois[0])
+                  }
+                }
+              } catch (matrixError) {
+                console.error('[MapData] Error during matrix calculation process:', matrixError)
+                const errorFallbackPois = uniqueInitialPois.map(p => ({...p, isFavorite: false}))
+                setCombinedPois(errorFallbackPois)
+                setMatrixError("An unexpected error occurred while calculating travel times.")
+                if (errorFallbackPois.length > 0) {
+                  console.log('[MapData Debug] Setting error fallback POIs (sample):', errorFallbackPois[0])
+                }
+              } finally {
+                setIsPoiTravelTimeLoading(false)
               }
-            } finally {
+            } else {
               setIsPoiTravelTimeLoading(false)
             }
           } else {
-            setIsPoiTravelTimeLoading(false)
+            setIsMapDataLoading(false)
           }
         } else {
           setIsMapDataLoading(false)
@@ -280,6 +308,9 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
         console.error("[MapData] Error fetching map data:", error)
         setIsMapDataLoading(false)
         setIsPoiTravelTimeLoading(false)
+        if (!routeError && !poiError && !matrixError) {
+          setRouteError("An unexpected error occurred while fetching map data.")
+        }
       }
     }
 
@@ -295,6 +326,9 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
     combinedPoisCount: combinedPois.length,
     isMapDataLoading,
     isPoiTravelTimeLoading,
+    routeError,
+    poiError,
+    matrixError,
   })
 
   return {
@@ -306,6 +340,9 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
     combinedPois,
     isMapDataLoading,
     isPoiTravelTimeLoading,
+    routeError,
+    poiError,
+    matrixError,
   }
 }
 
@@ -355,6 +392,9 @@ export default function ResultsMap({
     combinedPois,
     isMapDataLoading,
     isPoiTravelTimeLoading,
+    routeError,
+    poiError,
+    matrixError,
   } = useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddress })
 
   // Memoize MapComponent props
@@ -443,28 +483,52 @@ export default function ResultsMap({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-      <div className="md:col-span-2">
-        <MapComponent {...mapComponentProps} />
-      </div>
-      <div className="md:col-span-1">
-        <Card className="h-[600px] overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between py-3">
-            <CardTitle className="text-lg">Points of Interest</CardTitle>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="show-pois"
-                checked={showPois}
-                onCheckedChange={handleTogglePois}
-                disabled={isMapDataLoading}
-              />
-              <Label htmlFor="show-pois">Show POIs</Label>
-            </div>
-          </CardHeader>
-          <CardContent className="h-[calc(600px-60px)] p-0">
-            <PointsOfInterest {...pointsOfInterestProps} />
-          </CardContent>
-        </Card>
+    <div className="space-y-4">
+      {routeError && (
+        <Alert variant="destructive">
+          <Terminal className="h-4 w-4" />
+          <AlertTitle>Route Error</AlertTitle>
+          <AlertDescription>{routeError}</AlertDescription>
+        </Alert>
+      )}
+      {poiError && (
+        <Alert variant="destructive">
+          <Terminal className="h-4 w-4" />
+          <AlertTitle>Points of Interest Error</AlertTitle>
+          <AlertDescription>{poiError}</AlertDescription>
+        </Alert>
+      )}
+      {matrixError && (
+        <Alert variant="destructive">
+          <Terminal className="h-4 w-4" />
+          <AlertTitle>Travel Time Calculation Error</AlertTitle>
+          <AlertDescription>{matrixError}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="md:col-span-2">
+          <MapComponent {...mapComponentProps} />
+        </div>
+        <div className="md:col-span-1">
+          <Card className="h-[600px] overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between py-3">
+              <CardTitle className="text-lg">Points of Interest</CardTitle>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="show-pois"
+                  checked={showPois}
+                  onCheckedChange={handleTogglePois}
+                  disabled={isMapDataLoading}
+                />
+                <Label htmlFor="show-pois">Show POIs</Label>
+              </div>
+            </CardHeader>
+            <CardContent className="h-[calc(600px-60px)] p-0">
+              <PointsOfInterest {...pointsOfInterestProps} />
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )
