@@ -380,7 +380,6 @@ export default function ResultsMap({
   endAddress
 }: ResultsMapProps) {
   const [isClient, setIsClient] = useState(false)
-  const [showPois, setShowPois] = useState(true)
   const [selectedPoiId, setSelectedPoiId] = useState<string | undefined>(undefined)
 
   const {
@@ -411,8 +410,8 @@ export default function ResultsMap({
     alternateMidpointLng: alternateMidpoint?.lng || 0,
     mainRoute,
     alternateRoute,
-    pois: showPois ? combinedPois : [],
-    showPois,
+    pois: combinedPois,
+    showPois: true,
     showAlternateRoute: !!alternateRoute,
     selectedPoiId,
     onPoiSelect: setSelectedPoiId,
@@ -427,7 +426,6 @@ export default function ResultsMap({
     alternateMidpoint,
     mainRoute,
     alternateRoute,
-    showPois,
     combinedPois,
     selectedPoiId,
   ])
@@ -466,17 +464,12 @@ export default function ResultsMap({
     console.log('State update (ResultsMap):', {
       hasMainRoute: !!mainRoute,
       hasAlternateRoute: !!alternateRoute,
-      showPois,
       initialPoisCount: initialPois.length,
       poisWithTimesCount: combinedPois.length,
       isMapLoading: isMapDataLoading,
       isPoiTimeLoading: isPoiTravelTimeLoading
     })
-  }, [mainRoute, alternateRoute, showPois, initialPois, combinedPois, isMapDataLoading, isPoiTravelTimeLoading])
-
-  const handleTogglePois = () => {
-    setShowPois(!showPois)
-  }
+  }, [mainRoute, alternateRoute, initialPois, combinedPois, isMapDataLoading, isPoiTravelTimeLoading])
 
   if (!isClient) {
     return <div className="flex h-[520px] w-full items-center justify-center rounded-lg bg-gray-100"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
@@ -512,21 +505,7 @@ export default function ResultsMap({
         </div>
         <div className="md:col-span-1">
           <Card className="h-[600px] overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between py-3">
-              <CardTitle className="text-lg">Points of Interest</CardTitle>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="show-pois"
-                  checked={showPois}
-                  onCheckedChange={handleTogglePois}
-                  disabled={isMapDataLoading}
-                />
-                <Label htmlFor="show-pois">Show POIs</Label>
-              </div>
-            </CardHeader>
-            <CardContent className="h-[calc(600px-60px)] p-0">
-              <PointsOfInterest {...pointsOfInterestProps} />
-            </CardContent>
+            <PointsOfInterest {...pointsOfInterestProps} />
           </Card>
         </div>
       </div>
