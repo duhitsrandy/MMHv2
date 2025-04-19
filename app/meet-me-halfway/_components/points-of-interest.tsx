@@ -90,7 +90,9 @@ export default function PointsOfInterest({
   midpointLng = "0"
 }: PointsOfInterestProps) {
   // Debug the full pois prop structure
-  console.log('[PointsOfInterest] Raw pois prop:', JSON.stringify(pois, null, 2));
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[PointsOfInterest] Raw pois prop:', JSON.stringify(pois, null, 2));
+  }
 
   const [poisWithTravelTimes, setPoisWithTravelTimes] = useState<
     PoiWithTravelTimes[]
@@ -113,7 +115,9 @@ export default function PointsOfInterest({
         try {
           setFavorites(JSON.parse(savedFavorites))
         } catch (e) {
-          console.error("Error loading favorites:", e)
+          if (process.env.NODE_ENV === 'development') {
+            console.error("Error loading favorites:", e)
+          }
         }
       }
     }
@@ -129,7 +133,9 @@ export default function PointsOfInterest({
   // Combined effect to handle POI updates and travel time calculations
   useEffect(() => {
     if (!pois.length) {
-      console.log('[PointsOfInterest] No POIs provided');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[PointsOfInterest] No POIs provided');
+      }
       setPoisWithTravelTimes([])
       return
     }
@@ -137,19 +143,23 @@ export default function PointsOfInterest({
     setPoisWithTravelTimes([]) // Reset before loading new ones
 
     try {
-      console.log('[PointsOfInterest] Processing POIs:', pois);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[PointsOfInterest] Processing POIs:', pois);
+      }
       // Use the pre-calculated travel times from the POIs
       const updatedPois = pois.map(poi => {
         const poiId = poi.osm_id || `${poi.lat}-${poi.lon}`;
-        console.log('[PointsOfInterest] Processing POI:', {
-          name: poi.name,
-          id: poiId,
-          travelTimeFromStart: poi.travelTimeFromStart,
-          travelTimeFromEnd: poi.travelTimeFromEnd,
-          totalTravelTime: poi.totalTravelTime,
-          distanceFromStart: poi.distanceFromStart,
-          distanceFromEnd: poi.distanceFromEnd
-        });
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[PointsOfInterest] Processing POI:', {
+            name: poi.name,
+            id: poiId,
+            travelTimeFromStart: poi.travelTimeFromStart,
+            travelTimeFromEnd: poi.travelTimeFromEnd,
+            totalTravelTime: poi.totalTravelTime,
+            distanceFromStart: poi.distanceFromStart,
+            distanceFromEnd: poi.distanceFromEnd
+          });
+        }
 
         // Ensure all required fields are present
         const updatedPoi = {
@@ -164,14 +174,20 @@ export default function PointsOfInterest({
           travelTimeDifference: poi.travelTimeDifference || undefined
         };
 
-        console.log('[PointsOfInterest] Updated POI:', updatedPoi);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[PointsOfInterest] Updated POI:', updatedPoi);
+        }
         return updatedPoi;
       });
 
-      console.log('[PointsOfInterest] Updated POIs:', updatedPois);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[PointsOfInterest] Updated POIs:', updatedPois);
+      }
       setPoisWithTravelTimes(updatedPois);
     } catch (error) {
-      console.error("[PointsOfInterest] Error processing POIs:", error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error("[PointsOfInterest] Error processing POIs:", error);
+      }
     }
   }, [pois, favorites]);
 
@@ -189,7 +205,9 @@ export default function PointsOfInterest({
   };
 
   const sortedAndFilteredPois = useMemo(() => {
-    console.log('[PointsOfInterest] Sorting and filtering POIs with travel times:', poisWithTravelTimes);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[PointsOfInterest] Sorting and filtering POIs with travel times:', poisWithTravelTimes);
+    }
     
     // Apply category filter (from tabs)
     let filtered = [...poisWithTravelTimes];
@@ -250,7 +268,9 @@ export default function PointsOfInterest({
       filtered = filtered.filter(poi => poi.isFavorite);
     }
     
-    console.log('[PointsOfInterest] Filtered POIs:', filtered);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[PointsOfInterest] Filtered POIs:', filtered);
+    }
     
     // Sort by total travel time
     const sorted = filtered.sort((a, b) => {
@@ -259,7 +279,9 @@ export default function PointsOfInterest({
       return aTime - bTime;
     });
     
-    console.log('[PointsOfInterest] Sorted POIs:', sorted);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[PointsOfInterest] Sorted POIs:', sorted);
+    }
     return sorted;
   }, [poisWithTravelTimes, activeTab, showOnlyFavorites]);
 
@@ -269,19 +291,27 @@ export default function PointsOfInterest({
   }, [poisWithTravelTimes]);
 
   const formatDuration = (seconds?: number): string => {
-    console.log('[formatDuration] Input seconds:', seconds);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[formatDuration] Input seconds:', seconds);
+    }
     if (seconds === undefined || seconds === null) {
-      console.log('[formatDuration] Returning N/A for undefined seconds');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[formatDuration] Returning N/A for undefined seconds');
+      }
       return "N/A";
     }
 
     // Convert seconds to minutes and round to nearest minute
     const minutes = Math.round(seconds / 60);
-    console.log('[formatDuration] Converted to minutes:', minutes);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[formatDuration] Converted to minutes:', minutes);
+    }
 
     const hours = Math.floor(minutes / 60);
     const mins = Math.round(minutes % 60);
-    console.log('[formatDuration] Calculated hours:', hours, 'mins:', mins);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[formatDuration] Calculated hours:', hours, 'mins:', mins);
+    }
 
     if (hours > 0) {
       return `${hours}h ${mins}m`;
@@ -350,15 +380,17 @@ export default function PointsOfInterest({
   // Add debugging for POI data
   useEffect(() => {
     if (!isLoading && sortedAndFilteredPois.length > 0) {
-      console.log('[PointsOfInterest] POI data for rendering:', sortedAndFilteredPois.map(poi => ({
-        name: poi.name,
-        travelTimeFromStart: poi.travelTimeFromStart,
-        travelTimeFromEnd: poi.travelTimeFromEnd,
-        distanceFromStart: poi.distanceFromStart,
-        distanceFromEnd: poi.distanceFromEnd,
-        totalTravelTime: poi.totalTravelTime,
-        travelTimeDifference: poi.travelTimeDifference
-      })));
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[PointsOfInterest] POI data for rendering:', sortedAndFilteredPois.map(poi => ({
+          name: poi.name,
+          travelTimeFromStart: poi.travelTimeFromStart,
+          travelTimeFromEnd: poi.travelTimeFromEnd,
+          distanceFromStart: poi.distanceFromStart,
+          distanceFromEnd: poi.distanceFromEnd,
+          totalTravelTime: poi.totalTravelTime,
+          travelTimeDifference: poi.travelTimeDifference
+        })));
+      }
     }
   }, [sortedAndFilteredPois, isLoading]);
 

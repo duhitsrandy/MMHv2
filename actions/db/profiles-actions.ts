@@ -14,12 +14,22 @@ import {
 } from "@/db/schema/profiles-schema"
 import { ActionState } from "@/types"
 import { eq } from "drizzle-orm"
+import { auth } from "@clerk/nextjs/server"
 
 export async function createProfileAction(
-  data: InsertProfile
+  data: Omit<InsertProfile, 'userId' | 'createdAt' | 'updatedAt' | 'id' | 'stripeCustomerId' | 'stripeSubscriptionId' | 'stripePriceId' | 'stripeCurrentPeriodEnd'>
 ): Promise<ActionState<SelectProfile>> {
+  const { userId } = auth();
+  if (!userId) {
+    return { isSuccess: false, message: "Error: User is not authenticated." };
+  }
+
   try {
-    const [newProfile] = await db.insert(profilesTable).values(data).returning()
+    const profileToInsert: InsertProfile = {
+      ...data,
+      userId: userId,
+    };
+    const [newProfile] = await db.insert(profilesTable).values(profileToInsert).returning()
     return {
       isSuccess: true,
       message: "Profile created successfully",
@@ -27,16 +37,25 @@ export async function createProfileAction(
     }
   } catch (error) {
     console.error("Error creating profile:", error)
-    return { isSuccess: false, message: "Failed to create profile" }
+    return { isSuccess: false, message: "An internal error occurred while creating the profile." }
   }
 }
 
 export async function getProfileByUserIdAction(
-  userId: string
+  targetUserId: string
 ): Promise<ActionState<SelectProfile>> {
+  const { userId: authenticatedUserId } = auth();
+  if (!authenticatedUserId) {
+    return { isSuccess: false, message: "Error: User is not authenticated." };
+  }
+
+  if (authenticatedUserId !== targetUserId) {
+    return { isSuccess: false, message: "Error: Unauthorized to access this profile." };
+  }
+
   try {
     const profile = await db.query.profiles.findFirst({
-      where: eq(profilesTable.userId, userId)
+      where: eq(profilesTable.userId, targetUserId)
     })
     if (!profile) {
       return { isSuccess: false, message: "Profile not found" }
@@ -48,20 +67,29 @@ export async function getProfileByUserIdAction(
       data: profile
     }
   } catch (error) {
-    console.error("Error getting profile by user id", error)
-    return { isSuccess: false, message: "Failed to get profile" }
+    console.error("Error getting profile by user id:", error)
+    return { isSuccess: false, message: "An internal error occurred while retrieving the profile." }
   }
 }
 
 export async function updateProfileAction(
-  userId: string,
-  data: Partial<InsertProfile>
+  targetUserId: string,
+  data: Partial<Omit<InsertProfile, 'userId' | 'createdAt' | 'updatedAt' | 'id' | 'stripeCustomerId' | 'stripeSubscriptionId'>>
 ): Promise<ActionState<SelectProfile>> {
+  const { userId: authenticatedUserId } = auth();
+  if (!authenticatedUserId) {
+    return { isSuccess: false, message: "Error: User is not authenticated." };
+  }
+
+  if (authenticatedUserId !== targetUserId) {
+    return { isSuccess: false, message: "Error: Unauthorized to update this profile." };
+  }
+
   try {
     const [updatedProfile] = await db
       .update(profilesTable)
       .set(data)
-      .where(eq(profilesTable.userId, userId))
+      .where(eq(profilesTable.userId, targetUserId))
       .returning()
 
     if (!updatedProfile) {
@@ -75,7 +103,7 @@ export async function updateProfileAction(
     }
   } catch (error) {
     console.error("Error updating profile:", error)
-    return { isSuccess: false, message: "Failed to update profile" }
+    return { isSuccess: false, message: "An internal error occurred while updating the profile." }
   }
 }
 
@@ -106,16 +134,26 @@ export async function updateProfileByStripeCustomerIdAction(
     console.error("Error updating profile by stripe customer ID:", error)
     return {
       isSuccess: false,
-      message: "Failed to update profile by Stripe customer ID"
+      message: "An internal error occurred while updating the profile via Stripe ID."
     }
   }
 }
 
 export async function deleteProfileAction(
-  userId: string
+  targetUserId: string
 ): Promise<ActionState<void>> {
+  const { userId: authenticatedUserId } = auth();
+  if (!authenticatedUserId) {
+    return { isSuccess: false, message: "Error: User is not authenticated." };
+  }
+
+  if (authenticatedUserId !== targetUserId) {
+    return { isSuccess: false, message: "Error: Unauthorized to delete this profile." };
+  }
+
   try {
-    await db.delete(profilesTable).where(eq(profilesTable.userId, userId))
+    const result = await db.delete(profilesTable).where(eq(profilesTable.userId, targetUserId));
+
     return {
       isSuccess: true,
       message: "Profile deleted successfully",
@@ -123,6 +161,6 @@ export async function deleteProfileAction(
     }
   } catch (error) {
     console.error("Error deleting profile:", error)
-    return { isSuccess: false, message: "Failed to delete profile" }
+    return { isSuccess: false, message: "An internal error occurred while deleting the profile." }
   }
 }

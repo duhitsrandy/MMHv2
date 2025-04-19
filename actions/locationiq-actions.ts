@@ -2,6 +2,7 @@
 
 import { ActionState } from "@/types"
 import { PoiResponse } from "@/types/poi-types"
+import { OsrmRoute } from "@/types/meet-me-halfway-types"
 import { rateLimit } from "@/lib/rate-limit"
 import { z } from 'zod';
 import {
@@ -365,7 +366,7 @@ export async function searchPoisAction(
         const distanceB = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(b.lat), parseFloat(b.lon));
         return distanceA - distanceB;
       })
-      .slice(0, 12); // Increased from 8 to 12 POIs per route
+      .slice(0, 20); // Increase limit to 20 POIs
     
     console.log(`[POI Search] Returning ${sortedPois.length} sorted POIs:`, {
       types: sortedPois.reduce((acc: any, poi: PoiResponse) => {
@@ -425,7 +426,7 @@ export async function getRouteAction(
     endLat: string;
     endLon: string;
   }
-): Promise<ActionState<any>> {
+): Promise<ActionState<OsrmRoute>> {
 
   // --- Validation Start ---
   const validationResult = RouteCoordinatesSchema.safeParse(params);
@@ -483,7 +484,7 @@ export async function getRouteAction(
     // 50 km/h = 13.89 m/s
     const estimatedDuration = directDistance / 13.89;
     
-    const fallbackRoute = {
+    const fallbackRoute: ActionState<OsrmRoute> = {
       isSuccess: true as const,
       message: "Route estimated (API error)",
       data: {
@@ -524,7 +525,7 @@ export async function getRouteAction(
     }
   }
 
-  const route = {
+  const route: ActionState<OsrmRoute> = {
     isSuccess: true as const,
     message: "Route calculated successfully",
     data: {
@@ -728,7 +729,7 @@ export async function getAlternateRouteAction(
     endLat: string;
     endLon: string;
   }
-): Promise<ActionState<any>> {
+): Promise<ActionState<OsrmRoute>> {
 
   // --- Validation Start ---
   const validationResult = RouteCoordinatesSchema.safeParse(params);
@@ -747,16 +748,6 @@ export async function getAlternateRouteAction(
   const profile = "driving";
 
   try {
-    // Define route type
-    interface RouteData {
-      distance: number;
-      duration: number;
-      geometry: {
-        coordinates: [number, number][];
-        type: string;
-      };
-    }
-
     // Request route with up to 2 alternatives using OSRM
     const url = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson&alternatives=3`
 
@@ -773,16 +764,17 @@ export async function getAlternateRouteAction(
       return createFallbackRoute(startLat, startLon, endLat, endLon);
     }
 
-    const mainRoute = data.routes[0] as RouteData;
-    const potentialAlternatives = (data.routes.slice(1) as RouteData[]) || [];
+    // Cast response routes to the correct type
+    const mainRoute = data.routes[0] as OsrmRoute;
+    const potentialAlternatives = (data.routes.slice(1) as OsrmRoute[]) || [];
 
     // Filter for reasonable alternatives
-    const reasonableAlternatives = potentialAlternatives.filter((route: RouteData) => 
+    const reasonableAlternatives = potentialAlternatives.filter((route: OsrmRoute) => 
       route.distance <= mainRoute.distance * 1.4 && // Max 40% longer distance
       route.duration <= mainRoute.duration * 1.5   // Max 50% longer duration
     );
 
-    let selectedAlternative: RouteData | null = null;
+    let selectedAlternative: OsrmRoute | null = null;
 
     if (reasonableAlternatives.length === 0) {
       console.log("No reasonable alternatives found. Using fallback.");
@@ -840,7 +832,7 @@ export async function getAlternateRouteAction(
 }
 
 // Helper function to create a fallback route
-function createFallbackRoute(startLat: string, startLon: string, endLat: string, endLon: string): ActionState<any> {
+function createFallbackRoute(startLat: string, startLon: string, endLat: string, endLon: string): ActionState<OsrmRoute> {
   try {
     const directDistance = calculateDistance(
       parseFloat(startLat), parseFloat(startLon),
@@ -879,7 +871,8 @@ function createFallbackRoute(startLat: string, startLon: string, endLat: string,
   } catch (fallbackError) {
     return { 
       isSuccess: false as const, 
-      message: "Failed to calculate alternate route and fallback also failed" 
+      message: "Failed to calculate alternate route and fallback also failed",
+      data: undefined // Or provide a default empty route structure if needed downstream
     }
   }
 }

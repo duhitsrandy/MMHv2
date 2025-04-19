@@ -19,4 +19,4 @@ export const todosTable = pgTable("todos", {
 })
 
 export type InsertTodo = typeof todosTable.$inferInsert
-export type SelectTodo = typeof todosTable.$inferSelect
+export type SelectTodo = typeof todosTable.$inferSelect 

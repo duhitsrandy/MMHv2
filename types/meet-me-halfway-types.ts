@@ -58,6 +58,15 @@ export interface GeocodingResponse {
   display_name: string
 }
 
+export interface OsrmRoute {
+  distance: number;
+  duration: number;
+  geometry: {
+    coordinates: [number, number][];
+    type: "LineString";
+  };
+}
+
 export interface RouteResponse {
   geometry: {
     coordinates: [number, number][]
