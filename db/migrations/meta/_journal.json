@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1725104620592,
-      "tag": "0000_nostalgic_mauler",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1741789099650,
-      "tag": "0001_eager_mesmero",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1744498070150,
-      "tag": "0002_shiny_luke_cage",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1745082220510,
-      "tag": "0003_equal_giant_girl",
+      "when": 1745172505719,
+      "tag": "0000_melodic_supreme_intelligence",
       "breakpoints": true
     }
   ]

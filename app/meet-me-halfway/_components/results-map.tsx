@@ -176,15 +176,16 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
           altMidpoint = altMidpoint || getMidpoint(fetchedMainRoute)
 
           if (mainMidpoint || altMidpoint) {
-            console.log('[MapData] Fetching initial POIs...')
+            console.log('[MapData] Fetching initial POIs with radius 2000m...');
+            const searchRadius = 2000;
             const searchPromises: Promise<ActionState<PoiResponse[]>>[] = []
             if (mainMidpoint) {
               console.log('[ResultsMap] Searching POIs around main midpoint:', mainMidpoint)
-              searchPromises.push(searchPoisAction({ lat: mainMidpoint.lat.toString(), lon: mainMidpoint.lng.toString(), radius: 1500 }))
+              searchPromises.push(searchPoisAction({ lat: mainMidpoint.lat.toString(), lon: mainMidpoint.lng.toString(), radius: searchRadius }))
             }
             if (altMidpoint && (!mainMidpoint || (mainMidpoint.lat !== altMidpoint.lat || mainMidpoint.lng !== altMidpoint.lng))) {
               console.log('[ResultsMap] Searching POIs around alternate midpoint:', altMidpoint)
-              searchPromises.push(searchPoisAction({ lat: altMidpoint.lat.toString(), lon: altMidpoint.lng.toString(), radius: 1500 }))
+              searchPromises.push(searchPoisAction({ lat: altMidpoint.lat.toString(), lon: altMidpoint.lng.toString(), radius: searchRadius }))
             }
 
             if (searchPromises.length === 0) {
@@ -196,7 +197,7 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
             const poiResults = await Promise.all(searchPromises)
 
             let combinedFetchedPois: PoiResponse[] = []
-            let poiErrorMessage: string | null = null
+            let poiErrorMessage: string | null = null // Keep track of the first error
 
             poiResults.forEach((result, index) => {
               if (result.isSuccess && result.data) {
@@ -204,30 +205,35 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
               } else {
                 const source = index === 0 && mainMidpoint ? "main midpoint" : "alternate midpoint"
                 console.error(`[MapData] Failed to fetch POIs for ${source}:`, result.message)
-                if (!poiErrorMessage) {
+                if (!poiErrorMessage) { // Only store the first error encountered
                   poiErrorMessage = result.message || `Failed to fetch POIs near ${source}.`
                 }
               }
             })
 
-            if (poiErrorMessage) {
-              setPoiError(poiErrorMessage)
-            }
-
-            const uniqueInitialPois = combinedFetchedPois.filter((poi, index, self) =>
+            // Initial processing (now the only processing step)
+            const uniqueInitialPoisRaw = combinedFetchedPois.filter((poi, index, self) =>
               poi.lat && poi.lon && index === self.findIndex((p) => p.osm_id === poi.osm_id)
             )
-            setInitialPois(uniqueInitialPois)
-            console.log(`[MapData] Initial POIs fetched: ${uniqueInitialPois.length}`)
-            if (uniqueInitialPois.length > 0) {
-              console.log('[MapData Debug] Sample Initial POI:', uniqueInitialPois[0])
+            const uniqueInitialPois = uniqueInitialPoisRaw.filter(poi => poi.name && poi.name.trim() !== '' && poi.name !== 'Unnamed Location');
+            
+            console.log(`[MapData] Search (2000m): Fetched ${uniqueInitialPoisRaw.length}, Named POIs: ${uniqueInitialPois.length}`)
+
+            // Set POI error state if an error occurred and no POIs were found
+            if (poiErrorMessage && uniqueInitialPois.length === 0) {
+               setPoiError(poiErrorMessage);
+            } else {
+               setPoiError(null); // Clear any previous error if we found POIs
             }
 
-            setIsMapDataLoading(false)
+            setInitialPois(uniqueInitialPois); // Update state with final list
+            
+            setIsMapDataLoading(false); // POI fetching complete
 
+            // Proceed with matrix calculation only if we have POIs
             if (uniqueInitialPois.length > 0) {
-              setIsPoiTravelTimeLoading(true)
-              console.log('[MapData] Calculating POI travel times using matrix...')
+              setIsPoiTravelTimeLoading(true);
+              console.log('[MapData] Calculating POI travel times using matrix...');
 
               try {
                 const poiCoords = uniqueInitialPois.map(p => `${p.lon},${p.lat}`)
@@ -273,10 +279,16 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
                     }
                     return poiWithTimes
                   })
-                  setCombinedPois(poisWithTravelTime)
-                  console.log('[MapData] POIs updated with travel times from matrix.')
+                  // Filter out POIs where travel time couldn't be calculated (null/undefined)
+                  const validPoisWithTravelTime = poisWithTravelTime.filter(
+                    p => p.travelTimeFromStart != null && p.travelTimeFromEnd != null
+                  );
+
+                  setCombinedPois(validPoisWithTravelTime)
+                  console.log(`[MapData] POIs updated with travel times: ${validPoisWithTravelTime.length} valid entries.`)
                 } else {
                   console.error('[MapData] Failed to calculate travel time matrix:', matrixResult.message)
+                  // If matrix fails, still use the uniqueInitialPois list but without times
                   const fallbackPois = uniqueInitialPois.map(p => ({...p, isFavorite: false}))
                   setCombinedPois(fallbackPois)
                   setMatrixError(matrixResult.message || "Failed to calculate travel times for POIs.")
@@ -296,7 +308,9 @@ function useMapData({ startLat, startLng, endLat, endLng, startAddress, endAddre
                 setIsPoiTravelTimeLoading(false)
               }
             } else {
+              // Ensure loading state is false if no POIs were found even after potential retry
               setIsPoiTravelTimeLoading(false)
+              setCombinedPois([]) // Ensure combined POIs is empty
             }
           } else {
             setIsMapDataLoading(false)
