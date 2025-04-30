@@ -2,7 +2,7 @@
 
 import { ActionState } from "@/types"
 import { PoiResponse } from "@/types/poi-types"
-import { OsrmRoute } from "@/types/meet-me-halfway-types"
+import { OsrmRoute as OrsRoute } from "@/types/meet-me-halfway-types"
 import { rateLimit } from "@/lib/rate-limit"
 import { Redis } from '@upstash/redis'
 import { z } from 'zod';
@@ -13,7 +13,8 @@ import {
 } from '@/lib/schemas';
 import { formatZodError } from '@/lib/utils';
 import {
-  OSRM_API_BASE,
+  ORS_API_BASE,
+  ORS_API_KEY_ENV_VAR,
   OVERPASS_API_URL,
   LOCATIONIQ_API_BASE,
   NOMINATIM_API_BASE,
@@ -573,21 +574,34 @@ function calculateViewbox(lat: string, lon: string, radiusKm: number): string {
   return `${minLon},${minLat},${maxLon},${maxLat}`;
 }
 
+// Helper function to parse ORS Directions GeoJSON response
+function parseOrsRouteResponse(feature: any): OrsRoute | null {
+  if (!feature?.properties?.summary?.distance || 
+      !feature?.properties?.summary?.duration || 
+      !feature?.geometry?.coordinates) {
+    console.error("[ORS Parse] Invalid route feature structure:", feature);
+    return null;
+  }
+  return {
+    distance: feature.properties.summary.distance, // meters
+    duration: feature.properties.summary.duration, // seconds
+    geometry: feature.geometry // GeoJSON geometry object
+  };
+}
+
 export async function getRouteAction(
-  // Combine parameters into an object
   params: {
     startLat: string;
     startLon: string;
     endLat: string;
     endLon: string;
   }
-): Promise<ActionState<OsrmRoute>> {
+): Promise<ActionState<OrsRoute>> {
   const startTime = Date.now();
   const { userId } = auth();
-  let result: ActionState<OsrmRoute> | null = null;
+  let result: ActionState<OrsRoute> | null = null;
   let errorMsg: string | undefined = undefined;
   let status = 500; // Default status
-  // --> Variables to capture success data
   let capturedRouteDistance: number | undefined = undefined;
   let capturedRouteDuration: number | undefined = undefined;
   let capturedUsedFallback: boolean = false;
@@ -606,167 +620,207 @@ export async function getRouteAction(
     const { startLat, startLon, endLat, endLon } = validationResult.data;
     // --- Validation End ---
 
-    console.log(`[Route Calculation] Calculating route from (${startLat},${startLon}) to (${endLat},${endLon})`);
-    
-    // Validate coordinates
-    if (!startLat || !startLon || !endLat || !endLon) {
-      console.error('[Route Calculation] Missing coordinates');
-      return {
-        isSuccess: false as const,
-        message: "Missing coordinates for route calculation"
-      }
-    }
-    
-    // Ensure coordinates are valid numbers
-    const coords = [
-      parseFloat(startLat), parseFloat(startLon),
-      parseFloat(endLat), parseFloat(endLon)
-    ];
-    
-    if (coords.some(isNaN)) {
-      console.error('[Route Calculation] Invalid coordinates:', coords);
-      return {
-        isSuccess: false as const,
-        message: "Invalid coordinates for route calculation"
-      }
-    }
-    
-    // Use OSRM base URL from constants
-    const url = `${OSRM_API_BASE}/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`
-    console.log('[Route Calculation] Requesting route from OSRM:', url);
+    console.log(`[ORS Route] Calculating route from (${startLat},${startLon}) to (${endLat},${endLon})`);
 
-    const routeCacheKey = `route_${startLat}_${startLon}_${endLat}_${endLon}`;
-    const osrmTimeoutMs = 30000; // 30 seconds timeout for OSRM
-
-    // --- Main Logic Try Block Starts Here ---
-    try {
-      const response = await rateLimitedFetch(
-        url,
-        undefined, // No specific options needed beyond default headers
-        3, // Default retries
-        routeCacheKey, // Cache key
-        osrmTimeoutMs // OSRM Timeout
-      );
-      status = response.status; // Capture actual API status
-      console.log('OSRM API response status:', status);
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Could not read error body');
-        console.warn(`[Route Calculation] OSRM API error ${response.status} (${response.statusText}): ${errorText}. Using fallback route data.`);
-        
-        // Return a fallback route with estimated data
-        const directDistance = calculateDistance(
-          parseFloat(startLat), parseFloat(startLon),
-          parseFloat(endLat), parseFloat(endLon)
-        );
-        
-        // Estimate duration based on distance (assuming average speed of 50 km/h)
-        // 50 km/h = 13.89 m/s
-        const estimatedDuration = directDistance / 13.89;
-        
-        const fallbackRoute: ActionState<OsrmRoute> = {
-          isSuccess: true as const,
-          message: "Route estimated (API error)",
-          data: {
-            distance: directDistance,
-            duration: estimatedDuration,
-            geometry: {
-              coordinates: [
-                [parseFloat(startLon), parseFloat(startLat)],
-                [parseFloat(endLon), parseFloat(endLat)]
-              ],
-              type: "LineString"
-            }
-          }
-        };
-        
-        console.log('[Route Calculation] Returning fallback route:', fallbackRoute);
-        // ---> Capture fallback data
-        capturedRouteDistance = fallbackRoute.data?.distance;
-        capturedRouteDuration = fallbackRoute.data?.duration;
-        capturedUsedFallback = true;
-        status = 200; // Set status to 200 because we provide fallback data
-        return fallbackRoute;
-      }
-
-      const data = await response.json()
-      console.log('[Route Calculation] OSRM response:', data);
-      
-      if (!data || !data.routes || data.routes.length === 0) {
-        console.error('[Route Calculation] No route found in OSRM response');
-        return {
-          isSuccess: false as const,
-          message: "No route found between the provided locations"
-        }
-      }
-
-      // Ensure the route data has the correct structure
-      const routeData = data.routes[0];
-      if (!routeData.distance || !routeData.duration) {
-        console.error('[Route Calculation] Route data missing required fields:', routeData);
-        return {
-          isSuccess: false as const,
-          message: "Route data is incomplete"
-        }
-      }
-
-      // ---> Capture success data here
-      capturedRouteDistance = routeData.distance;
-      capturedRouteDuration = routeData.duration;
-      const route: ActionState<OsrmRoute> = {
-        isSuccess: true as const,
-        message: "Route calculated successfully",
-        data: {
-          distance: routeData.distance,
-          duration: routeData.duration,
-          geometry: routeData.geometry
-        }
-      };
-      
-      console.log('[Route Calculation] Returning calculated route:', route);
-      status = 200;
-      return route;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        console.error("[Route Calculation] Search timed out after 30 seconds");
-        errorMsg = "Route search timed out after 30 seconds";
-        status = 504; // Timeout
-        console.error("[Route Calculation] " + errorMsg);
-        result = { isSuccess: false, message: errorMsg, data: undefined };
-        return result;
-      }
-      
-      console.error("[Route Calculation] Error:", error);
-      errorMsg = error instanceof Error ? error.message : "Failed to search for route";
-      status = 500; // General fetch/processing error
-      result = { isSuccess: false, message: errorMsg, data: undefined };
+    const apiKey = process.env[ORS_API_KEY_ENV_VAR];
+    if (!apiKey) {
+      console.error('[ORS Route] ORS API key is missing');
+      errorMsg = "OpenRouteService API key is not configured";
+      status = 500;
+      result = { isSuccess: false, message: errorMsg };
       return result;
     }
-    // --- Main Logic Try Block Ends Here ---
 
-  } catch (outerError) { // Catch outer errors (validation, coord parsing)
+    // --- Use POST Request for ORS Directions ---
+    const url = `${ORS_API_BASE}/v2/directions/driving-car/geojson`; // Endpoint URL
+    const requestBody = {
+      coordinates: [
+        [parseFloat(startLon), parseFloat(startLat)], // ORS expects [lon, lat]
+        [parseFloat(endLon), parseFloat(endLat)]
+      ],
+      instructions: false,
+      // Add other parameters if needed, e.g., preference: 'fastest'
+    };
+    console.log('[ORS Route] Requesting route from ORS (POST):', url);
+    // console.log('[ORS Route] Request Body:', JSON.stringify(requestBody)); // Avoid logging unless needed
+
+    const routeCacheKey = `ors_route_${startLat}_${startLon}_${endLat}_${endLon}`;
+    const orsTimeoutMs = 30000;
+
+    try {
+      // Use POST method and Authorization header
+      const response = await fetch(url, {
+        method: 'POST', 
+        headers: {
+          'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
+          'Content-Type': 'application/json',
+          'Authorization': apiKey, // API key in header
+          'User-Agent': DEFAULT_USER_AGENT,
+        },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(orsTimeoutMs) // Use built-in timeout
+      });
+
+      status = response.status; // Capture actual API status
+      console.log('[ORS Route] ORS API response status:', status);
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => 'Could not read error body');
+        let orsErrorMessage = `ORS Directions API error: ${response.statusText}`;
+        try {
+          const errorJson = JSON.parse(errorBody);
+          // Try to extract message from ORS error structure
+          orsErrorMessage = errorJson?.error?.message || orsErrorMessage;
+        } catch { /* Ignore JSON parsing error */ }
+
+        console.warn(`[ORS Route] ORS API error ${status} (${orsErrorMessage}). Using fallback. Body: ${errorBody}`);
+        errorMsg = `ORS API error ${status}. Using fallback.`;
+        result = createFallbackRoute(startLat, startLon, endLat, endLon);
+        capturedUsedFallback = true;
+        status = 200; // Fallback is considered success
+        return result;
+      }
+
+      const data = await response.json(); // Expecting GeoJSON
+      // console.log('[ORS Route] ORS response:', data);
+
+      if (!data || !data.features || data.features.length === 0) {
+        console.error('[ORS Route] No route features found in ORS response');
+        errorMsg = "No route found between the provided locations";
+        status = 404; // Not found
+        result = { isSuccess: false, message: errorMsg };
+        return result;
+      }
+
+      const parsedRoute = parseOrsRouteResponse(data.features[0]);
+
+      if (!parsedRoute) {
+        console.error('[ORS Route] Failed to parse main route data from ORS response');
+        errorMsg = "Route data from ORS is incomplete or invalid";
+        status = 500;
+        result = { isSuccess: false, message: errorMsg };
+        return result;
+      }
+
+      capturedRouteDistance = parsedRoute.distance;
+      capturedRouteDuration = parsedRoute.duration;
+      result = {
+        isSuccess: true as const,
+        message: "Route calculated successfully via ORS",
+        data: parsedRoute
+      };
+
+      console.log('[ORS Route] Returning calculated route:', result.data.distance, result.data.duration);
+      status = 200;
+      return result;
+
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        errorMsg = `ORS Directions request timed out after ${orsTimeoutMs}ms. Using fallback.`;
+        status = 504; // Gateway Timeout
+        console.error(`[ORS Route] ${errorMsg}`);
+        result = createFallbackRoute(startLat, startLon, endLat, endLon);
+        capturedUsedFallback = true;
+        status = 200; // Fallback success
+        return result;
+      }
+
+      console.error("[ORS Route] Fetch/Processing Error:", error);
+      errorMsg = error instanceof Error ? error.message : "Failed to fetch route from ORS";
+      status = 500; // General fetch/processing error
+      console.warn(`[ORS Route] Error (${errorMsg}). Using fallback.`);
+      result = createFallbackRoute(startLat, startLon, endLat, endLon);
+      capturedUsedFallback = true;
+      status = 200; // Fallback success
+      return result;
+    }
+
+  } catch (outerError) {
     console.error("Outer error in getRouteAction:", outerError);
-    // errorMsg and status should already be set by the specific checks
-    // Ensure result is set if somehow missed
     if (!result) {
-      result = { isSuccess: false, message: errorMsg || "Unexpected error getting route" };
+      result = { isSuccess: false, message: errorMsg || "Unexpected error getting ORS route" };
     }
     return result;
   } finally {
     const duration = Date.now() - startTime;
+    const finalDistance = result?.isSuccess ? result.data?.distance : capturedRouteDistance;
+    const finalDuration = result?.isSuccess ? result.data?.duration : capturedRouteDuration;
     await trackApiEvent({
       endpoint: 'getRouteAction',
       method: 'ACTION',
-      status: result?.isSuccess ? status : (status !== 500 ? status : (result?.message?.includes('timed out') ? 504 : (result?.message?.includes('Invalid input') ? 400 : 500))),
+      status: result?.isSuccess ? status : (status === 200 ? 500 : status),
       duration: duration,
-      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown route action error'),
+      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown ORS route action error'),
       userId: userId ?? 'anonymous',
-      // ---> Use captured variables
-      routeDistance: capturedRouteDistance,
-      routeDuration: capturedRouteDuration,
-      usedFallback: capturedUsedFallback,
+      routeDistance: finalDistance,
+      routeDuration: finalDuration,
+      usedFallback: capturedUsedFallback || (result?.isSuccess === false && !!result?.message?.includes('fallback')),
+      serviceUsed: 'OpenRouteService'
     });
   }
+}
+
+// Modified getMidpoint to be more robust for GeoJSON structure
+function getMidpoint(route: OrsRoute): { lat: number; lng: number } | null {
+  // Use route directly which is now OrsRoute type
+  if (!route || !route.geometry || !route.geometry.coordinates || !route.distance) {
+      console.warn('[getMidpoint] Invalid route object passed:', route);
+      return null;
+  }
+
+  const coordinates = route.geometry.coordinates; // Already [lon, lat] pairs
+  const totalDistance = route.distance; // meters
+
+  if (coordinates.length < 2) {
+    console.warn('[getMidpoint] Route has less than 2 coordinates.');
+    return null;
+  };
+
+  let cumulativeDistance = 0;
+  for (let i = 0; i < coordinates.length - 1; i++) {
+    const point1 = coordinates[i];
+    const point2 = coordinates[i + 1];
+
+    // Validate points
+    if (!Array.isArray(point1) || point1.length < 2 || typeof point1[0] !== 'number' || typeof point1[1] !== 'number' ||
+        !Array.isArray(point2) || point2.length < 2 || typeof point2[0] !== 'number' || typeof point2[1] !== 'number') {
+      console.warn('[getMidpoint] Invalid coordinate points in segment:', point1, point2);
+      continue; // Skip invalid segment
+    }
+
+    const lon1 = point1[0];
+    const lat1 = point1[1];
+    const lon2 = point2[0];
+    const lat2 = point2[1];
+
+    const segmentDistance = calculateDistance(lat1, lon1, lat2, lon2); // calculateDistance expects (lat1, lon1, lat2, lon2)
+
+    if (cumulativeDistance + segmentDistance >= totalDistance / 2) {
+      const ratio = segmentDistance === 0 ? 0 : (totalDistance / 2 - cumulativeDistance) / segmentDistance;
+      if (isNaN(ratio) || !isFinite(ratio)) {
+         console.warn('[getMidpoint] Invalid ratio calculation, using segment start.', { totalDistance, cumulativeDistance, segmentDistance });
+         return { lat: lat1, lng: lon1 };
+      }
+      const midLon = lon1 + ratio * (lon2 - lon1);
+      const midLat = lat1 + ratio * (lat2 - lat1);
+
+      if (isNaN(midLat) || isNaN(midLon)) {
+         console.warn('[getMidpoint] Calculated midpoint coordinates are NaN.');
+         return { lat: lat1, lng: lon1 }; // Fallback to segment start
+      }
+      return { lat: midLat, lng: lon1 }; // Return { lat, lng }
+    }
+    cumulativeDistance += segmentDistance;
+  }
+
+  // Fallback
+  console.warn('[getMidpoint] Midpoint not found along segments, returning last point.');
+  const lastPoint = coordinates[coordinates.length - 1];
+  if (Array.isArray(lastPoint) && lastPoint.length >= 2 && typeof lastPoint[0] === 'number' && typeof lastPoint[1] === 'number') {
+      return { lat: lastPoint[1], lng: lastPoint[0] };
+  }
+
+  return null;
 }
 
 export async function calculateMidpointAction(
@@ -908,72 +962,6 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c // Distance in meters
 }
 
-// Copied getMidpoint function from results-map.tsx
-function getMidpoint(route: any): { lat: number; lng: number } | null {
-  if (!route || !route.geometry || !route.geometry.coordinates || !route.distance) return null
-
-  const coordinates = route.geometry.coordinates
-  const totalDistance = route.distance
-
-  if (coordinates.length < 2) return null;
-
-  // Find the point closest to 50% of the total distance
-  let cumulativeDistance = 0
-
-  for (let i = 0; i < coordinates.length - 1; i++) {
-    const point1 = coordinates[i]
-    const point2 = coordinates[i + 1]
-
-    // Ensure points are valid arrays of numbers
-    if (!Array.isArray(point1) || point1.length < 2 || !Array.isArray(point2) || point2.length < 2) {
-      console.warn('[getMidpoint] Invalid coordinate points:', point1, point2);
-      continue; // Skip invalid segment
-    }
-
-    const lat1 = point1[1]
-    const lon1 = point1[0]
-    const lat2 = point2[1]
-    const lon2 = point2[0]
-
-    // Ensure coordinates are numbers
-    if (typeof lat1 !== 'number' || typeof lon1 !== 'number' || typeof lat2 !== 'number' || typeof lon2 !== 'number') {
-      console.warn('[getMidpoint] Non-numeric coordinates in segment:', lat1, lon1, lat2, lon2);
-      continue; // Skip invalid segment
-    }
-
-    const segmentDistance = calculateDistance(lat1, lon1, lat2, lon2);
-
-    if (cumulativeDistance + segmentDistance >= totalDistance / 2) {
-      // The midpoint lies on this segment
-      const ratio = (totalDistance / 2 - cumulativeDistance) / segmentDistance;
-      // Check for division by zero or invalid ratio
-      if (isNaN(ratio) || !isFinite(ratio)) {
-         console.warn('[getMidpoint] Invalid ratio calculation, using segment start.', { totalDistance, cumulativeDistance, segmentDistance });
-         return { lat: lat1, lng: lon1 };
-      }
-      const midLat = lat1 + ratio * (lat2 - lat1)
-      const midLon = lon1 + ratio * (lon2 - lon1)
-      // Final check for valid midpoint coordinates
-      if (isNaN(midLat) || isNaN(midLon)) {
-         console.warn('[getMidpoint] Calculated midpoint coordinates are NaN.');
-         return { lat: lat1, lng: lon1 }; // Fallback to segment start
-      }
-      return { lat: midLat, lng: midLon }
-    }
-    cumulativeDistance += segmentDistance
-  }
-
-  // Fallback: If midpoint wasn't found in loop (e.g., due to coordinate issues or floating point errors),
-  // return the coordinates of the last point as a best guess.
-  console.warn('[getMidpoint] Midpoint not found along segments, returning last point.');
-  const lastPoint = coordinates[coordinates.length - 1];
-  if (Array.isArray(lastPoint) && lastPoint.length >= 2 && typeof lastPoint[0] === 'number' && typeof lastPoint[1] === 'number') {
-      return { lat: lastPoint[1], lng: lastPoint[0] };
-  }
-
-  return null; // Return null if no valid midpoint could be determined
-}
-
 // The updated getAlternateRouteAction function (from previous step)
 export async function getAlternateRouteAction(
   // Combine parameters
@@ -983,13 +971,12 @@ export async function getAlternateRouteAction(
     endLat: string;
     endLon: string;
   }
-): Promise<ActionState<OsrmRoute>> {
+): Promise<ActionState<OrsRoute>> {
   const startTime = Date.now();
   const { userId } = auth();
-  let result: ActionState<OsrmRoute> | null = null;
+  let result: ActionState<OrsRoute> | null = null;
   let errorMsg: string | undefined = undefined;
   let status = 500; // Default status
-  // --> Variables to capture success data
   let capturedRouteDistance: number | undefined = undefined;
   let capturedRouteDuration: number | undefined = undefined;
   let capturedUsedFallback: boolean = false;
@@ -1008,67 +995,120 @@ export async function getAlternateRouteAction(
     const { startLat, startLon, endLat, endLon } = validationResult.data;
     // --- Validation End ---
 
-    console.log(`[OSRM Alt Route] Requesting alternate routes from (${startLat}, ${startLon}) to (${endLat}, ${endLon})`);
-    const profile = "driving";
+    console.log(`[ORS Alt Route] Requesting alternate routes from (${startLat}, ${startLon}) to (${endLat}, ${endLon})`);
 
-    const url = `${OSRM_API_BASE}/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson&alternatives=3`;
-    const altRouteCacheKey = `alt_route_${startLat}_${startLon}_${endLat}_${endLon}`;
-    const osrmTimeoutMs = 30000;
+    const apiKey = process.env[ORS_API_KEY_ENV_VAR];
+    if (!apiKey) {
+      console.error('[ORS Alt Route] ORS API key is missing');
+      errorMsg = "OpenRouteService API key is not configured";
+      status = 500;
+      result = { isSuccess: false, message: errorMsg };
+      return result;
+    }
 
-    // --- Main Logic Try Block Starts Here ---
+    // --- Use POST Request for ORS Directions ---
+    const url = `${ORS_API_BASE}/v2/directions/driving-car/geojson`; // Endpoint URL
+    const requestBody = {
+      coordinates: [
+        [parseFloat(startLon), parseFloat(startLat)],
+        [parseFloat(endLon), parseFloat(endLat)]
+      ],
+      alternative_routes: { // Request alternatives via body parameter
+        target_count: 3, // Request up to 3 alternatives (including main)
+        // Optional: add weight_factor or share_factor if needed
+      },
+      instructions: false,
+    };
+    console.log('[ORS Alt Route] Requesting routes from ORS (POST):', url);
+    // console.log('[ORS Alt Route] Request Body:', JSON.stringify(requestBody));
+
+    const altRouteCacheKey = `ors_alt_route_${startLat}_${startLon}_${endLat}_${endLon}`;
+    const orsTimeoutMs = 30000;
+
     try {
-      const response = await rateLimitedFetch(
-        url, undefined, 3, altRouteCacheKey, osrmTimeoutMs
-      );
-      status = response.status; // Capture API status
-      console.log('[Alt Route] OSRM API response status:', status);
+      // Use POST method and Authorization header
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
+          'Content-Type': 'application/json',
+          'Authorization': apiKey,
+          'User-Agent': DEFAULT_USER_AGENT,
+        },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(orsTimeoutMs)
+      });
+      
+      status = response.status;
+      console.log('[ORS Alt Route] ORS API response status:', status);
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Could not read error body');
-        console.warn(`[Alt Route] OSRM API error ${response.status} (${response.statusText}): ${errorText}. Using fallback route data.`);
-        errorMsg = `OSRM API error ${status}. Using fallback.`;
-        result = createFallbackRoute(startLat, startLon, endLat, endLon); // Fallback marks success
-        status = 200; // Set status to 200 because we provide fallback data
-        return result;
-      }
+        const errorBody = await response.text().catch(() => 'Could not read error body');
+        let orsErrorMessage = `ORS Directions API error: ${response.statusText}`;
+         try {
+          const errorJson = JSON.parse(errorBody);
+           orsErrorMessage = errorJson?.error?.message || orsErrorMessage;
+         } catch { /* Ignore */ }
 
-      const data = await response.json();
-      if (!data || !data.routes || data.routes.length === 0) {
-        console.warn(`OSRM returned no routes. Using fallback.`);
-        errorMsg = "OSRM returned no routes. Using fallback.";
+        console.warn(`[ORS Alt Route] ORS API error ${status} (${orsErrorMessage}). Using fallback. Body: ${errorBody}`);
+        errorMsg = `ORS API error ${status}. Using fallback.`;
         result = createFallbackRoute(startLat, startLon, endLat, endLon);
+        capturedUsedFallback = true;
         status = 200; // Fallback success
         return result;
       }
 
-      const mainRoute = data.routes[0] as OsrmRoute; // Assuming structure is valid if routes exist
-      const potentialAlternatives = (data.routes.slice(1) as OsrmRoute[]) || [];
+      const data = await response.json(); 
+      if (!data || !data.features || data.features.length === 0) {
+        console.warn(`[ORS Alt Route] ORS returned no routes. Using fallback.`);
+        errorMsg = "ORS returned no routes. Using fallback.";
+        result = createFallbackRoute(startLat, startLon, endLat, endLon);
+        capturedUsedFallback = true;
+        status = 200; // Fallback success
+        return result;
+      }
 
-      const reasonableAlternatives = potentialAlternatives.filter((route: OsrmRoute) =>
+      // Parse all route features
+      const allParsedRoutes = data.features.map(parseOrsRouteResponse).filter((r: OrsRoute | null): r is OrsRoute => r !== null);
+
+      if (allParsedRoutes.length === 0) {
+         console.warn(`[ORS Alt Route] Failed to parse any routes from ORS response. Using fallback.`);
+        errorMsg = "Failed to parse route data from ORS. Using fallback.";
+        result = createFallbackRoute(startLat, startLon, endLat, endLon);
+        capturedUsedFallback = true;
+        status = 200; // Fallback success
+        return result;
+      }
+
+      const mainRoute = allParsedRoutes[0];
+      const potentialAlternatives = allParsedRoutes.slice(1);
+
+      const reasonableAlternatives = potentialAlternatives.filter((route: OrsRoute) =>
         route.distance <= mainRoute.distance * 1.4 &&
         route.duration <= mainRoute.duration * 1.5
       );
 
-      let selectedAlternative: OsrmRoute | null = null;
+      let selectedAlternative: OrsRoute | null = null;
 
       if (reasonableAlternatives.length === 0) {
-        console.log("No reasonable alternatives found. Using fallback.");
+        console.log("[ORS Alt Route] No reasonable alternatives found. Using fallback.");
         errorMsg = "No reasonable alternatives found. Using fallback.";
         result = createFallbackRoute(startLat, startLon, endLat, endLon);
+        capturedUsedFallback = true;
         status = 200; // Fallback success
         return result;
       } else if (reasonableAlternatives.length === 1) {
-        console.log("One reasonable alternative found.");
+        console.log("[ORS Alt Route] One reasonable alternative found.");
         selectedAlternative = reasonableAlternatives[0];
       } else {
-        console.log("Multiple reasonable alternatives found. Selecting the most geographically different.");
+         console.log("[ORS Alt Route] Multiple reasonable alternatives found. Selecting the most geographically different.");
         const mainMidpoint = getMidpoint(mainRoute);
         if (!mainMidpoint) {
-           console.warn("Could not calculate main route midpoint. Selecting the first reasonable alternative.");
+           console.warn("[ORS Alt Route] Could not calculate main route midpoint. Selecting first reasonable alternative.");
            selectedAlternative = reasonableAlternatives[0];
         } else {
           let maxMidpointDistance = -1;
-          reasonableAlternatives.forEach(alt => {
+          reasonableAlternatives.forEach((alt: OrsRoute) => {
             const altMidpoint = getMidpoint(alt);
             if (altMidpoint) {
               const distance = calculateDistance(mainMidpoint.lat, mainMidpoint.lng, altMidpoint.lat, altMidpoint.lng);
@@ -1077,119 +1117,121 @@ export async function getAlternateRouteAction(
                 selectedAlternative = alt;
               }
             } else {
-               console.warn("Could not calculate midpoint for an alternative route.");
+               console.warn("[ORS Alt Route] Could not calculate midpoint for an alternative route:", alt);
             }
           });
           if (!selectedAlternative) {
-             console.warn("Could not determine most different alternative based on midpoints. Selecting first reasonable.");
+             console.warn("[ORS Alt Route] Could not determine most different alternative based on midpoints. Selecting first reasonable.");
              selectedAlternative = reasonableAlternatives[0];
           }
         }
       }
 
       if (selectedAlternative) {
-        // ---> Capture success data here
         capturedRouteDistance = selectedAlternative.distance;
         capturedRouteDuration = selectedAlternative.duration;
         result = {
           isSuccess: true,
-          message: "Alternate route calculated successfully",
+          message: "Alternate route calculated successfully via ORS",
           data: selectedAlternative
         };
-        status = 200; // Explicit success
+        status = 200;
         return result;
       } else {
-        console.log("Failed to select an alternative. Using fallback.");
+        console.log("[ORS Alt Route] Failed to select an alternative. Using fallback.");
         errorMsg = "Failed to select an alternative. Using fallback.";
         result = createFallbackRoute(startLat, startLon, endLat, endLon);
+        capturedUsedFallback = true;
         status = 200; // Fallback success
         return result;
       }
-    } catch (error) { // Catch errors from fetch or processing
-      if (error instanceof Error && error.name === 'AbortError') {
-          errorMsg = `OSRM request timed out after ${osrmTimeoutMs}ms. Using fallback.`;
-          status = 504;
-          console.error(`[Alt Route] ${errorMsg}`);
-          result = createFallbackRoute(startLat, startLon, endLat, endLon);
-          status = 200; // Fallback success despite timeout
-          return result;
-      } else {
-          errorMsg = error instanceof Error ? error.message : "Unknown error fetching alternate route. Using fallback.";
-          status = 500; // Keep 500 for internal error, though fallback is returned
-          console.error("Error fetching alternate route:", error);
-          result = createFallbackRoute(startLat, startLon, endLat, endLon);
-          status = 200; // Fallback success
-          return result;
-      }
-    }
-    // --- Main Logic Try Block Ends Here ---
 
-  } catch (outerError) { // Catch outer errors (validation)
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        errorMsg = `ORS Directions request timed out after ${orsTimeoutMs}ms. Using fallback.`;
+        status = 504;
+        console.error(`[ORS Alt Route] ${errorMsg}`);
+        result = createFallbackRoute(startLat, startLon, endLat, endLon);
+        capturedUsedFallback = true;
+        status = 200; // Fallback success
+        return result;
+      }
+
+      console.error("[ORS Alt Route] Fetch/Processing Error:", error);
+      errorMsg = error instanceof Error ? error.message : "Failed to fetch alternate route from ORS";
+      status = 500;
+      console.warn(`[ORS Alt Route] Error (${errorMsg}). Using fallback.`);
+      result = createFallbackRoute(startLat, startLon, endLat, endLon);
+      capturedUsedFallback = true;
+      status = 200; // Fallback success
+      return result;
+    }
+
+  } catch (outerError) {
     console.error("Outer error in getAlternateRouteAction:", outerError);
-    // errorMsg and status should be set by validation
     if (!result) {
-      result = { isSuccess: false, message: errorMsg || "Unexpected error getting alternate route" };
+      result = { isSuccess: false, message: errorMsg || "Unexpected error getting ORS alternate route" };
     }
     return result;
   } finally {
     const duration = Date.now() - startTime;
+    const finalDistance = result?.isSuccess ? result.data?.distance : capturedRouteDistance;
+    const finalDuration = result?.isSuccess ? result.data?.duration : capturedRouteDuration;
     await trackApiEvent({
       endpoint: 'getAlternateRouteAction',
       method: 'ACTION',
-      status: result?.isSuccess ? status : (status !== 500 ? status : (result?.message?.includes('timed out') ? 504 : (result?.message?.includes('Invalid input') ? 400 : 500))),
+      status: result?.isSuccess ? status : (status === 200 ? 500 : status),
       duration: duration,
-      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown alternate route action error'),
+      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown ORS alt route action error'),
       userId: userId ?? 'anonymous',
-      // ---> Use captured variables
-      routeDistance: capturedRouteDistance,
-      routeDuration: capturedRouteDuration,
-      usedFallback: capturedUsedFallback,
+      routeDistance: finalDistance,
+      routeDuration: finalDuration,
+      usedFallback: capturedUsedFallback || (result?.isSuccess === false && !!result?.message?.includes('fallback')),
+      serviceUsed: 'OpenRouteService'
     });
   }
 }
 
-// Helper function to create a fallback route
-function createFallbackRoute(startLat: string, startLon: string, endLat: string, endLon: string): ActionState<OsrmRoute> {
+// Update Fallback Route to return OrsRoute shape
+function createFallbackRoute(startLat: string, startLon: string, endLat: string, endLon: string): ActionState<OrsRoute> {
   try {
-    const directDistance = calculateDistance(
-      parseFloat(startLat), parseFloat(startLon),
-      parseFloat(endLat), parseFloat(endLon)
-    );
+    const sLat = parseFloat(startLat);
+    const sLon = parseFloat(startLon);
+    const eLat = parseFloat(endLat);
+    const eLon = parseFloat(endLon);
 
-    // Create a simple route with a slight detour
-    const midLat = (parseFloat(startLat) + parseFloat(endLat)) / 2;
-    const midLon = (parseFloat(startLon) + parseFloat(endLon)) / 2;
-    
-    // Add a slight offset to the midpoint
-    const dx = parseFloat(endLon) - parseFloat(startLon);
-    const dy = parseFloat(endLat) - parseFloat(startLat);
-    const angle = Math.atan2(dy, dx) + Math.PI / 2; // Perpendicular angle
-    const offset = directDistance * 0.15 / 111000; // 15% of route distance, converted to degrees
-    
-    const detourLat = midLat + Math.sin(angle) * offset;
-    const detourLon = midLon + Math.cos(angle) * offset;
+    if ([sLat, sLon, eLat, eLon].some(isNaN)) {
+      throw new Error("Invalid coordinates provided to fallback route creator.");
+    }
+
+    const directDistance = calculateDistance(sLat, sLon, eLat, eLon);
+
+    // Create a simple straight line geometry
+    const fallbackGeometry = {
+      coordinates: [[sLon, sLat], [eLon, eLat]] as [number, number][],
+      type: "LineString" as const
+    };
+
+    // Estimate duration (50 km/h = 13.89 m/s)
+    const estimatedDuration = directDistance / 13.89;
+
+    console.log(`[Fallback Route] Created fallback: dist=${directDistance.toFixed(0)}m, dur=${estimatedDuration.toFixed(0)}s`);
 
     return {
       isSuccess: true as const,
-      message: "Alternate route estimated (fallback)",
+      message: "Route estimated (fallback)", // Keep message generic
       data: {
-        distance: directDistance * 1.2, // 20% longer than direct route
-        duration: (directDistance / 13.89) * 1.2, // Assuming ~50 km/h average speed
-        geometry: {
-          coordinates: [
-            [parseFloat(startLon), parseFloat(startLat)],
-            [detourLon, detourLat],
-            [parseFloat(endLon), parseFloat(endLat)]
-          ],
-          type: "LineString"
-        }
+        distance: directDistance, // Use direct distance
+        duration: estimatedDuration,
+        geometry: fallbackGeometry
       }
     }
   } catch (fallbackError) {
-    return { 
-      isSuccess: false as const, 
-      message: "Failed to calculate alternate route and fallback also failed",
-      data: undefined // Or provide a default empty route structure if needed downstream
+    console.error("[Fallback Route] Error creating fallback:", fallbackError);
+    return {
+      isSuccess: false as const,
+      message: "Failed to calculate route and fallback also failed",
+      data: undefined
     }
   }
 }

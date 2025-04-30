@@ -3,8 +3,8 @@
 import { ActionState } from "@/types"
 import { PoiResponse } from "@/types/poi-types"
 import { z } from 'zod';
-import { OsrmMatrixSchema } from '@/lib/schemas';
 import { formatZodError } from '@/lib/utils';
+import { ORS_API_BASE, ORS_API_KEY_ENV_VAR } from "@/lib/constants";
 
 interface RouteResponse {
   distance: number;
@@ -231,16 +231,25 @@ function createFallbackRoute(startLat: string, startLon: string, endLat: string,
   }
 }
 
-// OSRM API Base URL (should ideally be in env variables)
-const OSRM_API_BASE = "http://router.project-osrm.org";
-
 // Define the expected structure for the Matrix response data
 interface MatrixData {
   durations: number[][] | null;
   distances: number[][] | null;
 }
 
-// Revert the function signature and keep the original logic
+// Define a Zod schema for ORS Matrix input validation
+const OrsMatrixInputSchema = z.object({
+  coordinates: z.string().refine(val => {
+    const pairs = val.split(';');
+    return pairs.every(pair => {
+      const coords = pair.split(',');
+      return coords.length === 2 && !isNaN(parseFloat(coords[0])) && !isNaN(parseFloat(coords[1]));
+    });
+  }, { message: "Invalid coordinates format. Expected 'lon,lat;lon,lat;...'" }),
+  sources: z.string().refine(val => /^\d+(;\d+)*$/.test(val), { message: "Invalid sources format. Expected 'idx1;idx2;...'" }),
+  destinations: z.string().refine(val => /^\d+(;\d+)*$/.test(val), { message: "Invalid destinations format. Expected 'idx1;idx2;...'" }),
+});
+
 export async function getTravelTimeMatrixAction(
   coordinates: string, // Format: "lon1,lat1;lon2,lat2;..."
   sources: string, // Format: "idx1;idx2;..." (indices from coordinates)
@@ -248,72 +257,107 @@ export async function getTravelTimeMatrixAction(
 ): Promise<ActionState<MatrixData>> {
 
   // --- Validation Start ---
-  const validationResult = OsrmMatrixSchema.safeParse({
+  const validationResult = OrsMatrixInputSchema.safeParse({
     coordinates,
     sources,
     destinations,
   });
   if (!validationResult.success) {
     const errorMessage = formatZodError(validationResult.error);
-    console.error("Validation failed for getTravelTimeMatrixAction:", errorMessage);
+    console.error("[Matrix Calculation] Validation failed:", errorMessage);
     return {
       isSuccess: false,
       message: `Invalid input: ${errorMessage}`,
     };
   }
-  // Use validated data (though we use original variables here for simplicity)
-  const { coordinates: vCoords, sources: vSources, destinations: vDests } = validationResult.data;
+  const { coordinates: vCoordsStr, sources: vSourcesStr, destinations: vDestsStr } = validationResult.data;
   // --- Validation End ---
 
-  console.log("[Matrix Calculation] Requesting travel time matrix from OSRM");
+  const apiKey = process.env[ORS_API_KEY_ENV_VAR];
+  if (!apiKey) {
+    console.error('[Matrix Calculation] ORS API key is missing');
+    return {
+      isSuccess: false,
+      message: "OpenRouteService API key is not configured",
+    };
+  }
 
-  // Construct the OSRM Table API URL using validated/original inputs
-  const apiUrl = `${OSRM_API_BASE}/table/v1/driving/${vCoords}?sources=${vSources}&destinations=${vDests}&annotations=duration,distance`;
-  console.log("[Matrix Calculation] OSRM Table URL:", apiUrl);
+  // Prepare data for ORS API
+  const locations = vCoordsStr.split(';').map(pair => {
+    const [lon, lat] = pair.split(',').map(Number);
+    return [lon, lat]; // ORS expects [lon, lat]
+  });
+  const sourceIndices = vSourcesStr.split(';').map(Number);
+  const destinationIndices = vDestsStr.split(';').map(Number);
+
+  // Construct the ORS Matrix API URL and request body
+  const apiUrl = `${ORS_API_BASE}/v2/matrix/driving-car`; // Using driving profile
+  const requestBody = {
+    locations: locations,
+    sources: sourceIndices,
+    destinations: destinationIndices,
+    metrics: ["duration", "distance"],
+    units: "m" // Request distance in meters
+  };
+
+  console.log("[Matrix Calculation] Requesting travel time matrix from ORS");
+  console.log("[Matrix Calculation] ORS Matrix URL:", apiUrl);
+  // console.log("[Matrix Calculation] ORS Request Body:", JSON.stringify(requestBody)); // Avoid logging potentially large bodies unless debugging
 
   try {
-    // Replace rateLimitedFetch if it was added incorrectly; use standard fetch
     const response = await fetch(apiUrl, {
+      method: 'POST',
       headers: {
-        'User-Agent': 'Meet-Me-Halfway/1.0',
-      }
+        'Content-Type': 'application/json',
+        'Authorization': apiKey, // Use Authorization header for ORS API key
+        'User-Agent': 'Meet-Me-Halfway/1.0', // Optional: Add User-Agent
+      },
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const errorBody = await response.text();
+      let errorMessage = `ORS Matrix API error: ${response.statusText}`;
+      try {
+        const errorJson = JSON.parse(errorBody);
+        errorMessage = errorJson?.error?.message || errorMessage; // Try to get specific ORS error
+      } catch (e) { /* Ignore parsing error */ }
+      
       console.error(
-        `[Matrix Calculation] OSRM API Error ${response.status}: ${response.statusText}, Body: ${errorBody}`
+        `[Matrix Calculation] ORS API Error ${response.status}: ${errorMessage}\nFull Body: ${errorBody}`
       );
-      throw new Error(`OSRM API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log("[Matrix Calculation] OSRM API Response:", data);
-
-    // Check for OSRM specific response code
-    if (data.code !== "Ok") {
-      console.error("[Matrix Calculation] OSRM Response Error:", data.message);
+      // Consider specific handling for 429 Too Many Requests (Rate Limiting)
+      if (response.status === 429) {
+          return {
+              isSuccess: false,
+              message: "Rate limit exceeded for ORS Matrix API. Please try again later."
+          }
+      }
       return {
-        isSuccess: false,
-        message: `OSRM API returned an error: ${data.message || 'Unknown error'}`,
+          isSuccess: false,
+          message: `Failed to fetch ORS Matrix: ${errorMessage}`
       };
     }
 
-    // Validate the structure of durations and distances if necessary
+    const data = await response.json();
+    // console.log("[Matrix Calculation] ORS API Response:", data); // Avoid logging large responses
+
+    // Validate ORS response structure
     if (!data.durations || !data.distances) {
-        console.error("[Matrix Calculation] OSRM response missing durations or distances");
+        console.error("[Matrix Calculation] ORS response missing durations or distances");
         return {
             isSuccess: false,
-            message: "OSRM response missing durations or distances."
+            message: "ORS response format incorrect: missing durations or distances."
         };
     }
 
     return {
       isSuccess: true,
-      message: "Travel time matrix calculated successfully",
+      message: "Travel time matrix calculated successfully via ORS",
       data: {
-        durations: data.durations, // [[time_src0_dest0, time_src0_dest1], [time_src1_dest0, time_src1_dest1]]
-        distances: data.distances, // [[dist_src0_dest0, dist_src0_dest1], [dist_src1_dest0, dist_src1_dest1]]
+        // ORS returns durations in seconds, distances in meters (as requested)
+        durations: data.durations, 
+        distances: data.distances, 
       },
     };
   } catch (error) {
