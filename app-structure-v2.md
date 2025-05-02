@@ -91,6 +91,9 @@ Meet Me Halfway is a Next.js application that helps users find a convenient meet
   - POI Search (`locationiq-actions.ts` -> `searchPoisAction`)
 - **OSRM** (*Note: Specific OSRM actions/routes not listed, may be integrated within ORS/LocationIQ actions or replaced*):
   - Potentially used for route calculations.
+- **Fast Routing OSRM (RapidAPI)**:
+  - Main and alternate route calculations (`osrm-actions.ts` -> `getRouteAction`, `getAlternateRouteAction`)
+  - Fallback to ORS for alternate routes if needed
 - **OpenRouteService (ORS)**:
   - Travel time matrix (`ors-actions.ts` -> `getTravelTimeMatrixAction`)
   - Route calculation (`ors-actions.ts` -> `getRouteAction` - *potentially replacing OSRM*)

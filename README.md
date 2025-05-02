@@ -6,7 +6,7 @@ A modern web application that helps users find the perfect meeting point between
 
 ### Core Functionality
 - **Geocoding**: Convert addresses to coordinates using LocationIQ
-- **Routing**: Calculate main and alternate routes using OSRM
+- **Routing**: Calculate main and alternate routes using Fast Routing OSRM (RapidAPI)
 - **POI Search**: Find points of interest around route midpoints
 - **Travel Time Matrix**: Calculate travel times to POIs using OpenRouteService
 - **Interactive Map**: Display routes and POIs on a Leaflet map
@@ -33,7 +33,7 @@ A modern web application that helps users find the perfect meeting point between
 - **Database**: Supabase (PostgreSQL)
 - **ORM**: Drizzle
 - **Rate Limiting**: Upstash Redis
-- **External APIs**: LocationIQ, OSRM, OpenRouteService
+- **External APIs**: LocationIQ, Fast Routing OSRM (RapidAPI), OpenRouteService (for travel time matrix)
 - **Analytics/Monitoring**: PostHog (server and client), file logging (dev only)
 
 ## Getting Started
@@ -44,7 +44,7 @@ A modern web application that helps users find the perfect meeting point between
 - Supabase account
 - Clerk account
 - Upstash Redis account
-- API keys for LocationIQ and OpenRouteService
+- API keys for LocationIQ, Fast Routing OSRM (RapidAPI), and OpenRouteService
 - PostHog account (for analytics)
 
 ### Installation
@@ -78,6 +78,8 @@ UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_token
 
 # API Keys
 NEXT_PUBLIC_LOCATIONIQ_KEY=your_locationiq_key
+RAPIDAPI_FAST_ROUTING_HOST=fast-routing.p.rapidapi.com
+RAPIDAPI_FAST_ROUTING_KEY=your_rapidapi_key
 OPENROUTESERVICE_API_KEY=your_ors_key
 
 # Analytics
@@ -180,7 +182,7 @@ npm run dev
 1. Clone the repository and install dependencies
 2. Set up all environment variables as described in `.env.example`
 3. Set up the database schema and run migrations
-4. Configure Clerk, Supabase, Upstash, LocationIQ, OpenRouteService, and PostHog accounts
+4. Configure Clerk, Supabase, Upstash, LocationIQ, Fast Routing OSRM (RapidAPI), and PostHog accounts
 5. Run the development server and verify all features (auth, API, analytics, etc.)
 6. Review and update documentation as needed
 7. (Optional) Run tests to verify setup
@@ -188,7 +190,7 @@ npm run dev
 ## Features in Detail
 
 ### 1. Route Calculation
-- Main route calculation using OSRM
+- Main route calculation using Fast Routing OSRM (RapidAPI)
 - Alternate route selection based on geographic diversity
 - Route visualization with distance and duration
 
@@ -224,7 +226,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - [LocationIQ](https://locationiq.com/) for geocoding and POI data
-- [OSRM](http://project-osrm.org/) for routing
+- [Fast Routing OSRM (RapidAPI)](https://rapidapi.com/osrm/api/fast-routing) for routing
 - [OpenRouteService](https://openrouteservice.org/) for travel time calculations
 - [Clerk](https://clerk.com/) for authentication
 - [Supabase](https://supabase.com/) for database

@@ -34,12 +34,14 @@
   ```
   POSTHOG_KEY=your_production_key
   POSTHOG_HOST=https://app.posthog.com
+  RAPIDAPI_FAST_ROUTING_HOST=https://rapidapi.com/host
+  RAPIDAPI_FAST_ROUTING_KEY=your_rapidapi_key
   ```
 - [ ] Remove development-only environment variables
 - [ ] Ensure all sensitive keys are properly secured in production environment
 
 ### Secret & API Key Rotation
-- [ ] Regularly rotate API keys and secrets (Clerk, Supabase, Upstash, LocationIQ, OpenRouteService, PostHog)
+- [ ] Regularly rotate API keys and secrets (Clerk, Supabase, Upstash, LocationIQ, Fast Routing OSRM (RapidAPI), OpenRouteService (for travel time matrix), PostHog)
 - [ ] Use a secrets manager or environment variable best practices
 - [ ] Document the rotation process and update `.env.example` as needed
 
@@ -122,9 +124,10 @@
 
 ### Location Services
 - [ ] Update LocationIQ configuration for production load
-- [ ] Set up fallback geocoding services
-- [ ] Configure caching for location data
-- [ ] Set up monitoring for location service availability
+- [ ] Update Fast Routing OSRM (RapidAPI) configuration for production load
+- [ ] Set up fallback geocoding and routing services
+- [ ] Configure caching for location and routing data
+- [ ] Set up monitoring for location and routing service availability
 
 ### Feature Flags
 - [ ] Set up feature flag service (if needed)

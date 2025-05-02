@@ -1,7 +1,7 @@
 # Meet Me Halfway App Structure
 
 ## Overview
-Meet Me Halfway is a Next.js application that helps users find a convenient meeting point between two locations. The app calculates two routes (main and alternate) between the locations using OSRM, finds points of interest (POIs) around the midpoints of both routes using LocationIQ, and enriches POIs with travel times using OpenRouteService (ORS). Both routes are displayed simultaneously on an interactive map.
+Meet Me Halfway is a Next.js application that helps users find a convenient meeting point between two locations. The app calculates two routes (main and alternate) between the locations using Fast Routing OSRM (RapidAPI), finds points of interest (POIs) around the midpoints of both routes using LocationIQ, and enriches POIs with travel times using OpenRouteService (ORS Matrix API). Both routes are displayed simultaneously on an interactive map.
 
 ## Core Components
 
@@ -26,8 +26,8 @@ Meet Me Halfway is a Next.js application that helps users find a convenient meet
 ### 4. Results Map (`app/meet-me-halfway/_components/results-map.tsx`)
 - Orchestrates the display of map and POI data after a successful search.
 - **Data Fetching**: Uses the `useMapData` custom hook:
-    - Fetches main route (OSRM via `getRouteAction`).
-    - Fetches alternate route (OSRM via `getAlternateRouteAction`).
+    - Fetches main route (Fast Routing OSRM via `getRouteAction`).
+    - Fetches alternate route (Fast Routing OSRM via `getAlternateRouteAction`).
     - Calculates midpoints for both routes.
     - Fetches initial POIs around both midpoints (LocationIQ via `searchPoisAction`).
     - Fetches travel time matrix (ORS via `getTravelTimeMatrixAction`) to enrich POIs.
@@ -59,13 +59,13 @@ Meet Me Halfway is a Next.js application that helps users find a convenient meet
 - **Action**: `geocodeLocationAction`.
 - **Purpose**: Converts user-input addresses into latitude/longitude coordinates.
 
-### 2. Routing (`actions/locationiq-actions.ts`)
-- **API**: OSRM Demo Server (Route Service).
+### 2. Routing (`actions/osrm-actions.ts`)
+- **API**: Fast Routing OSRM (RapidAPI).
 - **Actions**: 
     - `getRouteAction`: Fetches the main driving route.
-    - `getAlternateRouteAction`: Fetches up to 3 alternative routes.
+    - `getAlternateRouteAction`: Fetches up to 3 alternative routes (with fallback to ORS if needed).
 - **Purpose**: Calculates the road network paths between the geocoded start and end points.
-- **Note**: Although LocationIQ offers routing, the app currently calls the free OSRM demo server directly from these actions.
+- **Note**: The app now uses Fast Routing OSRM (RapidAPI) for robust and scalable routing.
 
 ### 3. Alternate Route Selection (`actions/locationiq-actions.ts`)
 - **Logic**: Within `getAlternateRouteAction`.
@@ -84,7 +84,7 @@ Meet Me Halfway is a Next.js application that helps users find a convenient meet
 ### 5. Travel Time Matrix (`actions/ors-actions.ts`)
 - **API**: OpenRouteService (ORS) Matrix API.
 - **Action**: `getTravelTimeMatrixAction`.
-- **Purpose**: Calculates a matrix of travel times and distances between multiple sources (start/end locations) and destinations (all fetched POIs). This data is used to enrich the POIs displayed in the list and popups.
+- **Purpose**: Calculates a matrix of travel times and distances between multiple sources (start/end locations) and destinations (all fetched POIs). This data is used to enrich the POIs displayed in the list and popups. (ORS is now only used for this matrix calculation.)
 
 ## State Management (`useMapData` hook in `results-map.tsx`)
 
@@ -128,13 +128,13 @@ Meet Me Halfway is a Next.js application that helps users find a convenient meet
 1. Add more POI categories & filtering options.
 2. Implement user accounts to save searches.
 3. Add route comparison features (e.g., elevation, road types).
-4. Consider replacing OSRM Demo Server with a more robust routing service (e.g., LocationIQ routing, ORS routing, Mapbox) for better reliability.
+4. Now uses Fast Routing OSRM (RapidAPI) for robust routing service. Consider additional providers for redundancy if needed.
 5. Add unit/integration tests.
 
 ## Tech Stack Breakdown (Summary)
 
 - **Frontend**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS, shadcn/ui, react-leaflet, react-hook-form, next-themes
-- **Backend/APIs**: Next.js Server Actions, LocationIQ, OSRM Demo, OpenRouteService
+- **Backend/APIs**: Next.js Server Actions, LocationIQ, Fast Routing OSRM (RapidAPI), OpenRouteService
 - **Database**: Supabase (PostgreSQL) with Drizzle ORM
 - **Authentication**: Clerk
 - **Rate Limiting**: Upstash Redis with @upstash/ratelimit

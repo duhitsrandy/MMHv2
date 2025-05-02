@@ -5,7 +5,7 @@ The Meet Me Halfway application integrates with several external APIs for geocod
 
 ## API Setup Checklist (From Scratch)
 1. Set up all required environment variables (see `.env.example`)
-2. Ensure Supabase, Clerk, Upstash, LocationIQ, OpenRouteService, and PostHog accounts are configured
+2. Ensure Supabase, Clerk, Upstash, LocationIQ, **Fast Routing OSRM (RapidAPI)**, OpenRouteService, and PostHog accounts are configured
 3. Run database migrations
 4. Start the development server (`npm run dev`)
 5. Test endpoints using curl, Postman, or the provided examples below
@@ -87,7 +87,7 @@ curl -X POST https://yourdomain.com/api/poi \
 ```
 
 ### 3. Main Route (`getRouteAction`)
-**Description:** Calculate the main driving route between two points using OSRM.
+**Description:** Calculate the main driving route between two points using **Fast Routing OSRM (RapidAPI)**.
 **Auth:** Required (Clerk)
 **Rate Limit:** Special
 
@@ -106,13 +106,14 @@ curl -X POST https://yourdomain.com/api/route \
   "data": {
     "distance": 5000,
     "duration": 900,
-    "geometry": { "coordinates": [[-74.0060, 40.7128], [-73.9352, 40.7306]], "type": "LineString" }
+    "geometry": { "coordinates": [[-74.0060, 40.7128], [-73.9352, 40.7306]], "type": "LineString" },
+    "serviceUsed": "FastRoutingOSRM"
   }
 }
 ```
 
 ### 4. Alternate Routes (`getAlternateRouteAction`)
-**Description:** Get alternate driving routes between two points.
+**Description:** Get alternate driving routes between two points using **Fast Routing OSRM (RapidAPI)**. Falls back to ORS if unavailable.
 **Auth:** Required (Clerk)
 **Rate Limit:** Special
 
@@ -131,13 +132,15 @@ curl -X POST https://yourdomain.com/api/route/alternate \
   "data": {
     "distance": 5200,
     "duration": 950,
-    "geometry": { "coordinates": [[-74.0060, 40.7128], [-73.9352, 40.7306]], "type": "LineString" }
+    "geometry": { "coordinates": [[-74.0060, 40.7128], [-73.9352, 40.7306]], "type": "LineString" },
+    "serviceUsed": "FastRoutingOSRM",
+    "usedFallback": false
   }
 }
 ```
 
 ### 5. Travel Time Matrix (`getTravelTimeMatrixAction`)
-**Description:** Calculate travel times between multiple points using OpenRouteService.
+**Description:** Calculate travel times between multiple points using **OpenRouteService** (ORS Matrix API).
 **Auth:** Required (Clerk)
 **Rate Limit:** Authenticated
 
@@ -415,6 +418,18 @@ RATE_LIMIT_REQUESTS_AUTH=50
 RATE_LIMIT_WINDOW_AUTH=60
 RATE_LIMIT_REQUESTS_SPECIAL=100
 RATE_LIMIT_WINDOW_SPECIAL=60
+```
+
+## Environment Variables (Routing)
+
+Add these to your `.env.local` or deployment environment:
+```env
+# Fast Routing OSRM (RapidAPI)
+RAPIDAPI_FAST_ROUTING_HOST=fast-routing.p.rapidapi.com
+RAPIDAPI_FAST_ROUTING_KEY=your_rapidapi_key
+
+# OpenRouteService (for travel time matrix only)
+OPENROUTESERVICE_API_KEY=your_ors_key
 ```
 
 ## Best Practices
