@@ -273,6 +273,15 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Debug logging has been removed for production readiness.
 - If you add custom marker icons, ensure the assets are present and update the icon references in the code.
 
+## Clerk Webhook Setup
+
+We've configured webhooks for Clerk to handle user events (e.g., user.created) via the endpoint at `/api/webhooks/clerk`. Ensure the following:
+- Set the webhook URL in the Clerk dashboard to your ngrok URL + `/api/webhooks/clerk` for local testing.
+- Add `CLERK_WEBHOOK_SECRET` to your `.env.local` file.
+- The handler is located in `app/api/webhooks/clerk/route.ts`.
+
+This setup syncs user data to the database on events.
+
 ---
 
 _Last updated: [DATE]_
