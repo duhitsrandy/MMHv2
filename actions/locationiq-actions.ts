@@ -20,10 +20,13 @@ import {
   NOMINATIM_API_BASE,
   CACHE_TTL_SECONDS,
   DEFAULT_POI_RADIUS,
-  DEFAULT_USER_AGENT
+  DEFAULT_USER_AGENT,
+  OSRM_API_BASE,
+  OSRM_API_KEY_ENV_VAR,
 } from '@/lib/constants'; // Import constants
 import { trackApiEvent } from '../app/lib/monitoring'; // <-- Import monitoring function (Corrected Path)
 import { auth } from "@clerk/nextjs/server"; // <-- Add Clerk auth import
+import { osrmRoute } from "@/actions/osrm-actions"                    // new
 
 // Initialize Redis client for caching
 const redisCache = Redis.fromEnv();
@@ -605,6 +608,7 @@ export async function getRouteAction(
   let capturedRouteDistance: number | undefined = undefined;
   let capturedRouteDuration: number | undefined = undefined;
   let capturedUsedFallback: boolean = false;
+  let serviceUsed = "OpenRouteService"          // NEW
 
   try {
     // --- Validation Start ---
@@ -631,6 +635,37 @@ export async function getRouteAction(
       return result;
     }
 
+    /* ── Try Fast-Routing (OSRM) first ───────────────────── */
+    try {
+      const osrmData = await osrmRoute({
+        startLon,
+        startLat,
+        endLon,
+        endLat,
+        alts: 0,
+      })
+      if (osrmData.routes?.length) {
+        const r = osrmData.routes[0]
+        const parsed: OrsRoute = {
+          distance: r.distance,
+          duration: r.duration,
+          geometry: r.geometry,
+        }
+        capturedRouteDistance = parsed.distance
+        capturedRouteDuration = parsed.duration
+        serviceUsed = "FastRoutingOSRM"          // NEW
+        return (result = {
+          isSuccess: true,
+          message: "Route calculated successfully via OSRM",
+          data: parsed,
+        })
+      }
+    } catch (e) {
+      console.warn("[OSRM Route] fell back to ORS →", e)
+      // fall through to current ORS branch
+    }
+
+    /* ── Existing ORS logic (unchanged) ── */
     // --- Use POST Request for ORS Directions ---
     const url = `${ORS_API_BASE}/v2/directions/driving-car/geojson`; // Endpoint URL
     const requestBody = {
@@ -755,7 +790,7 @@ export async function getRouteAction(
       routeDistance: finalDistance,
       routeDuration: finalDuration,
       usedFallback: capturedUsedFallback || (result?.isSuccess === false && !!result?.message?.includes('fallback')),
-      serviceUsed: 'OpenRouteService'
+      serviceUsed,                              // CHANGED
     });
   }
 }
@@ -980,6 +1015,7 @@ export async function getAlternateRouteAction(
   let capturedRouteDistance: number | undefined = undefined;
   let capturedRouteDuration: number | undefined = undefined;
   let capturedUsedFallback: boolean = false;
+  let serviceUsed = "OpenRouteService"          // NEW
 
   try {
     // --- Validation Start ---
@@ -1006,6 +1042,43 @@ export async function getAlternateRouteAction(
       return result;
     }
 
+    /* ── OSRM attempt (up to 3 alts) ─────────────────────── */
+    try {
+      const osrmData = await osrmRoute({
+        startLon,
+        startLat,
+        endLon,
+        endLat,
+        alts: 3,
+      })
+      if (osrmData.routes?.length > 1) {
+        const main = osrmData.routes[0]
+        const alts = osrmData.routes.slice(1)
+
+        // pick first alt ≤ 40 % longer than main
+        const chosen = alts.find((r: any) => r.distance <= main.distance * 1.4)
+        if (chosen) {
+          const parsed: OrsRoute = {
+            distance: chosen.distance,
+            duration: chosen.duration,
+            geometry: chosen.geometry,
+          }
+          capturedRouteDistance = parsed.distance
+          capturedRouteDuration = parsed.duration
+          serviceUsed = "FastRoutingOSRM"        // NEW
+          return (result = {
+            isSuccess: true,
+            message: "Alternate route calculated via OSRM",
+            data: parsed,
+          })
+        }
+      }
+      console.log("[OSRM Alt] no suitable alt, falling back to ORS")
+    } catch (e) {
+      console.warn("[OSRM Alt] fell back to ORS →", e)
+    }
+
+    /* ── Existing ORS alternate-route code unchanged ── */
     // --- Use POST Request for ORS Directions ---
     const url = `${ORS_API_BASE}/v2/directions/driving-car/geojson`; // Endpoint URL
     const requestBody = {
@@ -1187,7 +1260,7 @@ export async function getAlternateRouteAction(
       routeDistance: finalDistance,
       routeDuration: finalDuration,
       usedFallback: capturedUsedFallback || (result?.isSuccess === false && !!result?.message?.includes('fallback')),
-      serviceUsed: 'OpenRouteService'
+      serviceUsed,                              // CHANGED
     });
   }
 }

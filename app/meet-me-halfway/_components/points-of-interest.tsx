@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { PoiResponse } from "@/types/poi-types"
+import { PoiResponse, EnrichedPoi, TravelInfo } from "@/types/poi-types"
 import { getRouteAction } from "@/actions/locationiq-actions"
 import {
   Clock,
@@ -41,71 +41,37 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
+import { GeocodedOrigin } from "@/types"
 
 interface PointsOfInterestProps {
-  pois: PoiResponse[]
+  pois: EnrichedPoi[]
+  origins: GeocodedOrigin[]
   isLoading?: boolean
-  startLat: string | number
-  startLng: string | number
-  endLat: string | number
-  endLng: string | number
-  startAddress?: string
-  endAddress?: string
+  selectedPoiId?: string
   onPoiSelect?: (poiId: string) => void
-  midpointLat?: string | number
-  midpointLng?: string | number
-}
-
-interface PoiWithTravelTimes extends PoiResponse {
-  osm_id: string
-  travelTimeFromStart?: number
-  travelTimeFromEnd?: number
-  distanceFromStart?: number
-  distanceFromEnd?: number
-  totalTravelTime?: number
-  travelTimeDifference?: number
-  isFavorite?: boolean
 }
 
 type SortOption =
   | "name"
-  | "distanceFromStart"
-  | "distanceFromEnd"
-  | "totalTime"
-  | "timeDifference"
+  | "durationFromFirst"
 type FilterOption = "all" | "food" | "activities" | "lodging" | "other"
-type MaxTimeDifference = 5 | 10 | 15 | 30 | 999
 
 export default function PointsOfInterest({
   pois,
+  origins,
   isLoading = true,
-  startLat,
-  startLng,
-  endLat,
-  endLng,
-  startAddress = "",
-  endAddress = "",
+  selectedPoiId,
   onPoiSelect,
-  midpointLat = "0",
-  midpointLng = "0"
 }: PointsOfInterestProps) {
   // Debug the full pois prop structure
   if (process.env.NODE_ENV === 'development') {
     console.log('[PointsOfInterest] Raw pois prop:', JSON.stringify(pois, null, 2));
   }
 
-  const [poisWithTravelTimes, setPoisWithTravelTimes] = useState<
-    PoiWithTravelTimes[]
-  >([])
   const [activeTab, setActiveTab] = useState<FilterOption>("all")
-  const [selectedPoi, setSelectedPoi] = useState<string | null>(null)
   const [favorites, setFavorites] = useState<string[]>([])
-  const [sortBy, setSortBy] = useState<SortOption>("totalTime")
-  const [maxTimeDifference, setMaxTimeDifference] =
-    useState<MaxTimeDifference>(15)
+  const [sortBy, setSortBy] = useState<SortOption>("durationFromFirst")
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false)
-  const [selectedCategory, setSelectedCategory] = useState<string>("")
-  const [showFilters, setShowFilters] = useState(false)
 
   // Load favorites from localStorage on component mount
   useEffect(() => {
@@ -125,215 +91,86 @@ export default function PointsOfInterest({
 
   // Save favorites to localStorage when they change
   useEffect(() => {
-    if (typeof window !== "undefined" && favorites.length > 0) {
+    if (typeof window !== "undefined") {
       localStorage.setItem("mmh-favorites", JSON.stringify(favorites))
     }
   }, [favorites])
 
-  // Combined effect to handle POI updates and travel time calculations
-  useEffect(() => {
-    if (!pois.length) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[PointsOfInterest] No POIs provided');
-      }
-      setPoisWithTravelTimes([])
-      return
-    }
-
-    setPoisWithTravelTimes([]) // Reset before loading new ones
-
-    try {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[PointsOfInterest] Processing POIs:', pois);
-      }
-      // Use the pre-calculated travel times from the POIs
-      const updatedPois = pois.map(poi => {
-        const poiId = poi.osm_id || `${poi.lat}-${poi.lon}`;
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[PointsOfInterest] Processing POI:', {
-            name: poi.name,
-            id: poiId,
-            travelTimeFromStart: poi.travelTimeFromStart,
-            travelTimeFromEnd: poi.travelTimeFromEnd,
-            totalTravelTime: poi.totalTravelTime,
-            distanceFromStart: poi.distanceFromStart,
-            distanceFromEnd: poi.distanceFromEnd
-          });
-        }
-
-        // Ensure all required fields are present
-        const updatedPoi = {
-          ...poi,
-          osm_id: poiId,
-          isFavorite: favorites.includes(poiId),
-          travelTimeFromStart: poi.travelTimeFromStart || undefined,
-          travelTimeFromEnd: poi.travelTimeFromEnd || undefined,
-          distanceFromStart: poi.distanceFromStart || undefined,
-          distanceFromEnd: poi.distanceFromEnd || undefined,
-          totalTravelTime: poi.totalTravelTime || undefined,
-          travelTimeDifference: poi.travelTimeDifference || undefined
-        };
-
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[PointsOfInterest] Updated POI:', updatedPoi);
-        }
-        return updatedPoi;
-      });
-
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[PointsOfInterest] Updated POIs:', updatedPois);
-      }
-      setPoisWithTravelTimes(updatedPois);
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error("[PointsOfInterest] Error processing POIs:", error);
-      }
-    }
-  }, [pois, favorites]);
-
-  // Define getPoiCategory before using it
-  const getPoiCategory = (type: string): string => {
-    if (type.includes('restaurant') || type.includes('cafe') || type.includes('bar')) return 'Food & Drink';
-    if (type.includes('park') || type.includes('playground') || type.includes('recreation')) return 'Parks & Recreation';
-    if (type.includes('hotel') || type.includes('motel') || type.includes('inn')) return 'Hotels';
-    if (type.includes('shop') || type.includes('store') || type.includes('market')) return 'Shopping';
-    if (type.includes('museum') || type.includes('gallery') || type.includes('theatre')) return 'Arts & Culture';
-    if (type.includes('school') || type.includes('university') || type.includes('college')) return 'Education';
-    if (type.includes('hospital') || type.includes('clinic') || type.includes('pharmacy')) return 'Healthcare';
-    if (type.includes('bank') || type.includes('atm') || type.includes('post')) return 'Services';
-    return 'Other';
-  };
-
   const sortedAndFilteredPois = useMemo(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[PointsOfInterest] Sorting and filtering POIs with travel times:', poisWithTravelTimes);
-    }
-    
-    // Apply category filter (from tabs)
-    let filtered = [...poisWithTravelTimes];
-    
-    // Filter by tabs
+    // Start with the enriched POIs passed as props
+    let processedPois = pois.map(poi => ({
+      ...poi,
+      // Add isFavorite status based on the local favorites state
+      isFavorite: favorites.includes(poi.osm_id || `${poi.lat}-${poi.lon}`)
+    }))
+
+    // Apply category filter (tabs)
     if (activeTab !== 'all') {
-      filtered = filtered.filter(poi => {
-        const lowerType = poi.type.toLowerCase();
+      processedPois = processedPois.filter(poi => {
+        const lowerType = poi.type.toLowerCase()
         switch (activeTab) {
           case 'food':
-            return lowerType.includes('restaurant') || 
-                   lowerType.includes('cafe') || 
-                   lowerType.includes('bar') || 
-                   lowerType.includes('pub') ||
-                   lowerType.includes('food');
+            return lowerType.includes('restaurant') || lowerType.includes('cafe') || lowerType.includes('bar') || lowerType.includes('pub') || lowerType.includes('food')
           case 'activities':
-            return lowerType.includes('park') || 
-                   lowerType.includes('museum') || 
-                   lowerType.includes('cinema') || 
-                   lowerType.includes('theatre') ||
-                   lowerType.includes('theater') || 
-                   lowerType.includes('entertainment') ||
-                   lowerType.includes('gym') ||
-                   lowerType.includes('recreation');
+            return lowerType.includes('park') || lowerType.includes('museum') || lowerType.includes('cinema') || lowerType.includes('theatre') || lowerType.includes('theater') || lowerType.includes('entertainment') || lowerType.includes('gym') || lowerType.includes('recreation')
           case 'lodging':
-            return lowerType.includes('hotel') || 
-                   lowerType.includes('motel') || 
-                   lowerType.includes('inn') || 
-                   lowerType.includes('hostel') ||
-                   lowerType.includes('lodging');
+            return lowerType.includes('hotel') || lowerType.includes('motel') || lowerType.includes('inn') || lowerType.includes('hostel') || lowerType.includes('lodging')
           case 'other':
-            return !lowerType.includes('restaurant') && 
-                   !lowerType.includes('cafe') && 
-                   !lowerType.includes('bar') && 
-                   !lowerType.includes('pub') &&
-                   !lowerType.includes('food') &&
-                   !lowerType.includes('park') && 
-                   !lowerType.includes('museum') && 
-                   !lowerType.includes('cinema') && 
-                   !lowerType.includes('theatre') &&
-                   !lowerType.includes('theater') && 
-                   !lowerType.includes('entertainment') &&
-                   !lowerType.includes('gym') &&
-                   !lowerType.includes('recreation') &&
-                   !lowerType.includes('hotel') && 
-                   !lowerType.includes('motel') && 
-                   !lowerType.includes('inn') && 
-                   !lowerType.includes('hostel') &&
-                   !lowerType.includes('lodging');
+            // Simplified 'other' logic - needs careful review if specific types are needed
+            const knownCategories = ['restaurant', 'cafe', 'bar', 'pub', 'food', 'park', 'museum', 'cinema', 'theatre', 'theater', 'entertainment', 'gym', 'recreation', 'hotel', 'motel', 'inn', 'hostel', 'lodging']
+            return !knownCategories.some(cat => lowerType.includes(cat))
           default:
-            return true;
+            return true
         }
-      });
+      })
     }
-    
-    // Filter by favorites
+
+    // Filter by favorites checkbox
     if (showOnlyFavorites) {
-      filtered = filtered.filter(poi => poi.isFavorite);
+      processedPois = processedPois.filter(poi => poi.isFavorite)
     }
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[PointsOfInterest] Filtered POIs:', filtered);
-    }
-    
-    // Sort by total travel time
-    const sorted = filtered.sort((a, b) => {
-      const aTime = a.totalTravelTime || Infinity;
-      const bTime = b.totalTravelTime || Infinity;
-      return aTime - bTime;
-    });
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[PointsOfInterest] Sorted POIs:', sorted);
-    }
-    return sorted;
-  }, [poisWithTravelTimes, activeTab, showOnlyFavorites]);
 
-  // Get unique categories for the filter
-  const categories = useMemo(() => {
-    return Array.from(new Set(poisWithTravelTimes.map(poi => getPoiCategory(poi.type)))).sort();
-  }, [poisWithTravelTimes]);
+    // Sorting Logic (Adaptation Needed)
+    processedPois.sort((a, b) => {
+       if (!a) return 1;
+       if (!b) return -1;
 
-  const formatDuration = (seconds?: number): string => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[formatDuration] Input seconds:', seconds);
-    }
-    if (seconds === undefined || seconds === null) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[formatDuration] Returning N/A for undefined seconds');
+      switch (sortBy) {
+        case "name":
+          return (a.name || '').localeCompare(b.name || '');
+        case "durationFromFirst":
+        default:
+          // Explicitly check travelInfo before accessing duration
+          const aDuration = (a.travelInfo && a.travelInfo.length > 0) ? a.travelInfo[0].duration ?? Infinity : Infinity;
+          const bDuration = (b.travelInfo && b.travelInfo.length > 0) ? b.travelInfo[0].duration ?? Infinity : Infinity;
+          return aDuration - bDuration;
       }
-      return "N/A";
-    }
+    });
 
-    // Convert seconds to minutes and round to nearest minute
-    const minutes = Math.round(seconds / 60);
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[formatDuration] Converted to minutes:', minutes);
-    }
+    return processedPois
+  }, [pois, activeTab, showOnlyFavorites, sortBy, favorites])
 
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.round(minutes % 60);
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[formatDuration] Calculated hours:', hours, 'mins:', mins);
+  const formatDuration = (seconds?: number | null): string => {
+    if (seconds === undefined || seconds === null) {
+      return "N/A"
     }
-
+    const minutes = Math.round(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    const mins = Math.round(minutes % 60)
     if (hours > 0) {
-      return `${hours}h ${mins}m`;
+      return `${hours}h ${mins}m`
     }
-
-    return `${mins}m`;
+    return `${mins}m`
   }
 
-  const formatDistance = (meters?: number): string => {
-    if (meters === undefined) return "N/A"
-
-    // Convert meters to miles (1 meter = 0.000621371 miles)
+  const formatDistance = (meters?: number | null): string => {
+    if (meters === undefined || meters === null) return "N/A"
     const miles = meters * 0.000621371
-
     if (miles >= 10) {
-      // For longer distances, round to nearest mile
       return `${Math.round(miles)} mi`
     } else if (miles >= 0.1) {
-      // For medium distances, round to nearest mile
       return `${Math.round(miles)} mi`
     } else {
-      // For very short distances, show in feet (1 mile = 5280 feet)
       const feet = Math.round(miles * 5280)
       return `${feet} ft`
     }
@@ -348,7 +185,6 @@ export default function PointsOfInterest({
       case "park":
         return <MapPin className="size-4" />
       case "bar":
-        return <Beer className="size-4" />
       case "pub":
         return <Beer className="size-4" />
       case "library":
@@ -369,10 +205,11 @@ export default function PointsOfInterest({
 
   const toggleFavorite = (poiId: string) => {
     setFavorites(prev => {
-      if (prev.includes(poiId)) {
-        return prev.filter(id => id !== poiId)
+      const key = poiId
+      if (prev.includes(key)) {
+        return prev.filter(id => id !== key)
       } else {
-        return [...prev, poiId]
+        return [...prev, key]
       }
     })
   }
@@ -383,20 +220,20 @@ export default function PointsOfInterest({
       if (process.env.NODE_ENV === 'development') {
         console.log('[PointsOfInterest] POI data for rendering:', sortedAndFilteredPois.map(poi => ({
           name: poi.name,
-          travelTimeFromStart: poi.travelTimeFromStart,
-          travelTimeFromEnd: poi.travelTimeFromEnd,
-          distanceFromStart: poi.distanceFromStart,
-          distanceFromEnd: poi.distanceFromEnd,
-          totalTravelTime: poi.totalTravelTime,
-          travelTimeDifference: poi.travelTimeDifference
+          travelTimeFromStart: poi.travelInfo?.[0]?.duration,
+          travelTimeFromEnd: poi.travelInfo?.[1]?.duration,
+          distanceFromStart: poi.travelInfo?.[0]?.distance,
+          distanceFromEnd: poi.travelInfo?.[1]?.distance,
+          totalTravelTime: poi.travelInfo?.[0]?.duration + (poi.travelInfo?.[1]?.duration || 0),
+          travelTimeDifference: Math.abs((poi.travelInfo?.[0]?.duration || 0) - (poi.travelInfo?.[1]?.duration || 0))
         })));
       }
     }
-  }, [sortedAndFilteredPois, isLoading]);
+  }, [sortedAndFilteredPois, isLoading])
 
   return (
-    <Card className="relative h-[600px] overflow-hidden">
-      <CardHeader className="pb-3">
+    <Card className="relative h-full overflow-hidden flex flex-col">
+      <CardHeader className="pb-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle>Points of Interest</CardTitle>
           <Button
@@ -415,13 +252,14 @@ export default function PointsOfInterest({
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="relative p-0">
+      <CardContent className="relative p-0 flex-grow flex flex-col">
         <Tabs
           defaultValue="all"
           value={activeTab}
           onValueChange={value => setActiveTab(value as FilterOption)}
+          className="flex flex-col flex-grow"
         >
-          <div className="border-b px-6">
+          <div className="border-b px-6 flex-shrink-0">
             <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="all" disabled={isLoading}>All</TabsTrigger>
               <TabsTrigger value="food" disabled={isLoading}>Food</TabsTrigger>
@@ -431,7 +269,7 @@ export default function PointsOfInterest({
             </TabsList>
           </div>
 
-          <div className="relative h-[485px]">
+          <div className="relative flex-grow overflow-hidden">
             {isLoading && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center space-y-2 bg-background/80 backdrop-blur-sm">
                 <Loader2 className="size-8 animate-spin text-primary" />
@@ -439,177 +277,146 @@ export default function PointsOfInterest({
               </div>
             )}
 
-            <div className="h-full space-y-4 overflow-y-auto px-2 py-4">
+            <div className="absolute inset-0 overflow-y-auto space-y-4 px-2 py-4">
               {sortedAndFilteredPois.length === 0 && !isLoading ? (
                 <div className="text-muted-foreground p-4 text-center">
                   No points of interest found for the selected filters.
                 </div>
               ) : (
-                sortedAndFilteredPois.map(poi => (
-                  <Card
-                    key={poi.osm_id || `${poi.lat}-${poi.lon}`}
-                    className={`mx-4 transition-all hover:shadow-md ${
-                      selectedPoi === (poi.osm_id || `${poi.lat}-${poi.lon}`) ? "ring-primary ring-2" : ""
-                    }`}
-                    onClick={() => {
-                      setSelectedPoi(poi.osm_id || `${poi.lat}-${poi.lon}` || null)
-                      onPoiSelect?.(poi.osm_id || `${poi.lat}-${poi.lon}` || "")
-                    }}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="mb-2 flex items-center gap-2">
-                            {getPoiIcon(poi.type)}
-                            <span className="font-medium truncate">{poi.name}</span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="size-6 p-0 shrink-0"
-                              onClick={e => {
-                                e.stopPropagation()
-                                if (poi.osm_id) toggleFavorite(poi.osm_id)
-                              }}
-                            >
-                              {poi.isFavorite ? (
-                                <Star className="size-4 text-yellow-500" />
-                              ) : (
-                                <StarOff className="size-4" />
-                              )}
-                            </Button>
-                          </div>
+                sortedAndFilteredPois.map(poi => {
+                  const poiKey = poi.osm_id || `${poi.lat}-${poi.lon}`
+                  return (
+                    <Card
+                      key={poiKey}
+                      className={`mx-4 transition-all hover:shadow-md ${
+                        selectedPoiId === poiKey ? "ring-primary ring-2" : ""
+                      }`}
+                      onClick={() => {
+                        onPoiSelect?.(poiKey)
+                      }}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="mb-2 flex items-center gap-2">
+                              {getPoiIcon(poi.type)}
+                              <span className="font-medium truncate">{poi.name}</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="size-6 p-0 shrink-0"
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  toggleFavorite(poiKey)
+                                }}
+                              >
+                                {poi.isFavorite ? (
+                                  <Star className="size-4 text-yellow-500" />
+                                ) : (
+                                  <StarOff className="size-4" />
+                                )}
+                              </Button>
+                            </div>
 
-                          <CardDescription>
-                            {poi.type}
-                            {poi.address && (
-                              <div className="text-xs text-muted-foreground mt-1">
-                                {[
-                                  poi.address.street,
-                                  poi.address.city,
-                                  poi.address.state,
-                                  poi.address.postal_code
-                                ].filter(Boolean).join(", ")}
+                            <CardDescription>
+                              {poi.type}
+                              {poi.address && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  {[
+                                    poi.address.street,
+                                    poi.address.city,
+                                    poi.address.state,
+                                    poi.address.postal_code
+                                  ].filter(Boolean).join(", ")}
+                                </div>
+                              )}
+                            </CardDescription>
+
+                            {poi.travelInfo && poi.travelInfo.length > 0 && (
+                              <div className={`mt-2 grid grid-cols-${Math.min(poi.travelInfo.length, 3)} gap-x-4 gap-y-1 text-xs`}>
+                                {poi.travelInfo.map(info => {
+                                  const originName = origins[info.sourceIndex]?.display_name;
+                                  const originLabel = originName ? originName.substring(0, 15) + (originName.length > 15 ? '...' : '') : `Loc ${info.sourceIndex + 1}`;
+                                  return (
+                                    <div key={info.sourceIndex}>
+                                      <div className="font-medium truncate" title={originName || `Location ${info.sourceIndex + 1}`}>{originLabel}:</div>
+                                      <div className="flex items-center gap-1 whitespace-nowrap">
+                                        <Clock className="size-3 shrink-0" />
+                                        <span className="truncate">{formatDuration(info.duration)}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 whitespace-nowrap">
+                                        <Navigation className="size-3 shrink-0" />
+                                        <span className="truncate">{formatDistance(info.distance)}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
-                          </CardDescription>
-
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                            <div className="flex items-center gap-1 whitespace-nowrap">
-                              <Clock className="size-3 shrink-0" />
-                              <span className="truncate text-xs">
-                                Location 1: {" "}
-                                {typeof poi.travelTimeFromStart === 'number' 
-                                  ? formatDuration(poi.travelTimeFromStart)
-                                  : "N/A"}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-1 whitespace-nowrap">
-                              <Clock className="size-3 shrink-0" />
-                              <span className="truncate text-xs">
-                                Location 2: {" "}
-                                {typeof poi.travelTimeFromEnd === 'number'
-                                  ? formatDuration(poi.travelTimeFromEnd)
-                                  : "N/A"}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-1 whitespace-nowrap">
-                              <Navigation className="size-3 shrink-0" />
-                              <span className="truncate text-xs">
-                                Location 1: {typeof poi.distanceFromStart === 'number'
-                                  ? formatDistance(poi.distanceFromStart)
-                                  : "N/A"}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-1 whitespace-nowrap">
-                              <Navigation className="size-3 shrink-0" />
-                              <span className="truncate text-xs">
-                                Location 2: {typeof poi.distanceFromEnd === 'number'
-                                  ? formatDistance(poi.distanceFromEnd)
-                                  : "N/A"}
-                              </span>
-                            </div>
                           </div>
 
-                          {typeof poi.travelTimeDifference === 'number' && (
-                            <div className="mt-2">
-                              <Badge
-                                variant={
-                                  poi.travelTimeDifference / 60 <= 5
-                                    ? "default"
-                                    : "secondary"
-                                }
-                              >
-                                {Math.round(poi.travelTimeDifference / 60)} min
-                                difference
-                              </Badge>
-                            </div>
-                          )}
-                        </div>
+                          <div className="flex flex-col gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="icon" 
+                              className="size-8 shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onPoiSelect?.(poiKey);
+                              }}
+                              title="View on Map"
+                            >
+                              <MapPin className="size-4" />
+                            </Button>
 
-                        <div className="flex flex-col gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="size-8 shrink-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onPoiSelect?.(poi.osm_id || `${poi.lat}-${poi.lon}` || "");
-                            }}
-                            title="View on Map"
-                          >
-                            <MapPin className="size-4" />
-                          </Button>
-
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="shrink-0">
-                                <Navigation className="size-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  window.open(
-                                    `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
-                                    "_blank"
-                                  );
-                                }}
-                              >
-                                Open in Google Maps
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  window.open(
-                                    `http://maps.apple.com/?ll=${poi.lat},${poi.lon}`,
-                                    "_blank"
-                                  );
-                                }}
-                              >
-                                Open in Apple Maps
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  window.open(
-                                    `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
-                                    "_blank"
-                                  );
-                                }}
-                              >
-                                Open in Waze
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="shrink-0">
+                                  <Navigation className="size-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(
+                                      `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
+                                      "_blank"
+                                    );
+                                  }}
+                                >
+                                  Open in Google Maps
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(
+                                      `http://maps.apple.com/?ll=${poi.lat},${poi.lon}`,
+                                      "_blank"
+                                    );
+                                  }}
+                                >
+                                  Open in Apple Maps
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(
+                                      `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
+                                      "_blank"
+                                    );
+                                  }}
+                                >
+                                  Open in Waze
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
+                      </CardContent>
+                    </Card>
+                  );
+                })
               )}
             </div>
           </div>

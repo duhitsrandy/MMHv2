@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { History } from "lucide-react"
 import dynamic from "next/dynamic"
-import { Location } from "@/types"
-import { Search } from "@/types"
+import { Location, Search, GeocodedOrigin } from "@/types"
 import { useUserData } from "../_hooks/useUserData"
 import { useSearchSaver } from "../_hooks/useSearchSaver"
 import MeetMeHalfwayForm from "./meet-me-halfway-form"
@@ -29,12 +28,7 @@ const ResultsMap = dynamic(
 type AppState = "input" | "results"
 
 interface AppData {
-  startLat?: string
-  startLng?: string
-  startAddress?: { lat: number; lng: number; display_name?: string }
-  endLat?: string
-  endLng?: string
-  endAddress?: { lat: number; lng: number; display_name?: string }
+  origins?: GeocodedOrigin[]
 }
 
 export default function MeetMeHalfwayApp() {
@@ -66,40 +60,44 @@ export default function MeetMeHalfwayApp() {
   }, [userDataError]);
 
   // Handle form submission
-  const handleFindMidpoint = async (data: {
-    startLat: string
-    startLng: string
-    startAddress: { lat: number; lng: number; display_name?: string }
-    endLat: string
-    endLng: string
-    endAddress: { lat: number; lng: number; display_name?: string }
-  }) => {
+  const handleFindMidpoint = async (data: { origins: GeocodedOrigin[] }) => {
     console.log("[App] handleFindMidpoint called with data:", data);
-    setAppData(data); // Set data needed for results view
+    if (!data.origins || data.origins.length < 2) {
+        console.error("[App] Invalid data received from form:", data);
+        // Optionally show a toast error
+        return;
+    }
+    setAppData({ origins: data.origins }); // Set the array of origins
     setAppState("results"); // Switch view
 
-    // Prepare data for the hook (excluding userId, as the hook adds it)
-    const newSearchData = {
-      startLocationAddress: data.startAddress.display_name || "",
-      startLocationLat: data.startLat,
-      startLocationLng: data.startLng,
-      endLocationAddress: data.endAddress.display_name || "",
-      endLocationLat: data.endLat,
-      endLocationLng: data.endLng,
-      // Hook expects these fields, even if temporary
-      midpointLat: "0", 
-      midpointLng: "0" 
-    };
+    // --- Save Search Logic (Adaptation Needed) ---
+    // For now, let's only save if exactly 2 origins were provided, using the old structure.
+    // TODO: Decide how to store multi-origin searches in the DB later (Phase 4 Optional).
+    if (data.origins.length === 2) {
+        const startOrigin = data.origins[0];
+        const endOrigin = data.origins[1];
 
-    // Call the saveSearch function from the hook (it handles the isSignedIn check)
-    await saveSearch(newSearchData); 
-    // Note: We don't need to manually update state here, 
-    // the onSearchSaved callback handles it.
-    // Error handling/toast is also done within the hook.
+        // Map back to the structure expected by useSearchSaver
+        const newSearchData = {
+            startLocationAddress: startOrigin.display_name || "",
+            startLocationLat: startOrigin.lat,
+            startLocationLng: startOrigin.lng,
+            endLocationAddress: endOrigin.display_name || "",
+            endLocationLat: endOrigin.lat,
+            endLocationLng: endOrigin.lng,
+            midpointLat: "0", // Hook still expects these, though maybe not used
+            midpointLng: "0"
+        };
+        await saveSearch(newSearchData); // Call the hook
+    } else {
+        console.log("[App] Skipping save for multi-origin search (>2 locations).");
+    }
+    // ----------------------------------------------
   }
 
   // Handle back to input
   const handleBackToInput = () => {
+    setAppData({}); // Clear data when going back
     setAppState("input")
   }
 
@@ -181,14 +179,15 @@ export default function MeetMeHalfwayApp() {
             ← Back to Input
           </Button>
 
-          <ResultsMap
-            startLat={appData.startLat || "0"}
-            startLng={appData.startLng || "0"}
-            endLat={appData.endLat || "0"}
-            endLng={appData.endLng || "0"}
-            startAddress={appData.startAddress || { lat: 0, lng: 0, display_name: '' }}
-            endAddress={appData.endAddress || { lat: 0, lng: 0, display_name: '' }}
-          />
+          {appData.origins && appData.origins.length >= 2 ? (
+             <ResultsMap
+                geocodedOrigins={appData.origins}
+             />
+           ) : (
+             <div className="text-center text-destructive p-4">
+               Error: Invalid location data provided for results.
+             </div>
+           )}
         </div>
       )}
     </div>

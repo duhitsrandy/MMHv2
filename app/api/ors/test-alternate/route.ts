@@ -38,6 +38,7 @@ export async function POST(request: Request) {
 
     console.log('[Test Alternate] Requesting routes with alternatives...');
 
+    console.time("[Test Alternate] ORS API Call Duration");
     const response = await fetch(
       'https://api.openrouteservice.org/v2/directions/driving-car',
       {
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
         })
       }
     );
+    console.timeEnd("[Test Alternate] ORS API Call Duration");
 
     if (!response.ok) {
       const errorText = await response.text();

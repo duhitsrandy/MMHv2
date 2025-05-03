@@ -23,6 +23,7 @@ DATABASE_URL=postgresql://user:password@host:port/database
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key # Keep this secure, not in frontend env
+CLERK_WEBHOOK_SECRET= # From Clerk Dashboard -> Webhooks -> Endpoint signing secret
 ```
 
 ---

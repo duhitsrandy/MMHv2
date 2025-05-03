@@ -1,5 +1,8 @@
 # Meet Me Halfway v2
 
+> **Documentation for this project is now organized in the `docs/` directory.**
+> See [docs/README.md](docs/README.md) for a full table of contents.
+
 A modern web application that helps users find the perfect meeting point between two locations, with support for alternate routes, points of interest, and travel time calculations.
 
 ## Features
@@ -139,14 +142,15 @@ npm run dev
 
 ## Documentation
 
-- [App Structure](app-structure.md)
-- [Authentication](auth-docs.md)
-- [Rate Limiting](rate-limit-docs.md)
-- [Theme System](theme-docs.md)
-- [Database Schema](db-schema-docs.md)
-- [API Integration](api-docs.md)
-- [Production Checklist](PRODUCTION.md)
-- [Potential Future Features](POTENTIAL_FUTURE_FEATURES.md)
+- [App Structure](docs/app-structure.md)
+- [Authentication](docs/auth-docs.md)
+- [Rate Limiting](docs/rate-limit-docs.md)
+- [Theme System](docs/theme-docs.md)
+- [Database Schema](docs/db-schema-docs.md)
+- [API Integration](docs/api-docs.md)
+- [Production Checklist](docs/PRODUCTION.md)
+- [Potential Future Features](docs/POTENTIAL_FUTURE_FEATURES.md)
+- [Monitoring & Analytics](docs/MONITORING.md)
 
 ## Analytics & Monitoring
 

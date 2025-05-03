@@ -304,6 +304,7 @@ export async function getTravelTimeMatrixAction(
   console.log("[Matrix Calculation] ORS Matrix URL:", apiUrl);
   // console.log("[Matrix Calculation] ORS Request Body:", JSON.stringify(requestBody)); // Avoid logging potentially large bodies unless debugging
 
+  console.time("[Matrix Calculation] ORS API Call Duration"); // <-- Add timer start
   try {
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -314,6 +315,7 @@ export async function getTravelTimeMatrixAction(
       },
       body: JSON.stringify(requestBody),
     });
+    console.timeEnd("[Matrix Calculation] ORS API Call Duration"); // <-- Add timer end (regardless of success/failure)
 
     if (!response.ok) {
       const errorBody = await response.text();
