@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useMemo } from "react"
-import L from "leaflet"
+import L, { Icon, Map as LeafletMap } from "leaflet"
 import "leaflet/dist/leaflet.css"
 import {
   MapContainer,
@@ -46,15 +46,15 @@ const purpleIcon = new L.Icon({
 })
 
 // Create a custom green icon for origin locations (example)
-const greenIcon = new L.Icon({
-  iconUrl: "/leaflet/marker-icon-green.png",
-  iconRetinaUrl: "/leaflet/marker-icon-2x-green.png",
-  shadowUrl: "/leaflet/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-})
+// const greenIcon = new L.Icon({
+//   iconUrl: "/leaflet/marker-icon-green.png",
+//   iconRetinaUrl: "/leaflet/marker-icon-2x-green.png",
+//   shadowUrl: "/leaflet/marker-shadow.png",
+//   iconSize: [25, 41],
+//   iconAnchor: [12, 41],
+//   popupAnchor: [1, -34],
+//   shadowSize: [41, 41]
+// })
 
 interface Icons {
   midpointIcon: L.Icon
@@ -67,7 +67,7 @@ const icons: Icons = {
   midpointIcon: redIcon,
   alternateMidpointIcon: purpleIcon,
   poiIcon: new L.Icon.Default(),
-  originIcon: greenIcon,
+  originIcon: new L.Icon.Default() as L.Icon,
 }
 
 interface MapComponentProps {
@@ -143,6 +143,182 @@ function FitBounds({
   return null
 }
 
+// *** NEW COMPONENT for POI Markers ***
+interface PoiMarkersLayerProps {
+  pois: EnrichedPoi[];
+  origins: GeocodedOrigin[];
+  showPois: boolean;
+  selectedPoiId?: string;
+  onPoiSelect?: (poiId: string) => void;
+  icons: { poiIcon: L.Icon.Default; selectedPoiIcon: L.Icon };
+  handleMarkerInteraction: (key: string, poiLat: number, poiLon: number, marker: L.Marker) => void;
+}
+
+function PoiMarkersLayer({
+  pois,
+  origins,
+  showPois,
+  selectedPoiId,
+  onPoiSelect, // onPoiSelect is needed if handleMarkerInteraction is defined outside
+  icons,
+  handleMarkerInteraction
+}: PoiMarkersLayerProps) {
+  const map = useMap(); // Get map instance reliably
+  const poiMarkers = useRef<Map<string, L.Marker>>(new Map());
+  const prevPoisRef = useRef<EnrichedPoi[]>([]);
+  const prevSelectedPoiIdRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!showPois) {
+      poiMarkers.current.forEach(marker => marker.remove());
+      poiMarkers.current.clear();
+      prevPoisRef.current = [];
+      prevSelectedPoiIdRef.current = undefined; // Also reset selection ref
+      return;
+    }
+
+    const prevPois = prevPoisRef.current;
+    const prevSelectedPoiId = prevSelectedPoiIdRef.current;
+    const getKey = (poi: EnrichedPoi): string => poi.osm_id || `${poi.lat}-${poi.lon}`;
+    const currentPoisMap = new Map<string, EnrichedPoi>(pois.map(poi => [getKey(poi), poi]));
+
+    // --- Refined Update Logic --- 
+
+    // 1. Remove markers that are no longer in the current list
+    poiMarkers.current.forEach((marker, key) => {
+      if (!currentPoisMap.has(key)) {
+        marker.off('click');
+        marker.off('keydown'); // Assuming keydown was also added
+        marker.remove();
+        poiMarkers.current.delete(key);
+      }
+    });
+
+    // 2. Add new markers or update existing ones
+    currentPoisMap.forEach((poi: EnrichedPoi, key: string) => {
+      const poiLat = Number(poi.lat);
+      const poiLon = Number(poi.lon);
+
+      if (isNaN(poiLat) || isNaN(poiLon)) {
+        return;
+      }
+
+      const isSelected = selectedPoiId === key;
+      const existingMarker = poiMarkers.current.get(key);
+
+      if (existingMarker) {
+        // Marker exists, just update icon if selection changed
+        const wasSelected = prevSelectedPoiIdRef.current === key; // Check previous selection
+        if (isSelected !== wasSelected) {
+          existingMarker.setIcon(isSelected ? icons.selectedPoiIcon : icons.poiIcon);
+        }
+      } else {
+        // Marker doesn't exist, create it fully
+        const markerElement = L.marker([poiLat, poiLon], {
+          icon: isSelected ? icons.selectedPoiIcon : icons.poiIcon,
+          alt: `POI: ${poi.name || 'Unnamed Location'}`,
+          keyboard: true,
+        }).addTo(map);
+
+        // Add listeners and popup
+        const element = markerElement.getElement();
+        if (element) {
+          element.setAttribute('tabindex', '0');
+          element.setAttribute('role', 'button');
+          element.setAttribute('aria-label', `Point of Interest: ${poi.name || 'Unnamed Location'}, Type: ${poi.type || 'Unknown Type'}. Press Enter or Space to view details.`);
+
+          L.DomEvent.on(element, 'keydown', (e) => {
+            const keyboardEvent = e as unknown as KeyboardEvent;
+            if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+              keyboardEvent.preventDefault();
+              handleMarkerInteraction(key, poiLat, poiLon, markerElement);
+            }
+          });
+        }
+
+        markerElement.on('click', () => {
+          handleMarkerInteraction(key, poiLat, poiLon, markerElement);
+        });
+
+        markerElement.bindPopup(createPopupContent(poi, origins));
+        
+        // Add to ref
+        poiMarkers.current.set(key, markerElement);
+      }
+    });
+
+    // Update refs for the next run
+    prevPoisRef.current = pois;
+    prevSelectedPoiIdRef.current = selectedPoiId;
+
+    // Cleanup: Remove all markers managed by this layer on unmount
+    return () => {
+       if (poiMarkers.current) {
+           poiMarkers.current.forEach((marker: L.Marker, key: string) => {
+               marker.off('click');
+               marker.off('keydown');
+               marker.remove();
+           });
+           poiMarkers.current.clear();
+       }
+       prevPoisRef.current = [];
+       prevSelectedPoiIdRef.current = undefined;
+    };
+
+  }, [map, pois, showPois, selectedPoiId, icons, origins, handleMarkerInteraction]);
+
+  return null;
+}
+
+// Helper function (moved here or ensure it's accessible globally/imported)
+function createPopupContent(poi: EnrichedPoi, originLocations: GeocodedOrigin[]): string {
+  let travelInfoHtml = ''
+  if (poi.travelInfo && poi.travelInfo.length > 0) {
+    travelInfoHtml = `<div class="mt-2 grid grid-cols-${Math.min(poi.travelInfo.length, 3)} gap-2 text-sm">`
+    poi.travelInfo.forEach((info) => {
+      const originName = originLocations[info.sourceIndex]?.display_name
+      const originLabel = originName ? originName.substring(0, 23) + (originName.length > 23 ? '...' : '') : `Location ${info.sourceIndex + 1}`
+      const durationText = info.duration != null ? `${Math.round(info.duration / 60)} min` : 'N/A'
+      const distanceText = info.distance != null ? `${Math.round((info.distance / 1000) * 0.621371)} mi` : ''
+      travelInfoHtml += `
+        <div>
+          <div class="font-medium">From ${originLabel}:</div>
+          <div>${durationText}</div>
+          <div>${distanceText}</div>
+        </div>
+      `
+    })
+    travelInfoHtml += `</div>`
+  }
+
+  return `
+    <div class="max-w-[330px]">
+      <div class="font-medium text-lg">${poi.name || 'Unnamed Location'}</div>
+      <div class="text-muted-foreground text-sm">${poi.type || 'Unknown Type'}</div>
+      ${poi.address ? `
+        <div class="text-muted-foreground mt-1 text-sm">
+          ${[
+            poi.address?.street,
+            poi.address?.city,
+            poi.address?.state,
+            poi.address?.postal_code
+          ]
+            .filter(Boolean)
+            .join(", ")}
+        </div>
+      ` : ''}
+      ${travelInfoHtml}
+      <div class="mt-2 text-sm text-center">
+        <a href="https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}" target="_blank" class="text-blue-600 hover:underline">Google Maps</a>
+        <span class="mx-1 text-gray-400">|</span>
+        <a href="http://maps.apple.com/?ll=${poi.lat},${poi.lon}" target="_blank" class="text-blue-600 hover:underline">Apple Maps</a>
+        <span class="mx-1 text-gray-400">|</span>
+        <a href="https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes" target="_blank" class="text-blue-600 hover:underline">Waze</a>
+      </div>
+    </div>
+  `
+}
+
 export default function MapComponent({
   origins,
   midpoint,
@@ -152,15 +328,15 @@ export default function MapComponent({
   alternateRoute,
   showAlternateRoute = false,
   pois = [],
-  showPois = false,
+  showPois = true,
   selectedPoiId,
   onPoiSelect,
   isLoading
 }: MapComponentProps) {
-  const mapRef = useRef<L.Map | null>(null)
+  const mapRef = useRef<LeafletMap | null>(null)
   const poiMarkers = useRef<Map<string, L.Marker>>(new Map())
   const prevPoisRef = useRef<EnrichedPoi[]>([])
-  const prevSelectedPoiIdRef = useRef<string | undefined>(undefined)
+  const prevSelectedPoiIdRef = useRef<string | undefined>(selectedPoiId)
 
   const selectedPoiIcon = new L.Icon({
     iconUrl: "/leaflet/marker-icon-gold.png",
@@ -186,189 +362,85 @@ export default function MapComponent({
     ]) || [], [alternateRoute]
   )
 
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !showPois) {
-      poiMarkers.current.forEach(marker => marker.remove())
-      poiMarkers.current.clear()
-      prevPoisRef.current = []
-      return
-    }
+  // Log received props
+  console.log('[MapComponent] Render Props:', {
+    originsCount: origins.length,
+    midpoint: !!midpoint,
+    alternateMidpoint: !!alternateMidpoint,
+    centralMidpoint: centralMidpoint,
+    mainRoute: !!mainRoute,
+    alternateRoute: !!alternateRoute,
+    showAlternateRoute,
+    poisCount: pois.length,
+    showPois,
+    selectedPoiId,
+    isLoading,
+  });
 
-    const prevPois = prevPoisRef.current
-    const prevSelectedPoiId = prevSelectedPoiIdRef.current
-    const getKey = (poi: EnrichedPoi) => poi.osm_id || `${poi.lat}-${poi.lon}`
-    const currentPoisMap = new Map(pois.map(poi => [getKey(poi), poi]))
-    const prevPoisMap = new Map(prevPois.map(poi => [getKey(poi), poi]))
-
-    console.log('[Map] Updating POIs:', {
-      currentCount: pois.length,
-      prevCount: prevPois.length,
-      selectedId: selectedPoiId,
-      prevSelectedId: prevSelectedPoiId,
-    })
-
-    prevPoisMap.forEach((_, key) => {
-      if (!currentPoisMap.has(key)) {
-        const markerToRemove = poiMarkers.current.get(key)
-        if (markerToRemove) {
-          markerToRemove.remove()
-          poiMarkers.current.delete(key)
-          console.log(`[Map] Removed POI marker: ${key}`)
-        }
-      }
-    })
-
-    currentPoisMap.forEach((poi, key) => {
-      const poiLat = Number(poi.lat)
-      const poiLon = Number(poi.lon)
-
-      if (isNaN(poiLat) || isNaN(poiLon)) {
-        console.warn("[Map] Invalid POI coordinates:", poi)
-        return
-      }
-
-      const isSelected = selectedPoiId === key
-      const wasSelected = prevSelectedPoiId === key
-      const existingMarker = poiMarkers.current.get(key)
-
-      if (existingMarker) {
-        if (isSelected !== wasSelected) {
-          existingMarker.setIcon(isSelected ? selectedPoiIcon : icons.poiIcon)
-          console.log(`[Map] Updated POI marker icon: ${key}, selected: ${isSelected}`)
-        }
-      } else {
-        const markerElement = L.marker([poiLat, poiLon], {
-          icon: isSelected ? selectedPoiIcon : icons.poiIcon,
-          alt: `POI: ${poi.name || 'Unnamed Location'}`,
-          keyboard: true,
-        }).addTo(map)
-
-        const element = markerElement.getElement()
-        if (element) {
-          element.setAttribute('tabindex', '0')
-          element.setAttribute('role', 'button')
-          element.setAttribute('aria-label', `Point of Interest: ${poi.name || 'Unnamed Location'}, Type: ${poi.type || 'Unknown Type'}. Press Enter or Space to view details.`)
-
-          L.DomEvent.on(element, 'keydown', (e) => {
-            const keyboardEvent = e as unknown as KeyboardEvent
-            if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
-              keyboardEvent.preventDefault()
-              handleMarkerInteraction(key, poiLat, poiLon, markerElement)
-            }
-          })
-        }
-
-        markerElement.on('click', () => {
-          handleMarkerInteraction(key, poiLat, poiLon, markerElement)
-        })
-
-        markerElement.bindPopup(createPopupContent(poi, origins))
-        poiMarkers.current.set(key, markerElement)
-        console.log(`[Map] Added POI marker: ${key}`)
-      }
-    })
-
-    prevPoisRef.current = pois
-    prevSelectedPoiIdRef.current = selectedPoiId
-
-    return () => {
-      if (mapRef.current && showPois) {
-        console.log('[Map] Cleaning up POI markers on unmount/hide')
-        poiMarkers.current.forEach(marker => marker.remove())
-        poiMarkers.current.clear()
-        prevPoisRef.current = []
-        prevSelectedPoiIdRef.current = undefined
-      }
-    }
-  }, [pois, showPois, selectedPoiId, onPoiSelect, selectedPoiIcon, mapRef, origins])
-
+  // Define handleMarkerInteraction - primarily updates state via onPoiSelect
+  // Let the useEffect below handle map movement and popup opening
   function handleMarkerInteraction(key: string, poiLat: number, poiLon: number, marker: L.Marker) {
-    const map = mapRef.current
-    if (!map) return
+    const map = mapRef.current;
+    if (!map) return;
 
+    // Always update the selected state
     if (onPoiSelect) {
-      onPoiSelect(key)
+      onPoiSelect(key);
     }
 
-    const targetLatLng = L.latLng(poiLat, poiLon)
-    const targetZoom = 15
-    const currentCenter = map.getCenter()
-    const currentZoom = map.getZoom()
-
+    // OPTIONAL: Immediately open popup if already close/zoomed (can be removed if useEffect handles all cases)
+    const targetLatLng = L.latLng(poiLat, poiLon);
+    const targetZoom = 15;
+    const currentCenter = map.getCenter();
+    const currentZoom = map.getZoom();
     if (currentZoom >= targetZoom - 1 && currentCenter.distanceTo(targetLatLng) < 50) {
-      if (!marker.isPopupOpen()) {
-        marker.openPopup()
-      }
-      return
+       if (!marker.isPopupOpen()) {
+         marker.openPopup();
+       }
+    } else {
     }
-
-    map.flyTo(targetLatLng, targetZoom, { duration: 0.8 })
-
-    let popupOpened = false
-    const openPopupOnEnd = () => {
-      if (!popupOpened) {
-        const currentMarker = poiMarkers.current.get(key)
-        if (currentMarker && !currentMarker.isPopupOpen()) {
-          currentMarker.openPopup()
-          popupOpened = true
-        }
-      }
-      map.off('moveend', openPopupOnEnd)
-      map.off('zoomend', openPopupOnEnd)
-    }
-
-    map.on('moveend', openPopupOnEnd)
-    map.on('zoomend', openPopupOnEnd)
   }
 
-  function createPopupContent(poi: EnrichedPoi, originLocations: GeocodedOrigin[]): string {
-    let travelInfoHtml = ''
-    if (poi.travelInfo && poi.travelInfo.length > 0) {
-      travelInfoHtml = `<div class="mt-2 grid grid-cols-${Math.min(poi.travelInfo.length, 3)} gap-2 text-sm">`
-      poi.travelInfo.forEach((info) => {
-        const originName = originLocations[info.sourceIndex]?.display_name
-        const originLabel = originName ? originName.substring(0, 15) + (originName.length > 15 ? '...' : '') : `Location ${info.sourceIndex + 1}`
-        const durationText = info.duration != null ? `${Math.round(info.duration / 60)} min` : 'N/A'
-        const distanceText = info.distance != null ? `${Math.round((info.distance / 1000) * 0.621371)} mi` : ''
-        travelInfoHtml += `
-          <div>
-            <div class="font-medium">From ${originLabel}:</div>
-            <div>${durationText}</div>
-            <div>${distanceText}</div>
-          </div>
-        `
-      })
-      travelInfoHtml += `</div>`
+  // useEffect to react to selectedPoiId changes (e.g., from card clicks)
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!map || selectedPoiId === prevSelectedPoiIdRef.current) {
+        prevSelectedPoiIdRef.current = selectedPoiId; // Update ref even if skipping
+        return;
     }
 
-    return `
-      <div class="max-w-[330px]">
-        <div class="font-medium text-lg">${poi.name || 'Unnamed Location'}</div>
-        <div class="text-muted-foreground text-sm">${poi.type || 'Unknown Type'}</div>
-        ${poi.address ? `
-          <div class="text-muted-foreground mt-1 text-sm">
-            ${[
-              poi.address?.street,
-              poi.address?.city,
-              poi.address?.state,
-              poi.address?.postal_code
-            ]
-              .filter(Boolean)
-              .join(", ")}
-          </div>
-        ` : ''}
-        ${travelInfoHtml}
-        <div class="mt-2 text-sm text-center">
-          <a href="https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}" target="_blank" class="text-blue-600 hover:underline">Google Maps</a>
-          <span class="mx-1 text-gray-400">|</span>
-          <a href="http://maps.apple.com/?ll=${poi.lat},${poi.lon}" target="_blank" class="text-blue-600 hover:underline">Apple Maps</a>
-          <span class="mx-1 text-gray-400">|</span>
-          <a href="https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes" target="_blank" class="text-blue-600 hover:underline">Waze</a>
-        </div>
-      </div>
-    `
-  }
+    // Find the selected POI data
+    const selectedPoiData = pois?.find(p => (p.osm_id || `${p.lat}-${p.lon}`) === selectedPoiId);
+
+    if (selectedPoiData) {
+      const poiLat = Number(selectedPoiData.lat);
+      const poiLon = Number(selectedPoiData.lon);
+      const targetLatLng = L.latLng(poiLat, poiLon);
+      const targetZoom = 15;
+
+      // Fly map to the location
+      map.flyTo(targetLatLng, targetZoom, { duration: 0.8 });
+
+      // Open standalone popup once fly-to completes
+      const openPopupHandler = () => {
+         const popupContent = createPopupContent(selectedPoiData, origins);
+         map.openPopup(popupContent, targetLatLng);
+         // Clean up this specific listener
+         map.off('moveend', openPopupHandler);
+         map.off('zoomend', openPopupHandler);
+      };
+
+      // Add listeners for fly-to end
+      map.on('moveend', openPopupHandler);
+      map.on('zoomend', openPopupHandler);
+      
+    }
+
+    // Update the ref for the next comparison
+    prevSelectedPoiIdRef.current = selectedPoiId;
+
+  }, [selectedPoiId, pois, origins, mapRef]); // Depend on selectedPoiId, pois, origins, mapRef
 
   const boundsElements = useMemo(() => ({
     routes: centralMidpoint ? [] : [mainRoute, showAlternateRoute ? alternateRoute : null],
@@ -493,6 +565,18 @@ export default function MapComponent({
             )}
           </>
         )}
+
+        {/* Render the new POI layer component */}
+        <PoiMarkersLayer
+          pois={pois || []} // Ensure pois is always an array
+          origins={origins}
+          showPois={showPois}
+          selectedPoiId={selectedPoiId}
+          onPoiSelect={onPoiSelect} // Pass down if handleMarkerInteraction needs it
+          icons={{ poiIcon: icons.poiIcon, selectedPoiIcon: selectedPoiIcon }}
+          handleMarkerInteraction={handleMarkerInteraction}
+        />
+
       </MapContainer>
     </div>
   )

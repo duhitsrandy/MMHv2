@@ -239,3 +239,40 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Tailwind CSS](https://tailwindcss.com/) for styling
 - [shadcn/ui](https://ui.shadcn.com/) for components
 - [Leaflet](https://leafletjs.com/) for maps
+
+# Meet Me Halfway Map Logic (Updated)
+
+## Marker and Popup Rendering
+
+- **POI markers** are rendered by a dedicated `PoiMarkersLayer` component, which uses the `useMap` hook from `react-leaflet` to reliably add, update, and remove POI markers on the map.
+- **Origin markers** now use the default Leaflet marker icon. If you want a custom icon, ensure the correct assets are present in `public/leaflet/` and update the icon reference in `map-component.tsx`.
+
+## Component Responsibilities
+
+### `PoiMarkersLayer`
+- Renders POI markers on the map.
+- Handles marker creation, icon updates, and removal.
+- Binds popups and click/keyboard events to markers.
+- Calls the parent `handleMarkerInteraction` when a marker is clicked.
+
+### `MapComponent`
+- Manages map state, origin/midpoint markers, and routes.
+- Handles POI selection and ensures the map flies to and opens a popup for the selected POI, whether selected via map or card.
+- Contains a `useEffect` that listens for changes to `selectedPoiId` and, when it changes, flies the map to the POI and opens a popup at that location.
+
+## Interaction Flow
+
+- **Selecting a POI (via card or marker):**
+  - Updates `selectedPoiId` in state.
+  - Triggers a map fly-to and popup open at the POI's location.
+  - If the marker is already in view and zoomed in, the popup opens immediately.
+
+## Notes
+
+- The marker and popup logic is now robust to timing issues and works for both 2-location and 3+ location searches.
+- Debug logging has been removed for production readiness.
+- If you add custom marker icons, ensure the assets are present and update the icon references in the code.
+
+---
+
+_Last updated: [DATE]_
