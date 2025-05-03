@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     console.log(`[Webhook Clerk] User created event for userId: ${userId}`);
 
     try {
-      // Check if profile already exists (defensive check, should ideally not happen for user.created)
+      // Check if profile already exists
       const existingProfile = await db.query.profiles.findFirst({
         where: (profiles, { eq }) => eq(profiles.userId, userId),
         columns: { userId: true }
@@ -78,29 +78,26 @@ export async function POST(req: Request) {
 
       if (existingProfile) {
         console.warn(`[Webhook Clerk] Profile already exists for userId: ${userId}. Skipping creation.`);
-        return NextResponse.json({ message: 'Profile already exists.' }, { status: 200 }); // Acknowledge event
+        return NextResponse.json({ message: 'Profile already exists.' }, { status: 200 });
       }
 
-      // Insert the new user profile into the database
+      // Extract and save additional fields
+      const email = evt.data.email_addresses?.[0]?.email_address || null;  // Safely get first email
+      const username = evt.data.username || null;  // Get username if available
+
       await db.insert(profilesTable).values({
         userId: userId,
-        membership: 'free', // Default to free plan
-        // Add other default fields if needed
+        email: email,  // Add email field
+        username: username,  // Add username field
+        membership: 'free',  // Keep existing field
+        // Add other fields as needed, e.g., loginType if you track it
       });
 
-      console.log(`[Webhook Clerk] Successfully created profile for userId: ${userId}`);
+      console.log(`[Webhook Clerk] Successfully created profile for userId: ${userId} with email and username`);
       return NextResponse.json({ message: 'User profile created successfully.' }, { status: 201 });
-
     } catch (dbError) {
       console.error(`[Webhook Clerk] Database error creating profile for userId ${userId}:`, dbError);
       return NextResponse.json({ error: 'Database error occurred.' }, { status: 500 });
     }
   }
-
-  // Handle other event types if needed in the future (e.g., user.updated, user.deleted)
-  // if (eventType === 'user.updated') { ... }
-  // if (eventType === 'user.deleted') { ... }
-
-  console.log(`[Webhook Clerk] Received unhandled event type: ${eventType}`);
-  return NextResponse.json({ message: 'Webhook received, but no action taken for this event type.' }, { status: 200 });
-} 
+}
