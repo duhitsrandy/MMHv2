@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" DROP COLUMN "temp_drizzle_test_col";

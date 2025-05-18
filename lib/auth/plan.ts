@@ -1,68 +1,95 @@
-import { db } from "../../db/db" // Relative path
-import { profilesTable } from "../../db/schema/profiles-schema" // Relative path
+import { db } from "@/db/db" // Adjusted path
+import { profilesTable, SelectProfile } from "@/db/schema/profiles-schema" // Adjusted path, imported SelectProfile
 import { eq } from "drizzle-orm"
 import { auth } from "@clerk/nextjs/server" // Use server import
-import { UserPlan } from "../../types/index" // Relative path
+// import { UserPlan } from "@/types/index" // OLD type, will use Tier from tier-map
+import { Tier } from "@/lib/stripe/tier-map" // NEW: Import Tier
+
+export type UserPlanInfo = {
+  tier: Tier;
+  // Add other relevant plan details if needed from profilesTable
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripePriceId?: string | null;
+  seatCount?: number | null;
+};
 
 /**
- * Fetches the membership plan for the currently authenticated user from the database.
- * @returns The user's plan ('free' or 'pro') or null if not found/not authenticated.
+ * Fetches the membership plan details for the currently authenticated user from the database.
+ * @returns The user's plan details or null if not found/not authenticated.
  */
-export async function getUserPlan(): Promise<UserPlan | null> {
+export async function getUserPlanInfo(): Promise<UserPlanInfo | null> { // RENAMED and new return type
   try {
     const { userId } = auth()
     if (!userId) {
       return null // Not authenticated
     }
 
-    const profile = await db
+    const result: Pick<SelectProfile, 'membership' | 'stripeCustomerId' | 'stripeSubscriptionId' | 'stripePriceId' | 'seatCount'>[] = await db
       .select({
         membership: profilesTable.membership,
+        stripeCustomerId: profilesTable.stripeCustomerId,
+        stripeSubscriptionId: profilesTable.stripeSubscriptionId,
+        stripePriceId: profilesTable.stripePriceId,
+        seatCount: profilesTable.seatCount,
       })
       .from(profilesTable)
       .where(eq(profilesTable.userId, userId))
       .limit(1)
 
-    // Check if profile exists and has a membership
-    if (profile.length > 0 && profile[0].membership) {
-       console.log(`[getUserPlan] Found profile for ${userId}, membership: ${profile[0].membership}`);
-       return profile[0].membership; // Return 'free' or 'pro'
+    if (result.length > 0 && result[0].membership) {
+      const profileData = result[0]
+      // console.log(`[getUserPlanInfo] Found profile for ${userId}, membership: ${profileData.membership}`);
+      return {
+        tier: profileData.membership as Tier, // Cast as Tier, assuming DB schema is updated
+        stripeCustomerId: profileData.stripeCustomerId,
+        stripeSubscriptionId: profileData.stripeSubscriptionId,
+        stripePriceId: profileData.stripePriceId,
+        seatCount: profileData.seatCount,
+      }
     } else {
-       // Log specific reason for returning null
-       if (profile.length === 0) {
-         console.warn(`[getUserPlan] Profile not found for userId: ${userId}. Returning null.`);
-       } else {
-         console.warn(`[getUserPlan] Profile found for ${userId}, but membership column is null/empty. Returning null.`);
-       }
-       return null; // Profile not found or membership is null/empty
+      // If no profile, or no membership, they are effectively 'starter' tier
+      // console.warn(`[getUserPlanInfo] Profile/membership not found for userId: ${userId}. Defaulting to 'starter'.`);
+      return { tier: 'starter' } // Default to starter if no specific plan found
     }
   } catch (error) {
-    console.error("Error fetching user plan:", error)
-    // Re-throwing might be better in some contexts, but returning null hides internal errors.
-    return null
+    console.error("Error fetching user plan info:", error)
+    return { tier: 'starter' } // Fallback to starter on error
   }
 }
 
 /**
- * Server Action helper to ensure the current user has a 'pro' plan.
- * Throws an error if the user is not authenticated or not on the 'pro' plan.
- * @throws {Error} If user is not authenticated or not 'pro'.
+ * Server Action helper to ensure the current user has at least a specified plan.
+ * Throws an error if the user is not authenticated or doesn't meet the required tier.
+ * @param {Tier} requiredTier - The minimum tier required.
+ * @throws {Error} If user does not meet criteria.
  */
-export async function requireProPlan(): Promise<void> {
+export async function requirePlan(requiredTiers: Tier[]): Promise<UserPlanInfo> {
   const { userId } = auth()
   if (!userId) {
-    // Use standard Error for now
     throw new Error("UNAUTHORIZED: Authentication required.")
   }
 
-  const plan = await getUserPlan()
+  const planInfo = await getUserPlanInfo()
 
-  if (plan !== "pro") {
-    // Use standard Error for now
-    throw new Error(
-      "FORBIDDEN: This feature requires a Pro plan. Please upgrade your account."
-    )
+  if (!planInfo || !requiredTiers.includes(planInfo.tier)) {
+    const message = `FORBIDDEN: This feature requires one of the following plans: ${requiredTiers.join(", ")}. Your current plan is ${planInfo?.tier || 'starter'}. Please upgrade.`
+    throw new Error(message)
   }
+  return planInfo // Return planInfo if check passes
+}
+
+// Example specific requirement functions:
+export async function requirePlusPlan(): Promise<UserPlanInfo> {
+  return requirePlan(['plus', 'pro', 'business'])
+}
+
+export async function requireProPlan(): Promise<UserPlanInfo> {
+  return requirePlan(['pro', 'business'])
+}
+
+export async function requireBusinessPlan(): Promise<UserPlanInfo> {
+  return requirePlan(['business'])
 }
 
 // Note: Ensure UserPlan type is defined in ~/types/index.ts

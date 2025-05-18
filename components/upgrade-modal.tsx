@@ -1,15 +1,40 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { createCheckoutSession } from '@/actions/stripe/createCheckoutSession';
+import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 interface UpgradeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUpgrade: () => void; // Placeholder for Stripe/Clerk integration
 }
 
-const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose, onUpgrade }) => {
+const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose }) => {
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
   if (!isOpen) {
     return null;
   }
+
+  const handleUpgrade = async () => {
+    setIsRedirecting(true);
+    try {
+      const result = await createCheckoutSession({ isYearly: false });
+
+      if (result.url) {
+        window.location.href = result.url;
+      } else if (result.error) {
+        toast.error(result.error);
+        setIsRedirecting(false);
+      } else {
+        toast.error("Could not initiate upgrade. Please try again.");
+        setIsRedirecting(false);
+      }
+    } catch (error) {
+      console.error("Upgrade error:", error);
+      toast.error("An unexpected error occurred. Please try again.");
+      setIsRedirecting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
@@ -30,14 +55,23 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose, onUpgrade 
           <button
             onClick={onClose}
             className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300"
+            disabled={isRedirecting}
           >
             Maybe Later
           </button>
           <button
-            onClick={onUpgrade}
-            className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700"
+            onClick={handleUpgrade}
+            className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700 flex items-center justify-center"
+            disabled={isRedirecting}
           >
-            Upgrade Now
+            {isRedirecting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Redirecting...
+              </>
+            ) : (
+              'Upgrade Now'
+            )}
           </button>
         </div>
       </div>

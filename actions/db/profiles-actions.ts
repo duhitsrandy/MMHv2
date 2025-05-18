@@ -74,7 +74,7 @@ export async function getProfileByUserIdAction(
 
 export async function updateProfileAction(
   targetUserId: string,
-  data: Partial<Omit<InsertProfile, 'userId' | 'createdAt' | 'updatedAt' | 'id' | 'stripeCustomerId' | 'stripeSubscriptionId'>>
+  data: Partial<Omit<InsertProfile, 'userId' | 'createdAt' | 'updatedAt' | 'id'>>
 ): Promise<ActionState<SelectProfile>> {
   const { userId: authenticatedUserId } = auth();
   if (!authenticatedUserId) {

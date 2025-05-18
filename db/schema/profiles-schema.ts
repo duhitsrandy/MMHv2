@@ -4,22 +4,21 @@ Defines the database schema for profiles.
 </ai_context>
 */
 
-import { pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core"
+import { pgEnum, pgTable, text, timestamp, varchar, uniqueIndex, primaryKey, integer } from "drizzle-orm/pg-core"
 
-export const membershipEnum = pgEnum("membership", ["free", "pro"])
+export const membershipEnum = pgEnum("membership_enum", ["starter", "plus", "pro", "business"])
 
 export const profilesTable = pgTable("profiles", {
   userId: text("user_id").primaryKey().notNull(),
-  membership: membershipEnum("membership").notNull().default("free"),
-  stripeCustomerId: text("stripe_customer_id"),
-  stripeSubscriptionId: text("stripe_subscription_id"),
   email: text("email"),
-  username: text("username"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at")
-    .defaultNow()
-    .notNull()
-    .$onUpdate(() => new Date())
+  username: varchar("username", { length: 50 }),
+  membership: membershipEnum("membership").default("starter"),
+  stripeCustomerId: text("stripe_customer_id").unique(),
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
+  stripePriceId: text("stripe_price_id"),
+  seatCount: integer("seat_count").default(1),
+  createdAt: timestamp("created_at", { mode: 'date' }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'date' }).$onUpdate(() => new Date())
 })
 
 export type InsertProfile = typeof profilesTable.$inferInsert

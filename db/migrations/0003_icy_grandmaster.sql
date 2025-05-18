@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ADD COLUMN "temp_drizzle_test_col" text;

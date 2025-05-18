@@ -11,26 +11,28 @@ import {
 import { SelectProfile } from "@/db/schema"
 import { stripe } from "@/lib/stripe"
 import Stripe from "stripe"
+import { getTierFromPriceId, Tier } from "@/lib/stripe/tier-map"
 
-type MembershipStatus = SelectProfile["membership"]
+type MembershipStatus = Tier
 
-const getMembershipStatus = (
-  status: Stripe.Subscription.Status,
-  membership: MembershipStatus
+const getMembershipStatusFromStripeEvent = (
+  stripeSubscriptionStatus: Stripe.Subscription.Status,
+  tierFromPriceId: Tier | null
 ): MembershipStatus => {
-  switch (status) {
+  switch (stripeSubscriptionStatus) {
     case "active":
     case "trialing":
-      return membership
+      return tierFromPriceId || 'starter'
     case "canceled":
-    case "incomplete":
     case "incomplete_expired":
+    case "unpaid":
+      return "starter"
+    case "incomplete":
     case "past_due":
     case "paused":
-    case "unpaid":
-      return "free"
+      return tierFromPriceId || 'starter'
     default:
-      return "free"
+      return "starter"
   }
 }
 
@@ -51,14 +53,16 @@ export const updateStripeCustomer = async (
     }
 
     const subscription = await getSubscription(subscriptionId)
+    const priceId = subscription.items.data[0]?.price.id
 
     const result = await updateProfileAction(userId, {
       stripeCustomerId: customerId,
-      stripeSubscriptionId: subscription.id
+      stripeSubscriptionId: subscription.id,
+      stripePriceId: priceId,
     })
 
     if (!result.isSuccess) {
-      throw new Error("Failed to update customer profile")
+      throw new Error(result.message || "Failed to update customer profile with Stripe IDs")
     }
 
     return result.data
@@ -66,54 +70,54 @@ export const updateStripeCustomer = async (
     console.error("Error in updateStripeCustomer:", error)
     throw error instanceof Error
       ? error
-      : new Error("Failed to update Stripe customer")
+      : new Error("Failed to update Stripe customer details in profile")
   }
 }
 
 export const manageSubscriptionStatusChange = async (
   subscriptionId: string,
-  customerId: string,
-  productId: string
+  customerId: string
 ): Promise<MembershipStatus> => {
   try {
-    if (!subscriptionId || !customerId || !productId) {
-      throw new Error(
-        "Missing required parameters for manageSubscriptionStatusChange"
-      )
-    }
-
     const subscription = await getSubscription(subscriptionId)
-    const product = await stripe.products.retrieve(productId)
-    const membership = product.metadata.membership as MembershipStatus
-
-    if (!["free", "pro"].includes(membership)) {
-      throw new Error(
-        `Invalid membership type in product metadata: ${membership}`
-      )
+    
+    const priceId = subscription.items.data[0]?.price.id
+    if (!priceId) {
+      throw new Error(`No price ID found on subscription item for subscription ${subscriptionId}`)
     }
 
-    const membershipStatus = getMembershipStatus(
+    const tierFromPrice = getTierFromPriceId(priceId)
+
+    if (!tierFromPrice) {
+      console.error(`Warning: Price ID ${priceId} not found in PRICE_TO_TIER_MAP. Defaulting user to starter. Customer: ${customerId}`)
+    }
+
+    const finalMembershipStatus = getMembershipStatusFromStripeEvent(
       subscription.status,
-      membership
+      tierFromPrice
     )
+
+    const updateData: Partial<Pick<SelectProfile, 'membership' | 'stripeSubscriptionId' | 'stripePriceId' | 'seatCount'>> = {
+      stripeSubscriptionId: subscription.id,
+      membership: finalMembershipStatus,
+      stripePriceId: priceId,
+      seatCount: finalMembershipStatus === 'business' ? 5 : 1,
+    }
 
     const updateResult = await updateProfileByStripeCustomerIdAction(
       customerId,
-      {
-        stripeSubscriptionId: subscription.id,
-        membership: membershipStatus
-      }
+      updateData
     )
 
     if (!updateResult.isSuccess) {
-      throw new Error("Failed to update subscription status")
+      throw new Error(`Failed to update subscription status in DB for customer ${customerId}. Message: ${updateResult.message}`)
     }
 
-    return membershipStatus
+    return finalMembershipStatus
   } catch (error) {
     console.error("Error in manageSubscriptionStatusChange:", error)
     throw error instanceof Error
       ? error
-      : new Error("Failed to update subscription status")
+      : new Error("Failed to process subscription status change")
   }
 }
