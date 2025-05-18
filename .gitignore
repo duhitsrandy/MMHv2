@@ -30,4 +30,10 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts 
+next-env.d.ts
+
+# Editor temporary files
+*.swp
+*.swo
+*~
+*.bak 
