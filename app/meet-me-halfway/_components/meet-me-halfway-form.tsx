@@ -26,11 +26,13 @@ import { usePlan } from "@/hooks/usePlan"
 interface MeetMeHalfwayFormProps {
   initialLocations: Location[]
   onFindMidpoint: (data: { origins: GeocodedOrigin[] }) => void
+  onOpenUpgradeModal: () => void
 }
 
 export default function MeetMeHalfwayForm({
   initialLocations,
-  onFindMidpoint
+  onFindMidpoint,
+  onOpenUpgradeModal
 }: MeetMeHalfwayFormProps) {
   const { user, isSignedIn } = useUser()
   const router = useRouter()
@@ -166,8 +168,8 @@ export default function MeetMeHalfwayForm({
         maxLocations,
      });
      if (!canAddLocation) {
-          if (plan === 'free' && !isPlanLoading) {
-             toast.info('Upgrade to Pro to add up to 5 locations.');
+          if ((plan === 'free' || plan === null) && !isPlanLoading) {
+            onOpenUpgradeModal();
           } else if (plan === 'pro') {
               toast.info('Maximum of 5 locations reached.');
           }

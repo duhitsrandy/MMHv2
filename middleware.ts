@@ -66,11 +66,14 @@ export default clerkMiddleware(async (auth, req) => {
     const rateLimitResult = await rateLimit({ type: rateLimitType })
     
     if (!rateLimitResult.success) {
-      // Log the rate limit violation
+      // Get the auth object first
+      const { userId } = auth();
+
+      // Log the rate limit violation (userId will be null for anonymous/public routes)
       console.warn(`Rate limit exceeded for ${rateLimitType} user`, {
         pathname: req.nextUrl.pathname,
         ip: req.ip,
-        userId: auth().userId, // Will be null for anonymous users
+        userId: userId, // Use the userId from the auth() object (can be null)
         limit: rateLimitResult.limit,
         remaining: rateLimitResult.remaining,
         reset: new Date(rateLimitResult.reset * 1000).toISOString(), // Convert ms to ISO string

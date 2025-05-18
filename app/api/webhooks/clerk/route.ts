@@ -100,4 +100,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Database error occurred.' }, { status: 500 });
     }
   }
+
+  console.log(`[Webhook Clerk] Unhandled event type: ${eventType}`);
+  return NextResponse.json({ error: 'Unhandled event type.' }, { status: 400 });
 }

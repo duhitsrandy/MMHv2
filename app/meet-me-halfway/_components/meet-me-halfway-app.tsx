@@ -12,6 +12,7 @@ import { useSearchSaver } from "../_hooks/useSearchSaver"
 import MeetMeHalfwayForm from "./meet-me-halfway-form"
 import SavedLocations from "./saved-locations"
 import RecentSearches from "./recent-searches"
+import UpgradeModal from "@/components/upgrade-modal"
 
 const ResultsMap = dynamic(
   () => import("./results-map").then((mod) => mod.default),
@@ -35,6 +36,7 @@ export default function MeetMeHalfwayApp() {
   const { isLoaded, userId, isSignedIn } = useAuth()
   const [appState, setAppState] = useState<AppState>("input")
   const [appData, setAppData] = useState<AppData>({})
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
 
   // Use the custom hook to manage user data
   const { locations, searches, isLoading, error: userDataError, setSearches } = useUserData(isLoaded ? userId : undefined);
@@ -49,6 +51,14 @@ export default function MeetMeHalfwayApp() {
     userId,
     onSearchSaved: handleSearchSaved
   });
+
+  // Modal Handlers
+  const openUpgradeModal = () => setIsUpgradeModalOpen(true)
+  const closeUpgradeModal = () => setIsUpgradeModalOpen(false)
+  const handleUpgradeAction = () => {
+    console.log("Upgrade action triggered!")
+    closeUpgradeModal()
+  }
 
   // Load user data on mount
   useEffect(() => {
@@ -158,6 +168,7 @@ export default function MeetMeHalfwayApp() {
               <MeetMeHalfwayForm
                 initialLocations={locations}
                 onFindMidpoint={handleFindMidpoint}
+                onOpenUpgradeModal={openUpgradeModal}
               />
             </div>
 
@@ -190,6 +201,12 @@ export default function MeetMeHalfwayApp() {
            )}
         </div>
       )}
+
+      <UpgradeModal
+        isOpen={isUpgradeModalOpen}
+        onClose={closeUpgradeModal}
+        onUpgrade={handleUpgradeAction}
+      />
     </div>
   )
 }

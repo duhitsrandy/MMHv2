@@ -336,17 +336,28 @@ export default function PointsOfInterest({
                               <div className={`mt-2 grid grid-cols-${Math.min(poi.travelInfo.length, 3)} gap-x-4 gap-y-1 text-xs`}>
                                 {poi.travelInfo.map(info => {
                                   const originName = origins[info.sourceIndex]?.display_name;
-                                  const originLabel = originName ? originName.substring(0, 15) + (originName.length > 15 ? '...' : '') : `Loc ${info.sourceIndex + 1}`;
+                                  const originLabel = originName 
+                                    ? (originName.length > 15 ? originName.substring(0, 15) + '...' : originName) 
+                                    : `Loc ${info.sourceIndex + 1}`;
+                                  
+                                  const durationText = formatDuration(info.duration);
+                                  const distanceText = formatDistance(info.distance);
+
                                   return (
-                                    <div key={info.sourceIndex}>
-                                      <div className="font-medium truncate" title={originName || `Location ${info.sourceIndex + 1}`}>{originLabel}:</div>
-                                      <div className="flex items-center gap-1 whitespace-nowrap">
-                                        <Clock className="size-3 shrink-0" />
-                                        <span className="truncate">{formatDuration(info.duration)}</span>
+                                    <div key={info.sourceIndex} className="flex flex-col">
+                                      <div 
+                                        className="font-medium truncate" 
+                                        title={originName || `Location ${info.sourceIndex + 1}`}
+                                      >
+                                        {originLabel}:
                                       </div>
-                                      <div className="flex items-center gap-1 whitespace-nowrap">
+                                      <div className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
+                                        <Clock className="size-3 shrink-0" />
+                                        <span className="truncate">{durationText}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
                                         <Navigation className="size-3 shrink-0" />
-                                        <span className="truncate">{formatDistance(info.distance)}</span>
+                                        <span className="truncate">{distanceText}</span>
                                       </div>
                                     </div>
                                   );

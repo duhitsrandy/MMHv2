@@ -15,7 +15,10 @@ export default function SignUpPage() {
 
   return (
     <SignUp
-      forceRedirectUrl="/todo"
+      path="/signup"
+      routing="path"
+      signInUrl="/login"
+      forceRedirectUrl="/meet-me-halfway"
       appearance={{ baseTheme: theme === "dark" ? dark : undefined }}
     />
   )
