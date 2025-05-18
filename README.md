@@ -9,9 +9,9 @@ A modern web application that helps users find the perfect meeting point between
 
 ### Core Functionality
 - **Geocoding**: Convert addresses to coordinates using LocationIQ
-- **Routing**: Calculate main and alternate routes using Fast Routing OSRM (RapidAPI)
+- **Routing**: Calculate main and alternate routes using OSRM (e.g., via Fast Routing OSRM RapidAPI or a self-hosted instance) for map visualization.
 - **POI Search**: Find points of interest around route midpoints
-- **Travel Time Matrix**: Calculate travel times to POIs using OpenRouteService
+- **Travel Time Matrix**: Calculate travel times to POIs using OpenRouteService (for free tier users) and HERE API (for pro tier users, including real-time traffic).
 - **Interactive Map**: Display routes and POIs on a Leaflet map
 
 ### Enhanced Features
@@ -36,7 +36,7 @@ A modern web application that helps users find the perfect meeting point between
 - **Database**: Supabase (PostgreSQL)
 - **ORM**: Drizzle
 - **Rate Limiting**: Upstash Redis
-- **External APIs**: LocationIQ, Fast Routing OSRM (RapidAPI), OpenRouteService (for travel time matrix)
+- **External APIs**: LocationIQ, OSRM (for route visualization), OpenRouteService (for free tier matrix), HERE API (for pro tier matrix with traffic)
 - **Analytics/Monitoring**: PostHog (server and client), file logging (dev only)
 
 ## Getting Started
@@ -47,7 +47,7 @@ A modern web application that helps users find the perfect meeting point between
 - Supabase account
 - Clerk account
 - Upstash Redis account
-- API keys for LocationIQ, Fast Routing OSRM (RapidAPI), and OpenRouteService
+- API keys for LocationIQ, OSRM (if using a hosted service like RapidAPI), OpenRouteService, and HERE API
 - PostHog account (for analytics)
 
 ### Installation
@@ -84,6 +84,7 @@ NEXT_PUBLIC_LOCATIONIQ_KEY=your_locationiq_key
 RAPIDAPI_FAST_ROUTING_HOST=fast-routing.p.rapidapi.com
 RAPIDAPI_FAST_ROUTING_KEY=your_rapidapi_key
 OPENROUTESERVICE_API_KEY=your_ors_key
+HERE_API_KEY=your_here_api_key
 
 # Analytics
 POSTHOG_API_KEY=your_posthog_key
@@ -231,7 +232,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [LocationIQ](https://locationiq.com/) for geocoding and POI data
 - [Fast Routing OSRM (RapidAPI)](https://rapidapi.com/osrm/api/fast-routing) for routing
-- [OpenRouteService](https://openrouteservice.org/) for travel time calculations
+- [OpenRouteService](https://openrouteservice.org/) (for free tier travel time calculations), HERE API (for pro tier traffic-aware travel time calculations)
 - [Clerk](https://clerk.com/) for authentication
 - [Supabase](https://supabase.com/) for database
 - [Upstash](https://upstash.com/) for Redis

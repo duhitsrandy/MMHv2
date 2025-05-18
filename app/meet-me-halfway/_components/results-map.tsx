@@ -7,6 +7,7 @@ import {
   searchPoisAction
 } from "@/actions/locationiq-actions"
 import { getTravelTimeMatrixAction } from "@/actions/ors-actions"
+import { getTrafficMatrixHereAction } from "../../actions/here-actions"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -45,6 +46,7 @@ interface MapComponentProps {
   onPoiSelect?: (poiId: string) => void
   isLoading?: boolean
   showPois: boolean
+  plan: string
 }
 
 interface ResultsMapProps {
@@ -219,41 +221,76 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
             setInitialPois(uniqueInitialPois)
             console.log(`[MapData] Found ${uniqueInitialPois.length} unique POIs for 2-origin search.`)
 
-            // --- Step 3: Fetch travel time matrix from each origin to each POI ---
+            // --- Step 3: Fetch travel time from each origin to each POI ---
             if (uniqueInitialPois.length > 0) {
-              const allPoints = [
-                ...matrixSourceCoords.map(c => ({ lon: c.lng, lat: c.lat })), // Origins (sources)
-                ...uniqueInitialPois.map(p => ({ lon: p.lon, lat: p.lat }))     // POIs (destinations)
-              ]
-              const coordinatesString = allPoints.map(p => `${p.lon},${p.lat}`).join(';')
-              const sourcesString = matrixSourceCoords.map((_, idx) => idx).join(';') // "0;1"
-              const destinationsString = uniqueInitialPois.map((_, idx) => idx + matrixSourceCoords.length).join(';')
+              if (plan === 'pro') {
+                console.log('[MapData 2-origin] PRO plan: Fetching travel times with HERE Matrix API');
+                setIsPoiTravelTimeLoading(true); // Ensure loading state is true here
+                const hereOrigins = matrixSourceCoords.map(o => ({ lat: parseFloat(o.lat), lng: parseFloat(o.lng) }));
+                const hereDestinations = uniqueInitialPois.map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lon) }));
 
-              const matrixResult = await getTravelTimeMatrixAction(
-                coordinatesString,
-                sourcesString,
-                destinationsString
-              )
+                const hereMatrixResult = await getTrafficMatrixHereAction({ origins: hereOrigins, destinations: hereDestinations });
 
-              if (!matrixResult.isSuccess || !matrixResult.data?.durations) {
-                console.error('[MapData] Matrix fetch failed:', matrixResult.message)
-                setMatrixError(matrixResult.message || 'Failed to fetch travel times')
-                finalCombinedPois = uniqueInitialPois.map(p => ({ ...p, travelInfo: [] }))
+                if (hereMatrixResult.success && hereMatrixResult.data?.travelTimes && hereMatrixResult.data?.distances) {
+                  const { travelTimes: hereTravelTimes, distances: hereDistances } = hereMatrixResult.data;
+                  const poisWithTravelTimes = uniqueInitialPois.map((poi, poiIdx): EnrichedPoi => {
+                    const travelInfo: TravelInfo[] = [];
+                    matrixSourceCoords.forEach((_, srcIdx) => {
+                      travelInfo.push({
+                        sourceIndex: srcIdx,
+                        duration: hereTravelTimes[srcIdx]?.[poiIdx] ?? null,
+                        distance: hereDistances[srcIdx]?.[poiIdx] ?? null
+                      });
+                    });
+                    return { ...poi, travelInfo };
+                  });
+                  finalCombinedPois = poisWithTravelTimes;
+                  console.log('[MapData 2-origin] Successfully enriched POIs with HERE Matrix data.');
+                } else {
+                  console.error('[MapData 2-origin] HERE Matrix fetch failed or data incomplete:', hereMatrixResult.error);
+                  setMatrixError(hereMatrixResult.error || 'Failed to fetch HERE Matrix travel times');
+                  // Fallback: POIs without travel times or try ORS?
+                  finalCombinedPois = uniqueInitialPois.map(p => ({ ...p, travelInfo: [] }));
+                }
+                setIsPoiTravelTimeLoading(false);
               } else {
-                const poisWithTravelTimes = uniqueInitialPois.map((poi, poiIdx): EnrichedPoi => {
-                  const travelInfo: TravelInfo[] = []
-                  matrixSourceCoords.forEach((_, srcIdx) => {
-                    const duration = matrixResult.data?.durations?.[srcIdx]?.[poiIdx]
-                    const distance = matrixResult.data?.distances?.[srcIdx]?.[poiIdx]
-                    travelInfo.push({
-                      sourceIndex: srcIdx,
-                      duration: duration ?? null,
-                      distance: distance ?? null
+                console.log('[MapData 2-origin] FREE plan: Fetching travel times with ORS Matrix');
+                setIsPoiTravelTimeLoading(true);
+                const allPoints = [
+                  ...matrixSourceCoords.map(c => ({ lon: c.lng, lat: c.lat })), // Origins (sources)
+                  ...uniqueInitialPois.map(p => ({ lon: p.lon, lat: p.lat }))     // POIs (destinations)
+                ]
+                const coordinatesString = allPoints.map(p => `${p.lon},${p.lat}`).join(';');
+                const sourcesString = matrixSourceCoords.map((_, idx) => idx).join(';'); // "0;1"
+                const destinationsString = uniqueInitialPois.map((_, idx) => idx + matrixSourceCoords.length).join(';');
+
+                const matrixResult = await getTravelTimeMatrixAction(
+                  coordinatesString,
+                  sourcesString,
+                  destinationsString
+                );
+
+                if (!matrixResult.isSuccess || !matrixResult.data?.durations) {
+                  console.error('[MapData 2-origin] ORS Matrix fetch failed:', matrixResult.message)
+                  setMatrixError(matrixResult.message || 'Failed to fetch ORS travel times')
+                  finalCombinedPois = uniqueInitialPois.map(p => ({ ...p, travelInfo: [] }))
+                } else {
+                  const poisWithTravelTimes = uniqueInitialPois.map((poi, poiIdx): EnrichedPoi => {
+                    const travelInfo: TravelInfo[] = []
+                    matrixSourceCoords.forEach((_, srcIdx) => {
+                      const duration = matrixResult.data?.durations?.[srcIdx]?.[poiIdx]
+                      const distance = matrixResult.data?.distances?.[srcIdx]?.[poiIdx]
+                      travelInfo.push({
+                        sourceIndex: srcIdx,
+                        duration: duration ?? null,
+                        distance: distance ?? null
+                      })
                     })
+                    return { ...poi, travelInfo }
                   })
-                  return { ...poi, travelInfo }
-                })
-                finalCombinedPois = poisWithTravelTimes
+                  finalCombinedPois = poisWithTravelTimes
+                }
+                setIsPoiTravelTimeLoading(false);
               }
             } else {
               finalCombinedPois = []
@@ -325,47 +362,41 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
             }
 
 
-            // --- Step 3 (Multi-Origin): Fetch travel time matrix from ALL origins to each POI ---
+            // --- Step 3 (Multi-Origin): Fetch travel time from ALL origins to each POI ---
             if (uniqueInitialPois.length > 0) {
               matrixSourceCoords = geocodedOrigins.map(o => ({ lat: o.lat, lng: o.lng }));
-              const allPoints = [
-                ...matrixSourceCoords.map(c => ({ lon: c.lng, lat: c.lat })), // Origins (sources)
-                ...uniqueInitialPois.map(p => ({ lon: p.lon, lat: p.lat }))     // POIs (destinations)
-              ];
-              const coordinatesString = allPoints.map(p => `${p.lon},${p.lat}`).join(';');
-              // Sources are indices 0 to N-1 (where N is number of origins)
-              const sourcesString = matrixSourceCoords.map((_, idx) => idx).join(';');
-              // Destinations are indices N to N+M-1 (where M is number of POIs)
-              const destinationsString = uniqueInitialPois.map((_, idx) => idx + matrixSourceCoords.length).join(';');
+              
+              // The parent `if (plan !== 'pro')` check already gates this for Pro users
+              // So, if we are in this block, plan is 'pro'.
+              console.log('[MapData >2-origin] PRO plan: Fetching travel times with HERE Matrix API');
+              setIsPoiTravelTimeLoading(true); // Ensure loading state is true here
+              const hereOrigins = matrixSourceCoords.map(o => ({ lat: parseFloat(o.lat), lng: parseFloat(o.lng) }));
+              const hereDestinations = uniqueInitialPois.map(p => ({ lat: parseFloat(p.lat), lng: parseFloat(p.lon) }));
 
-              console.log('[MapData >2] Fetching travel matrix for', matrixSourceCoords.length, 'origins to', uniqueInitialPois.length, 'POIs');
-              const matrixResult = await getTravelTimeMatrixAction(
-                coordinatesString,
-                sourcesString,
-                destinationsString
-              );
+              const hereMatrixResult = await getTrafficMatrixHereAction({ origins: hereOrigins, destinations: hereDestinations });
 
-              if (!matrixResult.isSuccess || !matrixResult.data?.durations) {
-                console.error('[MapData >2] Matrix fetch failed:', matrixResult.message);
-                setMatrixError(matrixResult.message || 'Failed to fetch travel times');
-                finalCombinedPois = uniqueInitialPois.map(p => ({ ...p, travelInfo: [] })); // POIs without travel times
-              } else {
+              if (hereMatrixResult.success && hereMatrixResult.data?.travelTimes && hereMatrixResult.data?.distances) {
+                const { travelTimes: hereTravelTimes, distances: hereDistances } = hereMatrixResult.data;
                 const poisWithTravelTimes = uniqueInitialPois.map((poi, poiIdx): EnrichedPoi => {
                   const travelInfo: TravelInfo[] = [];
                   matrixSourceCoords.forEach((_, srcIdx) => {
-                    const duration = matrixResult.data?.durations?.[srcIdx]?.[poiIdx];
-                    const distance = matrixResult.data?.distances?.[srcIdx]?.[poiIdx];
                     travelInfo.push({
                       sourceIndex: srcIdx,
-                      duration: duration ?? null,
-                      distance: distance ?? null
+                      duration: hereTravelTimes[srcIdx]?.[poiIdx] ?? null,
+                      distance: hereDistances[srcIdx]?.[poiIdx] ?? null
                     });
                   });
                   return { ...poi, travelInfo };
                 });
                 finalCombinedPois = poisWithTravelTimes;
-                console.log('[MapData >2] Successfully calculated travel times for POIs.');
+                console.log('[MapData >2-origin] Successfully enriched POIs with HERE Matrix data.');
+              } else {
+                console.error('[MapData >2-origin] HERE Matrix fetch failed or data incomplete:', hereMatrixResult.error);
+                setMatrixError(hereMatrixResult.error || 'Failed to fetch HERE Matrix travel times for multi-origin');
+                // Fallback: POIs without travel times
+                finalCombinedPois = uniqueInitialPois.map(p => ({ ...p, travelInfo: [] }));
               }
+              setIsPoiTravelTimeLoading(false);
             } else {
               console.log('[MapData >2] No POIs found or fetched, skipping matrix calculation.');
               finalCombinedPois = [];
@@ -417,7 +448,7 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
     }
 
     fetchMapData()
-  }, [geocodedOrigins, plan, getRouteAction, getAlternateRouteAction, searchPoisAction, getTravelTimeMatrixAction])
+  }, [geocodedOrigins, plan, getRouteAction, getAlternateRouteAction, searchPoisAction, getTravelTimeMatrixAction, getTrafficMatrixHereAction])
 
   console.log('[MapData Debug] Returning Hook State:', {
     mainRoute: !!mainRoute,
@@ -496,6 +527,7 @@ const PointsOfInterest = dynamic(
 export default function ResultsMap({ geocodedOrigins }: ResultsMapProps) {
   const [isClient, setIsClient] = useState(false)
   const [selectedPoiId, setSelectedPoiId] = useState<string | undefined>(undefined)
+  const { plan } = usePlan();
 
   useEffect(() => {
     setIsClient(true)
@@ -530,6 +562,7 @@ export default function ResultsMap({ geocodedOrigins }: ResultsMapProps) {
     selectedPoiId,
     onPoiSelect: setSelectedPoiId,
     isLoading: isMapDataLoading,
+    plan: plan,
   }), [
     geocodedOrigins,
     mainRoute,
@@ -540,6 +573,7 @@ export default function ResultsMap({ geocodedOrigins }: ResultsMapProps) {
     combinedPois,
     selectedPoiId,
     isMapDataLoading,
+    plan,
   ])
 
   // Memoize PointsOfInterest props
@@ -549,12 +583,14 @@ export default function ResultsMap({ geocodedOrigins }: ResultsMapProps) {
     selectedPoiId,
     onPoiSelect: setSelectedPoiId,
     isLoading: isPoiTravelTimeLoading || isMapDataLoading,
+    plan: plan,
   }), [
     combinedPois,
     geocodedOrigins,
     selectedPoiId,
     isPoiTravelTimeLoading,
     isMapDataLoading,
+    plan,
   ])
 
   useEffect(() => {

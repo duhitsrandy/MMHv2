@@ -5,7 +5,7 @@ The Meet Me Halfway application integrates with several external APIs for geocod
 
 ## API Setup Checklist (From Scratch)
 1. Set up all required environment variables (see `.env.example`)
-2. Ensure Supabase, Clerk, Upstash, LocationIQ, **Fast Routing OSRM (RapidAPI)**, OpenRouteService, and PostHog accounts are configured
+2. Ensure Supabase, Clerk, Upstash, LocationIQ, **Fast Routing OSRM (RapidAPI)**, OpenRouteService, HERE API, and PostHog accounts are configured
 3. Run database migrations
 4. Start the development server (`npm run dev`)
 5. Test endpoints using curl, Postman, or the provided examples below
@@ -139,8 +139,8 @@ curl -X POST https://yourdomain.com/api/route/alternate \
 }
 ```
 
-### 5. Travel Time Matrix (`getTravelTimeMatrixAction`)
-**Description:** Calculate travel times between multiple points using **OpenRouteService** (ORS Matrix API).
+### 5. Travel Time Matrix (ORS - Free Tier) (`getTravelTimeMatrixAction`)
+**Description:** Calculate travel times between multiple points using **OpenRouteService** (ORS Matrix API). Used for Free Tier users.
 **Auth:** Required (Clerk)
 **Rate Limit:** Authenticated
 
@@ -159,6 +159,31 @@ curl -X POST https://yourdomain.com/api/travel-time-matrix \
   "data": {
     "durations": [[900]],
     "distances": [[5000]]
+  }
+}
+```
+
+### 6. Traffic Travel Time Matrix (HERE API - Pro Tier) (`getTrafficMatrixHereAction`)
+**Description:** Calculate travel times and distances between multiple points using the **HERE Matrix API v8**, including real-time traffic. Used for Pro Tier users.
+**Auth:** Required (Clerk, and `requireProPlan` is enforced within the action)
+**Rate Limit:** Authenticated (actual API call subject to HERE API limits)
+
+#### Request Parameters (passed to action):
+```typescript
+interface HereMatrixActionParams {
+  origins: Array<{ lat: number; lng: number }>;
+  destinations: Array<{ lat: number; lng: number }>;
+}
+```
+
+#### Response Example (from action):
+```json
+{
+  "success": true,
+  "error": null,
+  "data": {
+    "travelTimes": [[2832, 2431], [3201, 2899]], // Example: travelTimes[originIndex][destinationIndex] in seconds
+    "distances": [[45000, 42000], [48000, 46000]]  // Example: distances[originIndex][destinationIndex] in meters
   }
 }
 ```
@@ -327,7 +352,7 @@ export async function getAlternateRouteAction(
 
 ### 3. OpenRouteService API
 
-#### Travel Time Matrix (`getTravelTimeMatrixAction`)
+#### Travel Time Matrix (Free Tier) (`getTravelTimeMatrixAction`)
 ```typescript
 export async function getTravelTimeMatrixAction(
   sources: Array<{ lat: number; lon: number }>,
@@ -358,6 +383,32 @@ interface TravelTimeMatrixResponse {
   distances: number[][];
 }
 ```
+
+### 4. HERE API
+
+#### Traffic Travel Time Matrix (Pro Tier) (`getTrafficMatrixHereAction`)
+
+See `app/actions/here-actions.ts` for the action definition and `lib/providers/here-platform.ts` for the direct API call wrapper (`getTravelTimeMatrixHere`).
+
+**Action Request Parameters:**
+```typescript
+interface HereMatrixActionParams {
+  origins: Array<{ lat: number; lng: number }>;
+  destinations: Array<{ lat: number; lng: number }>;
+}
+```
+
+**Action Response Data (on success):**
+```typescript
+interface ProcessedHereMatrixResponse {
+  travelTimes: (number | null)[][];
+  distances: (number | null)[][];
+}
+```
+**Notes:**
+- The HERE Matrix API is used for Pro Tier users to provide traffic-aware travel times and distances.
+- The `getTrafficMatrixHereAction` server action is protected by `requireProPlan()`.
+- The direct API call (`getTravelTimeMatrixHere`) in the provider constructs a request body including origins, destinations, `regionDefinition: { type: "world" }`, `routingMode: "fast"`, `transportMode: "car"`, and `matrixAttributes: ["travelTimes", "distances"]`. Departure time is omitted to default to "now" for live traffic.
 
 ## Backend Logic (Server Actions)
 
@@ -410,6 +461,7 @@ interface ErrorResponse {
 # API Keys
 NEXT_PUBLIC_LOCATIONIQ_KEY=...
 OPENROUTESERVICE_API_KEY=...
+HERE_API_KEY=your_here_api_key
 
 # Rate Limiting
 RATE_LIMIT_REQUESTS=10
@@ -428,8 +480,11 @@ Add these to your `.env.local` or deployment environment:
 RAPIDAPI_FAST_ROUTING_HOST=fast-routing.p.rapidapi.com
 RAPIDAPI_FAST_ROUTING_KEY=your_rapidapi_key
 
-# OpenRouteService (for travel time matrix only)
+# OpenRouteService (for travel time matrix only - Free Tier)
 OPENROUTESERVICE_API_KEY=your_ors_key
+
+# HERE API (for traffic-aware travel time matrix - Pro Tier)
+HERE_API_KEY=your_here_api_key
 ```
 
 ## Best Practices

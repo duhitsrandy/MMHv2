@@ -30,9 +30,11 @@ The app uses a sophisticated algorithm to find the optimal midpoint:
 
 The app integrates with:
 
-- **LocationIQ**: For geocoding and POI search
-- **OSRM**: For route calculation and travel time estimation
-- **Leaflet**: For interactive map visualization
+- **LocationIQ**: For geocoding and POI search.
+- **OSRM (Open Source Routing Machine)**: For generating the primary route lines displayed on the map.
+- **OpenRouteService (ORS)**: For calculating travel time matrices to Points of Interest (POIs) for free-tier users.
+- **HERE API**: For calculating traffic-aware travel time matrices to POIs for pro-tier users, providing more accurate estimations based on current conditions.
+- **Leaflet**: For interactive map visualization.
 
 ## Setup Instructions
 

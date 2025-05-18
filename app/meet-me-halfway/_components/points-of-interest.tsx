@@ -41,7 +41,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
-import { GeocodedOrigin } from "@/types"
+import { GeocodedOrigin, UserPlan } from "@/types"
 
 interface PointsOfInterestProps {
   pois: EnrichedPoi[]
@@ -49,6 +49,7 @@ interface PointsOfInterestProps {
   isLoading?: boolean
   selectedPoiId?: string
   onPoiSelect?: (poiId: string) => void
+  plan: UserPlan | null
 }
 
 type SortOption =
@@ -62,6 +63,7 @@ export default function PointsOfInterest({
   isLoading = true,
   selectedPoiId,
   onPoiSelect,
+  plan,
 }: PointsOfInterestProps) {
   // Debug the full pois prop structure
   if (process.env.NODE_ENV === 'development') {
@@ -321,68 +323,63 @@ export default function PointsOfInterest({
                             <CardDescription>
                               {poi.type}
                               {poi.address && (
-                                <div className="text-xs text-muted-foreground mt-1">
-                                  {[
-                                    poi.address.street,
-                                    poi.address.city,
-                                    poi.address.state,
-                                    poi.address.postal_code
-                                  ].filter(Boolean).join(", ")}
+                                <div className="text-xs text-muted-foreground mt-1 truncate" title={`${poi.address.street ? poi.address.street + ', ' : ''}${poi.address.city || ''}`}>
+                                  {`${poi.address.street ? poi.address.street + ', ' : ''}${poi.address.city || ''}`}
+                                  {/* Simplified address - can be expanded or made more robust */}
                                 </div>
                               )}
                             </CardDescription>
 
                             {poi.travelInfo && poi.travelInfo.length > 0 && (
-                              <div className={`mt-2 grid grid-cols-${Math.min(poi.travelInfo.length, 3)} gap-x-4 gap-y-1 text-xs`}>
-                                {poi.travelInfo.map(info => {
-                                  const originName = origins[info.sourceIndex]?.display_name;
-                                  const originLabel = originName 
-                                    ? (originName.length > 15 ? originName.substring(0, 15) + '...' : originName) 
-                                    : `Loc ${info.sourceIndex + 1}`;
-                                  
-                                  const durationText = formatDuration(info.duration);
-                                  const distanceText = formatDistance(info.distance);
+                              <div className="mt-2 text-xs">
+                                <table className="w-full text-left">
+                                  <thead>
+                                    <tr>
+                                      <th className="pb-1 pt-1 font-medium text-muted-foreground">Origin</th>
+                                      <th className="pb-1 pt-1 font-medium text-muted-foreground text-right">Time</th>
+                                      <th className="pb-1 pt-1 font-medium text-muted-foreground text-right">Distance</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {poi.travelInfo.map(info => {
+                                      const originName = origins[info.sourceIndex]?.display_name;
+                                      const originLabel = originName 
+                                        ? (originName.length > 30 ? originName.substring(0, 30) + '...' : originName)
+                                        : `Loc ${info.sourceIndex + 1}`;
+                                      
+                                      const durationText = formatDuration(info.duration);
+                                      const distanceText = formatDistance(info.distance);
 
-                                  return (
-                                    <div key={info.sourceIndex} className="flex flex-col">
-                                      <div 
-                                        className="font-medium truncate" 
-                                        title={originName || `Location ${info.sourceIndex + 1}`}
-                                      >
-                                        {originLabel}:
-                                      </div>
-                                      <div className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
-                                        <Clock className="size-3 shrink-0" />
-                                        <span className="truncate">{durationText}</span>
-                                      </div>
-                                      <div className="flex items-center gap-1 whitespace-nowrap text-muted-foreground">
-                                        <Navigation className="size-3 shrink-0" />
-                                        <span className="truncate">{distanceText}</span>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
+                                      return (
+                                        <tr key={info.sourceIndex}>
+                                          <td className="py-0.5 truncate" title={originName || `Location ${info.sourceIndex + 1}`}>
+                                            {originLabel}
+                                          </td>
+                                          <td className="py-0.5 text-right whitespace-nowrap">
+                                            {durationText}
+                                            {plan && plan === 'pro' && info.duration !== null && (
+                                              <span className="text-green-600 ml-1 text-xs font-semibold" title="Travel time includes real-time traffic conditions">(Live)</span>
+                                            )}
+                                          </td>
+                                          <td className="py-0.5 text-right whitespace-nowrap">{distanceText}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
                               </div>
                             )}
                           </div>
 
-                          <div className="flex flex-col gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="icon" 
-                              className="size-8 shrink-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onPoiSelect?.(poiKey);
-                              }}
-                              title="View on Map"
-                            >
-                              <MapPin className="size-4" />
-                            </Button>
-
+                          <div className="flex flex-col">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="shrink-0">
+                                <Button 
+                                  variant="outline" 
+                                  size="icon" 
+                                  className="size-8 shrink-0" 
+                                  title="Get Directions"
+                                >
                                   <Navigation className="size-4" />
                                 </Button>
                               </DropdownMenuTrigger>

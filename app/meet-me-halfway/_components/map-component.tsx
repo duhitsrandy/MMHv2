@@ -12,7 +12,7 @@ import {
   Popup
 } from "react-leaflet"
 import { EnrichedPoi, TravelInfo } from "@/types/poi-types"
-import { OsrmRoute, GeocodedOrigin } from "@/types"
+import { OsrmRoute, GeocodedOrigin, UserPlan } from "@/types"
 import { Loader2 } from "lucide-react"
 
 // Use default Leaflet markers for now
@@ -83,6 +83,7 @@ interface MapComponentProps {
   selectedPoiId?: string
   onPoiSelect?: (poiId: string) => void
   isLoading?: boolean
+  plan: UserPlan | null
 }
 
 function FitBounds({
@@ -152,6 +153,7 @@ interface PoiMarkersLayerProps {
   onPoiSelect?: (poiId: string) => void;
   icons: { poiIcon: L.Icon.Default; selectedPoiIcon: L.Icon };
   handleMarkerInteraction: (key: string, poiLat: number, poiLon: number, marker: L.Marker) => void;
+  plan: UserPlan | null;
 }
 
 function PoiMarkersLayer({
@@ -159,9 +161,10 @@ function PoiMarkersLayer({
   origins,
   showPois,
   selectedPoiId,
-  onPoiSelect, // onPoiSelect is needed if handleMarkerInteraction is defined outside
+  onPoiSelect,
   icons,
-  handleMarkerInteraction
+  handleMarkerInteraction,
+  plan
 }: PoiMarkersLayerProps) {
   const map = useMap(); // Get map instance reliably
   const poiMarkers = useRef<Map<string, L.Marker>>(new Map());
@@ -240,7 +243,7 @@ function PoiMarkersLayer({
           handleMarkerInteraction(key, poiLat, poiLon, markerElement);
         });
 
-        markerElement.bindPopup(createPopupContent(poi, origins));
+        markerElement.bindPopup(createPopupContent(poi, origins, plan));
         
         // Add to ref
         poiMarkers.current.set(key, markerElement);
@@ -265,58 +268,58 @@ function PoiMarkersLayer({
        prevSelectedPoiIdRef.current = undefined;
     };
 
-  }, [map, pois, showPois, selectedPoiId, icons, origins, handleMarkerInteraction]);
+  }, [map, pois, showPois, selectedPoiId, icons, origins, handleMarkerInteraction, plan]);
 
   return null;
 }
 
 // Helper function (moved here or ensure it's accessible globally/imported)
-function createPopupContent(poi: EnrichedPoi, originLocations: GeocodedOrigin[]): string {
-  let travelInfoHtml = ''
-  if (poi.travelInfo && poi.travelInfo.length > 0) {
-    travelInfoHtml = `<div class="mt-2 grid grid-cols-${Math.min(poi.travelInfo.length, 3)} gap-2 text-sm">`
-    poi.travelInfo.forEach((info) => {
-      const originName = originLocations[info.sourceIndex]?.display_name
-      const originLabel = originName ? originName.substring(0, 23) + (originName.length > 23 ? '...' : '') : `Location ${info.sourceIndex + 1}`
-      const durationText = info.duration != null ? `${Math.round(info.duration / 60)} min` : 'N/A'
-      const distanceText = info.distance != null ? `${Math.round((info.distance / 1000) * 0.621371)} mi` : ''
-      travelInfoHtml += `
-        <div>
-          <div class="font-medium">From ${originLabel}:</div>
-          <div>${durationText}</div>
-          <div>${distanceText}</div>
-        </div>
-      `
-    })
-    travelInfoHtml += `</div>`
+function createPopupContent(poi: EnrichedPoi, originLocations: GeocodedOrigin[], plan: UserPlan | null): string {
+  let content = `<div style="min-width: 220px; max-width: 280px;">`; // Add min/max width for popup consistency
+  content += `<div class="font-bold text-base mb-1">${poi.name}</div>`;
+  content += `<div class="text-sm text-gray-600 mb-2">${poi.type}</div>`;
+
+  if (poi.address) {
+    const street = poi.address.street || "";
+    const city = poi.address.city || "";
+    const shortAddress = street ? `${street}, ${city}` : city;
+    if (shortAddress) {
+       content += `<div class="text-xs text-gray-500 mb-2 truncate" title="${street && city ? street + ', ' + city : street || city}">${shortAddress}</div>`;
+    }
   }
 
-  return `
-    <div class="max-w-[330px]">
-      <div class="font-medium text-lg">${poi.name || 'Unnamed Location'}</div>
-      <div class="text-muted-foreground text-sm">${poi.type || 'Unknown Type'}</div>
-      ${poi.address ? `
-        <div class="text-muted-foreground mt-1 text-sm">
-          ${[
-            poi.address?.street,
-            poi.address?.city,
-            poi.address?.state,
-            poi.address?.postal_code
-          ]
-            .filter(Boolean)
-            .join(", ")}
-        </div>
-      ` : ''}
-      ${travelInfoHtml}
-      <div class="mt-2 text-sm text-center">
-        <a href="https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}" target="_blank" class="text-blue-600 hover:underline">Google Maps</a>
-        <span class="mx-1 text-gray-400">|</span>
-        <a href="http://maps.apple.com/?ll=${poi.lat},${poi.lon}" target="_blank" class="text-blue-600 hover:underline">Apple Maps</a>
-        <span class="mx-1 text-gray-400">|</span>
-        <a href="https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes" target="_blank" class="text-blue-600 hover:underline">Waze</a>
-      </div>
-    </div>
-  `
+  if (poi.travelInfo && poi.travelInfo.length > 0) {
+    content += '<div class="mt-1 text-xs">';
+    content += '<table class="w-full text-left">';
+    content += '<thead><tr>';
+    content += '<th class="pb-0.5 font-medium text-gray-500">Origin</th>';
+    content += '<th class="pb-0.5 font-medium text-gray-500 text-right">Time</th>';
+    content += '<th class="pb-0.5 font-medium text-gray-500 text-right">Distance</th>';
+    content += '</tr></thead><tbody>';
+
+    poi.travelInfo.forEach((info) => {
+      const originName = originLocations[info.sourceIndex]?.display_name;
+      const originLabel = originName 
+        ? (originName.length > 25 ? originName.substring(0, 25) + '...' : originName)
+        : `Loc ${info.sourceIndex + 1}`;
+      const durationText = info.duration != null ? `${Math.round(info.duration / 60)} min` : "N/A";
+      const distanceText = info.distance != null ? `${Math.round((info.distance / 1000) * 0.621371)} mi` : "N/A";
+      
+      content += '<tr>';
+      content += `<td class="py-0.5 truncate" title="${originName || `Location ${info.sourceIndex + 1}`}">${originLabel}</td>`;
+      content += '<td class="py-0.5 text-right whitespace-nowrap">';
+      content += durationText;
+      if (plan && plan === 'pro' && info.duration !== null) {
+        content += '<span class="text-green-500 ml-1 text-xs font-semibold" title="Includes real-time traffic">(Live)</span>';
+      }
+      content += '</td>';
+      content += `<td class="py-0.5 text-right whitespace-nowrap">${distanceText}</td>`;
+      content += '</tr>';
+    });
+    content += "</tbody></table></div>";
+  }
+  content += `</div>`; // Close main wrapper
+  return content;
 }
 
 export default function MapComponent({
@@ -331,7 +334,8 @@ export default function MapComponent({
   showPois = true,
   selectedPoiId,
   onPoiSelect,
-  isLoading
+  isLoading,
+  plan
 }: MapComponentProps) {
   const mapRef = useRef<LeafletMap | null>(null)
   const poiMarkers = useRef<Map<string, L.Marker>>(new Map())
@@ -424,7 +428,7 @@ export default function MapComponent({
 
       // Open standalone popup once fly-to completes
       const openPopupHandler = () => {
-         const popupContent = createPopupContent(selectedPoiData, origins);
+         const popupContent = createPopupContent(selectedPoiData, origins, plan);
          map.openPopup(popupContent, targetLatLng);
          // Clean up this specific listener
          map.off('moveend', openPopupHandler);
@@ -440,7 +444,7 @@ export default function MapComponent({
     // Update the ref for the next comparison
     prevSelectedPoiIdRef.current = selectedPoiId;
 
-  }, [selectedPoiId, pois, origins, mapRef]); // Depend on selectedPoiId, pois, origins, mapRef
+  }, [selectedPoiId, pois, origins, mapRef, plan]); // Depend on selectedPoiId, pois, origins, mapRef
 
   const boundsElements = useMemo(() => ({
     routes: centralMidpoint ? [] : [mainRoute, showAlternateRoute ? alternateRoute : null],
@@ -568,13 +572,14 @@ export default function MapComponent({
 
         {/* Render the new POI layer component */}
         <PoiMarkersLayer
-          pois={pois || []} // Ensure pois is always an array
+          pois={pois || []}
           origins={origins}
           showPois={showPois}
           selectedPoiId={selectedPoiId}
-          onPoiSelect={onPoiSelect} // Pass down if handleMarkerInteraction needs it
+          onPoiSelect={onPoiSelect}
           icons={{ poiIcon: icons.poiIcon, selectedPoiIcon: selectedPoiIcon }}
           handleMarkerInteraction={handleMarkerInteraction}
+          plan={plan}
         />
 
       </MapContainer>
