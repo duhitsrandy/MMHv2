@@ -23,6 +23,10 @@ const signedInLinks = [
   { href: "/meet-me-halfway/saved-searches", label: "Search History" }
 ]
 
+const alwaysVisibleLinks = [
+  { href: "/pricing", label: "Pricing" }
+]
+
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
@@ -68,6 +72,15 @@ export default function Header() {
               </Link>
             ))}
           </SignedIn>
+          {alwaysVisibleLinks.map(link => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="rounded-full px-3 py-1 hover:opacity-80"
+            >
+              {link.label}
+            </Link>
+          ))}
         </nav>
 
         <div className="flex items-center space-x-4">
@@ -106,6 +119,17 @@ export default function Header() {
       {isMenuOpen && (
         <nav className="border-t bg-background p-4 md:hidden">
           <ul className="space-y-2">
+            {alwaysVisibleLinks.map(link => (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  className="block rounded px-3 py-1 hover:bg-accent"
+                  onClick={toggleMenu}
+                >
+                  {link.label}
+                </Link>
+              </li>
+            ))}
             <SignedIn>
               {signedInLinks.map(link => (
                 <li key={link.href}>

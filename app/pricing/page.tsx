@@ -1,210 +1,288 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useUser } from '@clerk/nextjs';
-import { createCheckoutSession, createBillingPortalSessionAction } from '@/actions/stripe/createCheckoutSession';
-// TODO: Import action for creating Stripe Billing Portal session
-// import { createBillingPortalSessionAction } from '@/actions/stripe/createBillingPortalSessionAction'; 
-import { usePlan } from '@/hooks/usePlan'; // Assuming this hook tells us if the user is 'free' or 'pro'
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { CheckCircle2, Loader2, ExternalLink, Info } from 'lucide-react';
-import { toast } from 'sonner';
-import Link from 'next/link';
-import { TIER_DETAILS, TierName, Cadence } from '@/lib/stripe/tier-map';
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Label } from "@/components/ui/label"
+import { useState } from "react";
+import { CheckCircle2, XCircle, Star, Zap, Building, HelpCircle, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import Link from "next/link";
 
-interface TierFeatureProps {
-  text: string;
+type Cadence = "weekly" | "monthly" | "annually";
+type Tier = "Starter" | "Plus" | "Pro" | "Business";
+
+interface PricingTier {
+  name: Tier;
+  id: string;
+  href: string;
+  price: { weekly: string; monthly: string; annually: string };
+  description: string;
+  features: { text: string; unavailable?: boolean }[];
+  mostPopular?: boolean;
+  cta: string;
+  isCustom?: boolean;
 }
 
-const TierFeature: React.FC<TierFeatureProps> = ({ text }) => (
-  <li className="flex items-start">
-    <CheckCircle2 className="mr-2 mt-1 h-5 w-5 flex-shrink-0 text-green-500" />
-    <span>{text}</span>
-  </li>
-);
+const tiers: PricingTier[] = [
+  {
+    name: "Starter",
+    id: "tier-starter",
+    href: "/signup?tier=starter",
+    price: { weekly: "$0", monthly: "$0", annually: "$0" },
+    description: "Get started with our basic features, completely free.",
+    features: [
+      { text: "Up to 5 saved searches per month" },
+      { text: "Up to 2 locations per search" },
+      { text: "Standard email support" },
+      { text: "Weekly search cadence" },
+      { text: "Priority email support", unavailable: true },
+      { text: "Chat support", unavailable: true },
+      { text: "Daily search cadence", unavailable: true },
+      { text: "Hourly search cadence", unavailable: true },
+      { text: "API Access", unavailable: true },
+      { text: "Dedicated account manager", unavailable: true },
+    ],
+    cta: "Get Started",
+  },
+  {
+    name: "Plus",
+    id: "tier-plus",
+    href: "/signup?tier=plus",
+    price: { weekly: "$2.49", monthly: "$9.00", annually: "$90.00" },
+    description: "More power for individuals and small teams.",
+    features: [
+      { text: "Up to 20 saved searches per month" },
+      { text: "Up to 5 locations per search" },
+      { text: "Priority email support" },
+      { text: "Weekly search cadence" },
+      { text: "Daily search cadence" },
+      { text: "Chat support", unavailable: true },
+      { text: "Hourly search cadence", unavailable: true },
+      { text: "API Access", unavailable: true },
+      { text: "Dedicated account manager", unavailable: true },
+    ],
+    cta: "Choose Plus",
+    mostPopular: true,
+  },
+  {
+    name: "Pro",
+    id: "tier-pro",
+    href: "/signup?tier=pro",
+    price: { weekly: "$4.99", monthly: "$19.00", annually: "$190.00" },
+    description: "Unlock the full potential with unlimited access.",
+    features: [
+      { text: "Unlimited saved searches" },
+      { text: "Up to 10 locations per search" },
+      { text: "Priority email support" },
+      { text: "Chat support" },
+      { text: "Weekly search cadence" },
+      { text: "Daily search cadence" },
+      { text: "Hourly search cadence" },
+      { text: "API Access", unavailable: true },
+      { text: "Dedicated account manager", unavailable: true },
+    ],
+    cta: "Choose Pro",
+  },
+  {
+    name: "Business",
+    id: "tier-business",
+    href: "/contact-sales",
+    price: { weekly: "Custom", monthly: "Custom", annually: "Custom" },
+    description: "Tailored solutions for large organizations and specific needs.",
+    features: [
+      { text: "All Pro features" },
+      { text: "Custom number of locations" },
+      { text: "Dedicated account manager & support" },
+      { text: "Custom search cadences" },
+      { text: "API Access" },
+      { text: "Team features (seat-based)" },
+      { text: "Custom onboarding & training" },
+    ],
+    cta: "Contact Sales",
+    isCustom: true,
+  },
+];
 
-const getPriceIdForTierAndCadence = (tierName: TierName, cadence: Cadence): string | undefined => {
-  const tier = TIER_DETAILS[tierName];
-  if ('stripePriceIds' in tier && tier.stripePriceIds) {
-    return (tier.stripePriceIds as any)[cadence];
-  }
-  return undefined;
+const tierIcons = {
+  Starter: <Star className="h-5 w-5 text-yellow-500" />,
+  Plus: <Zap className="h-5 w-5 text-orange-500" />,
+  Pro: <Zap className="h-5 w-5 text-purple-500" />,
+  Business: <Building className="h-5 w-5 text-blue-600" />,
 };
 
-const getDisplayPriceForTierAndCadence = (tierName: TierName, cadence: Cadence): string => {
-  const tier = TIER_DETAILS[tierName];
-  if (tierName === 'starter') return "$0";
-  if ('displayPrices' in tier && tier.displayPrices) {
-    const price = (tier.displayPrices as any)[cadence];
-    let cadenceText = "/month";
-    if (cadence === 'weekly') cadenceText = "/week";
-    if (cadence === 'yearly') cadenceText = "/year"; // Price should be total yearly for display
-    
-    // For yearly, TIER_DETAILS.displayPrices.yearly is the total annual price
-    // If we want to show per month equivalent for yearly, we can calculate it here.
-    // For example: if (cadence === 'yearly') return `$${(price / 12).toFixed(2)}/month (billed annually)`;
-    return `$${price}${cadenceText}`;
-  }
-  return "N/A";
-};
 
 export default function PricingPage() {
-  const { user, isSignedIn } = useUser();
-  const { tier: currentTier, planInfo, isLoading: isPlanLoading, error: planError } = usePlan();
-  const router = useRouter();
-  const [isRedirecting, setIsRedirecting] = useState<string | false>(false); // priceId or false
-  const [selectedCadence, setSelectedCadence] = useState<Cadence>('monthly');
+  const [billingCycle, setBillingCycle] = useState<Cadence>("monthly");
 
-  const handleCheckout = async (tierName: TierName) => {
-    if (!isSignedIn) {
-      router.push('/login?redirect_url=/pricing');
-      return;
-    }
-
-    const priceId = getPriceIdForTierAndCadence(tierName, selectedCadence);
-    if (!priceId) {
-      toast.error("Pricing information not available for this selection.");
-      return;
-    }
-
-    setIsRedirecting(priceId);
-    try {
-      // The createCheckoutSession action now needs to accept priceId directly
-      const result = await createCheckoutSession({ priceId }); 
-      if (result.url) {
-        window.location.href = result.url;
-      } else {
-        toast.error(result.error || "Could not initiate upgrade. Please try again.");
-        setIsRedirecting(false);
-      }
-    } catch (error) {
-      console.error("Checkout error:", error);
-      toast.error("An unexpected error occurred. Please try again.");
-      setIsRedirecting(false);
-    }
+  const getPriceSuffix = (cycle: Cadence) => {
+    if (cycle === "weekly") return "/week";
+    if (cycle === "monthly") return "/month";
+    if (cycle === "annually") return "/year";
+    return "";
   };
-  
-  const handleManageSubscription = async () => {
-    setIsRedirecting("manage");
-    toast.info("Redirecting to manage your subscription...");
-    try {
-      const result = await createBillingPortalSessionAction(); 
-      if (result.url) {
-        window.location.href = result.url;
-      } else {
-        toast.error(result.error || "Could not open billing portal. Please try again.");
-        setIsRedirecting(false);
-      }
-    } catch (error) {
-      console.error("Manage subscription error:", error);
-      toast.error("An unexpected error occurred while opening the billing portal.");
-      setIsRedirecting(false);
-    }
-  };
-
-  if (isPlanLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (planError) {
-    return (
-      <div className="container mx-auto px-4 py-12 text-center">
-        <h1 className="text-3xl font-bold text-destructive mb-4">Error Loading Plans</h1>
-        <p>{planError.message}</p>
-        <Button onClick={() => window.location.reload()} className="mt-4">Try Again</Button>
-      </div>
-    );
-  }
-
-  const tiersToDisplay: TierName[] = ['starter', 'plus', 'pro', 'business'];
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <header className="text-center mb-12">
-        <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
-          Find the Plan That's Right For You
-        </h1>
-        <p className="mt-4 text-xl text-muted-foreground">
-          Simple, flexible pricing for individuals and teams.
+    <div className="bg-gray-50 dark:bg-gray-900 min-h-screen py-12 sm:py-16">
+      <div className="mx-auto max-w-7xl px-6 lg:px-8">
+        <div className="mx-auto max-w-4xl text-center">
+          <h1 className="text-base font-semibold leading-7 text-blue-600 dark:text-blue-400">Pricing</h1>
+          <p className="mt-2 text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-5xl">
+            Plans for every need
+          </p>
+        </div>
+        <p className="mx-auto mt-6 max-w-2xl text-center text-lg leading-8 text-gray-600 dark:text-gray-300">
+          Choose the perfect plan to help you find the ideal meeting point, effortlessly.
+          Save time and coordinate with ease.
         </p>
-      </header>
 
-      <div className="flex justify-center mb-10">
-        <RadioGroup defaultValue="monthly" onValueChange={(val) => setSelectedCadence(val as Cadence)} className="grid grid-cols-3 gap-x-2 rounded-lg bg-muted p-1 text-muted-foreground">
-          <div><RadioGroupItem value="weekly" id="weekly" className="sr-only" /><Label htmlFor="weekly" className="block w-full cursor-pointer rounded-md py-2 px-3 text-center ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-background data-[state=checked]:text-foreground hover:bg-accent hover:text-accent-foreground">Weekly</Label></div>
-          <div><RadioGroupItem value="monthly" id="monthly" className="sr-only" /><Label htmlFor="monthly" className="block w-full cursor-pointer rounded-md py-2 px-3 text-center ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-background data-[state=checked]:text-foreground hover:bg-accent hover:text-accent-foreground">Monthly</Label></div>
-          <div><RadioGroupItem value="yearly" id="yearly" className="sr-only" /><Label htmlFor="yearly" className="block w-full cursor-pointer rounded-md py-2 px-3 text-center ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-background data-[state=checked]:text-foreground hover:bg-accent hover:text-accent-foreground">Annual (Save ~15%)</Label></div>
-        </RadioGroup>
-      </div>
+        <div className="mt-16 flex justify-center">
+          <RadioGroup
+            defaultValue="monthly"
+            onValueChange={(val) => setBillingCycle(val as Cadence)}
+            className="grid grid-cols-3 gap-x-2 rounded-lg bg-muted p-1 text-muted-foreground sm:max-w-md"
+          >
+            <div>
+              <RadioGroupItem value="weekly" id="weekly" className="sr-only" />
+              <Label htmlFor="weekly" className={`block w-full cursor-pointer rounded-md py-2 px-3 text-center ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-background data-[state=checked]:text-foreground hover:bg-accent hover:text-accent-foreground ${billingCycle === 'weekly' ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>Weekly</Label>
+            </div>
+            <div>
+              <RadioGroupItem value="monthly" id="monthly" className="sr-only" />
+              <Label htmlFor="monthly" className={`block w-full cursor-pointer rounded-md py-2 px-3 text-center ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-background data-[state=checked]:text-foreground hover:bg-accent hover:text-accent-foreground ${billingCycle === 'monthly' ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>Monthly</Label>
+            </div>
+            <div>
+              <RadioGroupItem value="annually" id="annually" className="sr-only" />
+              <Label htmlFor="annually" className={`block w-full cursor-pointer rounded-md py-2 px-3 text-center ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:bg-background data-[state=checked]:text-foreground hover:bg-accent hover:text-accent-foreground ${billingCycle === 'annually' ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>Annually <span className="text-sm text-green-600 dark:text-green-400">(Save ~17%)</span></Label>
+            </div>
+          </RadioGroup>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
-        {tiersToDisplay.map((tierKey) => {
-          const tier = TIER_DETAILS[tierKey];
-          const priceId = getPriceIdForTierAndCadence(tierKey, selectedCadence);
-          const displayPrice = getDisplayPriceForTierAndCadence(tierKey, selectedCadence);
-          const isCurrentPlan = currentTier === tierKey;
-
-          return (
-            <Card key={tierKey} className={`flex flex-col ${tierKey === 'pro' ? 'border-blue-500 border-2 shadow-xl' : ''}`}>
-              <CardHeader className="pb-4">
-                <CardTitle className={`text-2xl font-semibold ${tierKey === 'pro' ? 'text-blue-600' : ''}`}>{tier.name}</CardTitle>
-                <CardDescription className="min-h-[40px]">{tier.description}</CardDescription>
-                 <p className="text-3xl font-bold pt-2">
-                  {displayPrice}
-                  {tierKey !== 'starter' && selectedCadence === 'yearly' && tier.displayPrices && 'yearly' in tier.displayPrices && TIER_DETAILS[tierKey].displayPrices.monthly > 0 &&
-                    <span className="text-xs font-normal text-muted-foreground block">
-                      equiv. $${(TIER_DETAILS[tierKey].displayPrices.yearly / 12).toFixed(2)}/month, billed annually
+        <div className="isolate mx-auto mt-10 grid max-w-md grid-cols-1 gap-8 lg:mx-0 lg:max-w-none lg:grid-cols-4">
+          {tiers.map((tier) => (
+            <Card
+              key={tier.id}
+              className={`flex flex-col rounded-3xl ${
+                tier.mostPopular ? "ring-2 ring-blue-600 dark:ring-blue-500 shadow-2xl" : "ring-1 ring-gray-200 dark:ring-gray-700"
+              } ${tier.name === 'Starter' ? 'bg-gray-100 dark:bg-gray-800/50' : 'bg-white dark:bg-gray-800'}`}
+            >
+              <CardHeader className="pt-8">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-semibold leading-7 text-gray-900 dark:text-white flex items-center">
+                    {tierIcons[tier.name]}
+                    <span className="ml-2">{tier.name}</span>
+                  </h3>
+                  {tier.mostPopular && (
+                    <p className="rounded-full bg-blue-600/10 px-2.5 py-1 text-xs font-semibold leading-5 text-blue-600 dark:text-blue-400">
+                      Most popular
+                    </p>
+                  )}
+                </div>
+                <div className="mt-4 flex items-baseline gap-x-2">
+                  <span className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white">
+                    {tier.price[billingCycle]}
+                  </span>
+                  {tier.price[billingCycle] !== "$0" && !tier.isCustom && (
+                    <span className="text-sm font-semibold leading-6 text-gray-600 dark:text-gray-300">
+                      {getPriceSuffix(billingCycle)}
                     </span>
-                  }
-                </p>
+                  )}
+                </div>
+                <CardDescription className="mt-4 text-sm leading-6 text-gray-600 dark:text-gray-400 min-h-[40px]">
+                  {tier.description}
+                </CardDescription>
               </CardHeader>
-              <CardContent className="flex-grow">
-                <ul className="space-y-2.5 text-sm">
-                  {tier.features.map((feature, idx) => <TierFeature key={idx} text={feature} />)}
+              <CardContent className="flex flex-1 flex-col justify-between">
+                <ul role="list" className="mt-6 space-y-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                  {tier.features.map((feature) => (
+                    <li key={feature.text} className="flex gap-x-3 items-center">
+                      {feature.unavailable ? (
+                        <XCircle className="h-5 w-5 flex-none text-red-500 dark:text-red-400" aria-hidden="true" />
+                      ) : (
+                        <CheckCircle2 className="h-5 w-5 flex-none text-blue-600 dark:text-blue-500" aria-hidden="true" />
+                      )}
+                      <span className={feature.unavailable ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-200'}>
+                        {feature.text}
+                      </span>
+                    </li>
+                  ))}
                 </ul>
-                 {tierKey === 'business' && 
-                    <p className="text-xs text-muted-foreground mt-3 flex items-center">
-                        <Info size={14} className="mr-1 shrink-0" /> Price shown is per seat. Includes 5 seats.
-                    </p>}
               </CardContent>
-              <CardFooter className="mt-auto pt-4">
-                {tierKey === 'starter' ? (
-                  <Button asChild className="w-full" variant={isCurrentPlan ? "outline" : "default"} disabled={isCurrentPlan && isSignedIn}>
-                    {isCurrentPlan && isSignedIn ? "Your Current Plan" : <Link href="/signup">Get Started</Link>}
-                  </Button>
-                ) : isCurrentPlan ? (
-                  <Button onClick={handleManageSubscription} className="w-full" disabled={isRedirecting === 'manage'}>
-                    {isRedirecting === 'manage' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}
-                    Manage Subscription
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={() => handleCheckout(tierKey)}
-                    className={`w-full ${tierKey === 'pro' ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
-                    disabled={isRedirecting === priceId || !priceId}
-                  >
-                    {isRedirecting === priceId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    {currentTier === 'starter' || !isSignedIn ? `Get ${tier.name}` : `Switch to ${tier.name}`}
-                  </Button>
-                )}
+              <CardFooter className="mt-8 p-6">
+                 <Button asChild className="w-full" variant={tier.mostPopular ? 'default' : 'outline'} size="lg">
+                  <Link href={tier.href}>
+                    {tier.cta}
+                    {isRedirectingToStripeForTier(tier.id, billingCycle) && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+                  </Link>
+                </Button>
               </CardFooter>
             </Card>
-          );
-        })}
+          ))}
+        </div>
+
+        <div className="mt-16 text-center">
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Frequently Asked Questions</h2>
+          <div className="mt-8 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+            {[
+              { q: "Can I change my plan later?", a: "Yes, you can upgrade or downgrade your plan at any time. Changes will be prorated." },
+              { q: "What payment methods do you accept?", a: "We accept all major credit cards. For Business plans, we can also arrange invoicing." },
+              { q: "Is there a discount for annual billing?", a: "Yes, you save approximately 17% (equivalent to 2 months free) by choosing an annual plan over monthly." },
+              { q: "What happens if I exceed my plan limits?", a: "For metered features like saved searches, you'll be prompted to upgrade if you consistently exceed limits." },
+              { q: "Do you offer refunds?", a: "We offer a 14-day money-back guarantee on all paid plans." },
+              { q: "How does support work?", a: "Support channels vary by plan, ranging from standard email to dedicated account managers for Business clients." },
+            ].map((faq, i) => (
+              <div key={i} className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow ring-1 ring-gray-900/5 dark:ring-white/10">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                   <HelpCircle className="h-5 w-5 mr-2 text-blue-500" /> {faq.q}
+                </h3>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{faq.a}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+         <p className="text-center text-sm text-muted-foreground mt-12">
+          All prices in USD. Features and pricing subject to change.
+          By subscribing, you agree to our <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link> and <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>.
+        </p>
       </div>
-      
-      <p className="text-center text-sm text-muted-foreground mt-12">
-        All prices in USD. Features and pricing subject to change. 
-        By subscribing, you agree to our <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link> and <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>.
-      </p>
     </div>
   );
+}
+
+const isRedirectingToStripeForTier = (tierId: string, cadence: Cadence) => {
+  console.log(`Checking redirect state for ${tierId} with ${cadence} billing`);
+  return false; 
+};
+
+const STRIPE_PRICE_IDS = {
+  starter: {
+    monthly: "starter_monthly"
+  },
+  plus: {
+    weekly: "plus_weekly",
+    monthly: "plus_monthly",
+    annually: "plus_yearly"
+  },
+  pro: {
+    weekly: "pro_weekly",
+    monthly: "pro_monthly",
+    annually: "pro_yearly"
+  },
+  business: {
+    weekly: "business_weekly",
+    monthly: "business_monthly",
+    annually: "business_yearly"
+  }
+};
+
+function getStripePriceId(tierName: Tier, cadence: Cadence): string | null {
+  if (tierName === "Starter") {
+    if (cadence === "monthly") return STRIPE_PRICE_IDS.starter.monthly;
+    return null;
+  } else if (tierName === "Plus") {
+    return STRIPE_PRICE_IDS.plus[cadence];
+  } else if (tierName === "Pro") {
+    return STRIPE_PRICE_IDS.pro[cadence];
+  } else if (tierName === "Business") {
+    return STRIPE_PRICE_IDS.business[cadence];
+  }
+  return null;
 } 
