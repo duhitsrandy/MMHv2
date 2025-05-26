@@ -1,0 +1,27 @@
+Notepad Name: Sonnet Roadmap
+
+## **🚨 CRITICAL DEVELOPMENT GUIDELINE** 🚨
+**DO NOT SUGGEST CHANGES TO WORKING FEATURES**
+- This app has working features built by other models
+- Focus is on payment/premium structure completion and going live
+- Only suggest changes for: efficiency, security, or adding complex new features
+- Always verify current functionality before suggesting modifications
+- Live traffic routing for Pro+ users is ALREADY WORKING via HERE API
+- Upgrade modal system needs completion, but core feature gating works
+
+---
+
+## **What's Currently Working (DO NOT CHANGE)**
+- ✅ Live traffic routing: Pro users automatically get HERE Matrix API
+- ✅ Plan detection and feature gating logic
+- ✅ Core mapping and midpoint calculation
+- ✅ Database schema and user management
+- ✅ Stripe backend integration (webhooks work)
+
+## **What Actually Needs Completion**
+- ❌ Frontend upgrade modal UI component
+- ❌ Stripe checkout session creation flow
+- ❌ Payment success/failure handling in UI
+- ❌ Production deployment configuration
+
+--- 

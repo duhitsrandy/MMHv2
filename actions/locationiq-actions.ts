@@ -21,8 +21,6 @@ import {
   CACHE_TTL_SECONDS,
   DEFAULT_POI_RADIUS,
   DEFAULT_USER_AGENT,
-  OSRM_API_BASE,
-  OSRM_API_KEY_ENV_VAR,
 } from '@/lib/constants'; // Import constants
 import { trackApiEvent } from '../app/lib/monitoring'; // <-- Import monitoring function (Corrected Path)
 import { auth } from "@clerk/nextjs/server"; // <-- Add Clerk auth import

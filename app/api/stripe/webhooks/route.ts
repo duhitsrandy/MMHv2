@@ -66,11 +66,9 @@ export async function POST(req: Request) {
 
 async function handleSubscriptionChange(event: Stripe.Event) {
   const subscription = event.data.object as Stripe.Subscription
-  const productId = subscription.items.data[0].price.product as string
   await manageSubscriptionStatusChange(
     subscription.id,
-    subscription.customer as string,
-    productId
+    subscription.customer as string
   )
 }
 
@@ -88,11 +86,9 @@ async function handleCheckoutSession(event: Stripe.Event) {
       expand: ["default_payment_method"]
     })
 
-    const productId = subscription.items.data[0].price.product as string
     await manageSubscriptionStatusChange(
       subscription.id,
-      subscription.customer as string,
-      productId
+      subscription.customer as string
     )
   }
 }

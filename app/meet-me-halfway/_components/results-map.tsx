@@ -112,7 +112,12 @@ function getMidpoint(route: OsrmRoute | null): { lat: number; lng: number } | nu
 }
 
 function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
-  const { plan } = usePlan();
+  const { tier } = usePlan();
+  
+  // Convert Tier to UserPlan for compatibility
+  const plan: UserPlan | null = tier === 'pro' || tier === 'business' ? 'pro' : 
+                                tier === 'starter' || tier === 'plus' ? 'free' : 
+                                null;
 
   const [mainRoute, setMainRoute] = useState<OsrmRoute | null>(null)
   const [alternateRoute, setAlternateRoute] = useState<OsrmRoute | null>(null)
@@ -134,6 +139,14 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
         setIsMapDataLoading(false);
         return;
       }
+
+      // Wait for plan to be loaded before proceeding
+      if (plan === undefined) {
+        console.log('[MapData] Waiting for plan to load...');
+        return;
+      }
+
+      console.log(`[MapData] Fetching for ${geocodedOrigins.length} origins with plan: ${plan}`);
 
       setIsMapDataLoading(true)
       setIsPoiTravelTimeLoading(false)
@@ -527,7 +540,12 @@ const PointsOfInterest = dynamic(
 export default function ResultsMap({ geocodedOrigins }: ResultsMapProps) {
   const [isClient, setIsClient] = useState(false)
   const [selectedPoiId, setSelectedPoiId] = useState<string | undefined>(undefined)
-  const { plan } = usePlan();
+  const { tier } = usePlan();
+  
+  // Convert Tier to UserPlan for compatibility
+  const plan: UserPlan | null = tier === 'pro' || tier === 'business' ? 'pro' : 
+                                tier === 'starter' || tier === 'plus' ? 'free' : 
+                                null;
 
   useEffect(() => {
     setIsClient(true)

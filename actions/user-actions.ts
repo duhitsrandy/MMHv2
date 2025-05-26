@@ -1,9 +1,10 @@
 "use server"
 
-import { getUserPlan } from "../lib/auth/plan" // Relative path
+import { getUserPlanInfo } from "../lib/auth/plan" // Relative path
 import { UserPlan } from "../types/index" // Relative path
 
 export async function getUserPlanAction(): Promise<UserPlan | null> {
-  // getUserPlan handles authentication and fetching internally
-  return await getUserPlan()
+  // getUserPlanInfo handles authentication and fetching internally
+  const planInfo = await getUserPlanInfo()
+  return planInfo?.tier as UserPlan || null
 } 
