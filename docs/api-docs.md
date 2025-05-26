@@ -3,13 +3,22 @@
 ## Overview
 The Meet Me Halfway application integrates with several external APIs for geocoding, routing, and points of interest services. This documentation covers the API endpoints, request/response formats, authentication, error handling, and integration details.
 
+**Key Features:**
+- Multi-origin support (2-10 locations based on subscription tier)
+- Tier-based API access (ORS for Free/Plus, HERE API for Pro/Business)
+- Real-time traffic data for Pro subscribers
+- Comprehensive subscription and billing system
+- Advanced POI search and travel time calculations
+
 ## API Setup Checklist (From Scratch)
 1. Set up all required environment variables (see `.env.example`)
-2. Ensure Supabase, Clerk, Upstash, LocationIQ, **Fast Routing OSRM (RapidAPI)**, OpenRouteService, HERE API, and PostHog accounts are configured
-3. Run database migrations
-4. Start the development server (`npm run dev`)
-5. Test endpoints using curl, Postman, or the provided examples below
-6. Review [auth-docs.md](auth-docs.md), [rate-limit-docs.md](rate-limit-docs.md), and [MONITORING.md](MONITORING.md) for security, rate limiting, and analytics details
+2. Ensure Supabase, Clerk, Upstash, LocationIQ, **Fast Routing OSRM (RapidAPI)**, OpenRouteService, HERE API, Stripe, and PostHog accounts are configured
+3. Run database migrations (`npm run db:migrate`)
+4. Configure Stripe products and pricing
+5. Set up webhook endpoints for Stripe
+6. Start the development server (`npm run dev`)
+7. Test endpoints using curl, Postman, or the provided examples below
+8. Review [auth-docs.md](auth-docs.md), [rate-limit-docs.md](rate-limit-docs.md), [SUBSCRIPTION_BILLING.md](SUBSCRIPTION_BILLING.md), and [MONITORING.md](MONITORING.md) for security, rate limiting, billing, and analytics details
 
 ## Authentication & Authorization
 - Most API endpoints require authentication via Clerk (see [auth-docs.md](auth-docs.md)).
@@ -188,6 +197,66 @@ interface HereMatrixActionParams {
 }
 ```
 
+### 7. Stripe Checkout Session (`createCheckoutSessionAction`)
+**Description:** Create a Stripe checkout session for subscription upgrades.
+**Auth:** Required (Clerk)
+**Rate Limit:** Authenticated
+
+#### Request Example (curl):
+```bash
+curl -X POST https://yourdomain.com/api/stripe/checkout \
+  -H 'Authorization: Bearer <clerk_token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"priceId": "price_1234567890"}'
+```
+
+#### Response Example (JSON):
+```json
+{
+  "success": true,
+  "url": "https://checkout.stripe.com/pay/cs_test_..."
+}
+```
+
+### 8. Stripe Billing Portal (`createBillingPortalSessionAction`)
+**Description:** Create a Stripe billing portal session for subscription management.
+**Auth:** Required (Clerk)
+**Rate Limit:** Authenticated
+
+#### Request Example (curl):
+```bash
+curl -X POST https://yourdomain.com/api/stripe/billing-portal \
+  -H 'Authorization: Bearer <clerk_token>' \
+  -H 'Content-Type: application/json'
+```
+
+#### Response Example (JSON):
+```json
+{
+  "success": true,
+  "url": "https://billing.stripe.com/session/..."
+}
+```
+
+### 9. User Plan Information (`getUserPlanInfoAction`)
+**Description:** Get current user's subscription plan and limits.
+**Auth:** Required (Clerk)
+**Rate Limit:** Authenticated
+
+#### Response Example (JSON):
+```json
+{
+  "success": true,
+  "data": {
+    "membership": "pro",
+    "maxLocations": 5,
+    "hasTrafficData": true,
+    "stripeCustomerId": "cus_...",
+    "stripeSubscriptionId": "sub_..."
+  }
+}
+```
+
 ## Error Handling
 
 ### Error Response Format
@@ -219,9 +288,40 @@ interface HereMatrixActionParams {
 - Automated tests can be added in the `__tests__/` directory or alongside actions/components
 - See [README.md](README.md) for general testing instructions
 
+## Webhook Endpoints
+
+### 1. Stripe Webhooks (`/api/stripe/webhooks`)
+**Description:** Handle Stripe subscription events for billing automation.
+**Auth:** Stripe webhook signature verification
+**Events Handled:**
+- `checkout.session.completed`: New subscription created
+- `customer.subscription.updated`: Subscription modified
+- `customer.subscription.deleted`: Subscription cancelled
+
+#### Webhook Configuration
+```bash
+# Stripe CLI for testing
+stripe listen --forward-to localhost:3000/api/stripe/webhooks
+
+# Production webhook endpoint
+https://yourdomain.com/api/stripe/webhooks
+```
+
+### 2. Clerk Webhooks (`/api/webhooks/clerk`)
+**Description:** Handle user lifecycle events from Clerk authentication.
+**Auth:** Clerk webhook signature verification
+**Events Handled:**
+- `user.created`: Create user profile in database
+- `user.updated`: Update user profile information
+- `user.deleted`: Clean up user data
+
 ## Cross-References
 - [Authentication & Authorization](auth-docs.md)
 - [Rate Limiting](rate-limit-docs.md)
+- [Subscription & Billing](SUBSCRIPTION_BILLING.md)
+- [HERE API Integration](HERE_API_INTEGRATION.md)
+- [Multi-Origin Feature](MULTI_ORIGIN_FEATURE.md)
+- [Upgrade Modal Implementation](UPGRADE_MODAL_IMPLEMENTATION.md)
 - [Monitoring & Analytics](MONITORING.md)
 - [Production Checklist](PRODUCTION.md)
 - [Potential Future Features](POTENTIAL_FUTURE_FEATURES.md)
@@ -457,13 +557,67 @@ interface ErrorResponse {
 
 ## Environment Variables
 
+### Core API Keys
 ```env
-# API Keys
-NEXT_PUBLIC_LOCATIONIQ_KEY=...
-OPENROUTESERVICE_API_KEY=...
-HERE_API_KEY=your_here_api_key
+# LocationIQ (Geocoding & POI Search)
+NEXT_PUBLIC_LOCATIONIQ_KEY=your_locationiq_key
 
-# Rate Limiting
+# Fast Routing OSRM (RapidAPI)
+RAPIDAPI_FAST_ROUTING_HOST=fast-routing.p.rapidapi.com
+RAPIDAPI_FAST_ROUTING_KEY=your_rapidapi_key
+
+# OpenRouteService (Free/Plus Tier Matrix)
+OPENROUTESERVICE_API_KEY=your_ors_key
+
+# HERE API (Pro/Business Tier Matrix with Traffic)
+HERE_API_KEY=your_here_api_key
+```
+
+### Database & Authentication
+```env
+# Supabase
+DATABASE_URL=postgresql://...
+NEXT_PUBLIC_SUPABASE_URL=https://...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+
+# Clerk Authentication
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/login
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/signup
+NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/meet-me-halfway
+NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/meet-me-halfway
+```
+
+### Stripe (Subscription & Billing)
+```env
+# Stripe Configuration
+STRIPE_SECRET_KEY=sk_live_... # or sk_test_ for development
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Plus Tier Price IDs
+STRIPE_PRICE_PLUS_WEEKLY=price_...
+STRIPE_PRICE_PLUS_MONTHLY=price_...
+STRIPE_PRICE_PLUS_YEARLY=price_...
+
+# Pro Tier Price IDs
+STRIPE_PRICE_PRO_WEEKLY=price_...
+STRIPE_PRICE_PRO_MONTHLY=price_...
+STRIPE_PRICE_PRO_YEARLY=price_...
+
+# Business Tier Price IDs
+STRIPE_PRICE_BUSINESS_WEEKLY=price_...
+STRIPE_PRICE_BUSINESS_MONTHLY=price_...
+STRIPE_PRICE_BUSINESS_YEARLY=price_...
+```
+
+### Rate Limiting (Upstash Redis)
+```env
+# Upstash Redis
+UPSTASH_REDIS_URL=redis://...
+UPSTASH_REDIS_TOKEN=...
+
+# Rate Limit Configuration
 RATE_LIMIT_REQUESTS=10
 RATE_LIMIT_WINDOW=60
 RATE_LIMIT_REQUESTS_AUTH=50
@@ -472,19 +626,11 @@ RATE_LIMIT_REQUESTS_SPECIAL=100
 RATE_LIMIT_WINDOW_SPECIAL=60
 ```
 
-## Environment Variables (Routing)
-
-Add these to your `.env.local` or deployment environment:
+### Analytics & Monitoring
 ```env
-# Fast Routing OSRM (RapidAPI)
-RAPIDAPI_FAST_ROUTING_HOST=fast-routing.p.rapidapi.com
-RAPIDAPI_FAST_ROUTING_KEY=your_rapidapi_key
-
-# OpenRouteService (for travel time matrix only - Free Tier)
-OPENROUTESERVICE_API_KEY=your_ors_key
-
-# HERE API (for traffic-aware travel time matrix - Pro Tier)
-HERE_API_KEY=your_here_api_key
+# PostHog Analytics
+NEXT_PUBLIC_POSTHOG_KEY=phc_...
+NEXT_PUBLIC_POSTHOG_HOST=https://app.posthog.com
 ```
 
 ## Best Practices

@@ -1,341 +1,425 @@
 # Meet Me Halfway App Structure
 
 ## Overview
-Meet Me Halfway is a Next.js application that helps users find a convenient meeting point between two locations. The app calculates two routes (main and alternate) between the locations using Fast Routing OSRM (RapidAPI), finds points of interest (POIs) around the midpoints of both routes using LocationIQ, and enriches POIs with travel times using OpenRouteService (ORS Matrix API). Both routes are displayed simultaneously on an interactive map.
+Meet Me Halfway is a production-ready Next.js SaaS application that helps users find optimal meeting points between multiple locations (2-10 based on subscription tier). The app features a comprehensive subscription billing system with Stripe, tier-based feature access, multi-origin support, traffic-aware routing for Pro subscribers, and advanced POI search capabilities.
 
-## Core Components
+**Key Features:**
+- **Multi-Origin Support**: 2-10 locations based on subscription tier
+- **Live Subscription Billing**: Stripe integration with multiple pricing tiers
+- **Traffic-Aware Routing**: HERE API integration for Pro/Business users
+- **Tier-Based Access Control**: Feature enforcement with upgrade modals
+- **Advanced Analytics**: PostHog integration for user behavior tracking
+- **Production-Ready**: Live payments, comprehensive error handling, rate limiting
+
+## Subscription Tiers & Features
+
+### Starter (Free)
+- **Locations**: 2 maximum
+- **Routing**: Basic routing via OSRM/ORS
+- **Features**: Standard place search, community support
+
+### Plus ($9/month, $90/year)
+- **Locations**: 3 maximum
+- **Routing**: Faster calculations, saved locations (up to 10)
+- **Features**: Basic email support
+
+### Pro ($19/month, $190/year)
+- **Locations**: 5 maximum
+- **Routing**: **Real-time traffic data via HERE API**
+- **Features**: Unlimited saved locations, advanced analytics, priority support
+
+### Business ($99/month, $990/year)
+- **Locations**: 10 maximum
+- **Features**: All Pro features + 5 user seats, dedicated account manager
+- **Enterprise**: Custom integration options
+
+## Core Architecture Components
 
 ### 1. Main App Component (`app/meet-me-halfway/page.tsx`)
-- Entry point for the application.
-- Renders `MeetMeHalfwayApp` which contains the search and results logic.
+- Entry point for the meet-me-halfway feature
+- Renders `MeetMeHalfwayApp` with subscription context
 
 ### 2. Meet Me Halfway App (`app/meet-me-halfway/_components/meet-me-halfway-app.tsx`)
-- Manages the overall state (search inputs, results visibility).
-- Conditionally renders `SearchInterface` or `ResultsMap`.
-- Handles the transition between search and results.
+- **State Management**: Search inputs, results visibility, upgrade modal state
+- **Subscription Integration**: Plan enforcement and upgrade flow management
+- **Component Orchestration**: Conditionally renders form, results, and upgrade modal
+- **Key Features**:
+  - Multi-origin form management
+  - Tier-based location limits enforcement
+  - Upgrade modal integration
+  - Plan-aware feature access
 
-### 3. Search Interface (`app/meet-me-halfway/_components/search-interface.tsx`)
-- Provides the main search form for two locations.
-- Features:
-  - Address input fields with **debouncing** to limit API calls during typing.
-  - Geocoding via LocationIQ (`geocodeLocationAction`).
-  - Form validation (likely using `react-hook-form` and potentially Zod).
-  - Loading states and user feedback.
-  - Callback (`onFindMidpoint`) to trigger results display.
+### 3. Multi-Origin Form (`app/meet-me-halfway/_components/meet-me-halfway-form.tsx`)
+- **Dynamic Location Inputs**: Add/remove locations with tier validation
+- **Geocoding Integration**: Real-time address validation with debouncing
+- **Tier Enforcement**: Upgrade prompts when location limits exceeded
+- **Features**:
+  - Responsive design for 2-10 location inputs
+  - Real-time validation and error handling
+  - Accessibility compliance
+  - Mobile-optimized interface
 
 ### 4. Results Map (`app/meet-me-halfway/_components/results-map.tsx`)
-- Orchestrates the display of map and POI data after a successful search.
-- **Data Fetching**: Uses the `useMapData` custom hook:
-    - Fetches main route (Fast Routing OSRM via `getRouteAction`).
-    - Fetches alternate route (Fast Routing OSRM via `getAlternateRouteAction`).
-    - Calculates midpoints for both routes.
-    - Fetches initial POIs around both midpoints (LocationIQ via `searchPoisAction`).
-    - Fetches travel time matrix (ORS via `getTravelTimeMatrixAction`) to enrich POIs.
-- **State Management**: Manages loading states (`isMapDataLoading`, `isPoiTravelTimeLoading`), POI visibility (`showPois`), and selected POI (`selectedPoiId`).
-- **Rendering**: Renders `MapComponent` and `PointsOfInterest`, passing down the necessary data (routes, enriched POIs, state).
+- **Dual-Mode Rendering**: 2-location vs 3+ location algorithms
+- **Plan-Aware API Selection**: HERE API for Pro users, ORS for Free/Plus
+- **Data Orchestration**: Routes, centroids, POIs, and travel time matrices
+- **Key Features**:
+  - Centroid calculation for 3+ locations
+  - Traffic-aware travel times (Pro tier)
+  - Comprehensive error handling with fallbacks
+  - Performance optimization for large datasets
 
 ### 5. Map Component (`app/meet-me-halfway/_components/map-component.tsx`)
-- Handles the Leaflet map rendering and interaction.
-- Displays:
-    - Main route (blue solid line).
-    - Alternate route (purple solid line, if available).
-    - Markers for start, end, main midpoint, and alternate midpoint (if available).
-    - POI markers (using enriched POI data for popups).
-- **Interaction**: 
-    - Handles POI marker clicks with a smooth `flyTo` animation.
-    - Opens POI popups on single click, relying on Leaflet's `autoPan` for visibility.
-    - Prevents repeated zooming on consecutive clicks on the same marker.
+- **Multi-Origin Visualization**: Displays all origin locations
+- **Interactive Features**: POI selection, smooth animations, responsive bounds
+- **Accessibility**: Keyboard navigation, screen reader support
+- **Performance**: Efficient marker management and clustering
 
 ### 6. Points of Interest (`app/meet-me-halfway/_components/points-of-interest.tsx`)
-- Displays a scrollable list of POIs.
-- Uses enriched POI data (`combinedPois`) received from `ResultsMap`.
-- Displays POI name, type, address, and detailed travel time/distance information calculated via ORS.
-- Handles POI selection, synchronizing with the `selectedPoiId` state in `ResultsMap`.
+- **Multi-Origin Travel Data**: Shows travel times from all origins
+- **Tier-Aware Display**: Enhanced data for Pro users with traffic information
+- **Interactive Features**: POI selection synchronization with map
+- **Performance**: Virtualized lists for large POI datasets
 
-## API Integration
+## Subscription & Billing System
 
-### 1. Geocoding (`actions/locationiq-actions.ts`)
-- **API**: LocationIQ Geocoding API.
-- **Action**: `geocodeLocationAction`.
-- **Purpose**: Converts user-input addresses into latitude/longitude coordinates.
+### Core Components
 
-### 2. Routing (`actions/osrm-actions.ts`)
-- **API**: Fast Routing OSRM (RapidAPI).
-- **Actions**: 
-    - `getRouteAction`: Fetches the main driving route.
-    - `getAlternateRouteAction`: Fetches up to 3 alternative routes (with fallback to ORS if needed).
-- **Purpose**: Calculates the road network paths between the geocoded start and end points.
-- **Note**: The app now uses Fast Routing OSRM (RapidAPI) for robust and scalable routing.
+#### 1. Stripe Integration (`actions/stripe/`)
+- **Checkout Sessions**: `createCheckoutSessionAction`
+- **Billing Portal**: `createBillingPortalSessionAction`
+- **Webhook Handling**: Subscription lifecycle management
+- **Plan Enforcement**: Tier-based feature access control
 
-### 3. Alternate Route Selection (`actions/locationiq-actions.ts`)
-- **Logic**: Within `getAlternateRouteAction`.
-- **Process**:
-    1. Fetches up to 3 alternatives from OSRM.
-    2. Filters alternatives based on reasonable duration/distance compared to the main route.
-    3. Calculates midpoints of the main route and valid alternatives.
-    4. Selects the alternative whose midpoint is geographically furthest from the main route's midpoint.
-    5. Returns the selected alternate route or null/fallback.
+#### 2. User Plan Management (`lib/auth/plan.ts`)
+- **Plan Detection**: `usePlan()` hook for React components
+- **Access Control**: `requireProPlan()` for server actions
+- **Plan Information**: `getUserPlanInfo()` for subscription details
 
-### 4. POI Search (`actions/locationiq-actions.ts`)
-- **API**: LocationIQ Nearby API (which likely uses Overpass API data).
-- **Action**: `searchPoisAction`.
-- **Purpose**: Finds POIs (amenities, shops, leisure, tourism) within a specified radius around the calculated midpoints.
+#### 3. Upgrade Modal (`components/upgrade-modal.tsx`)
+- **Dynamic Content**: Feature-specific upgrade messaging
+- **Stripe Integration**: Direct checkout flow
+- **Accessibility**: Full keyboard and screen reader support
+- **Responsive Design**: Mobile-optimized interface
 
-### 5. Travel Time Matrix (`actions/ors-actions.ts`)
-- **API**: OpenRouteService (ORS) Matrix API.
-- **Action**: `getTravelTimeMatrixAction`.
-- **Purpose**: Calculates a matrix of travel times and distances between multiple sources (start/end locations) and destinations (all fetched POIs). This data is used to enrich the POIs displayed in the list and popups. (ORS is now only used for this matrix calculation.)
+### Database Schema
 
-## State Management (`useMapData` hook in `results-map.tsx`)
+#### Profiles Table
+```sql
+CREATE TABLE profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL UNIQUE, -- Clerk user ID
+  membership TEXT NOT NULL DEFAULT 'starter',
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  stripe_price_id TEXT,
+  seat_count INTEGER DEFAULT 1,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
 
-- **Route State**: `mainRoute`, `alternateRoute` (containing geometry, duration, distance).
-- **Midpoint State**: `currentMidpoint`, `alternateMidpoint` (calculated `{lat, lng}` coordinates).
-- **POI State**: 
-    - `initialPois`: Raw POIs fetched from LocationIQ for both midpoints, deduplicated.
-    - `combinedPois`: Enriched POIs after processing with ORS travel time matrix data.
-- **Loading State**: `isMapDataLoading` (for routes/initial POIs), `isPoiTravelTimeLoading` (for ORS matrix calculation).
+## API Integration Architecture
 
-## Key Features & Flow
+### 1. Tier-Based API Routing
 
-1.  **Search**: User enters two addresses in `SearchInterface`.
-2.  **Geocoding**: Addresses are geocoded using LocationIQ (`geocodeLocationAction`).
-3.  **Trigger Results**: `onFindMidpoint` is called in `MeetMeHalfwayApp`, switching the view to `ResultsMap`.
-4.  **Fetch Routes & POIs (`useMapData`)**: 
-    - Main and alternate routes requested from OSRM.
-    - Midpoints calculated.
-    - Initial POIs fetched from LocationIQ around both midpoints.
-    - `isMapDataLoading` set to `false`, `isPoiTravelTimeLoading` set to `true`.
-5.  **Render Initial Map**: `MapComponent` renders with routes and midpoints. `PointsOfInterest` renders with a loading state.
-6.  **Fetch Travel Times (`useMapData`)**: 
-    - ORS Matrix API called with start/end points and all initial POIs.
-7.  **Enrich POIs**: Results from ORS are used to add travel time/distance data to each POI, creating `combinedPois`.
-8.  **Render Final State**: `isPoiTravelTimeLoading` set to `false`. `MapComponent` updates POI markers (if shown) with popup data. `PointsOfInterest` displays the list with full details.
-9.  **Interaction**: User can click POIs on the map (`MapComponent`) or in the list (`PointsOfInterest`), which updates the shared `selectedPoiId` state in `ResultsMap`, highlighting the selection in both components.
+#### Free/Plus Tiers
+- **Geocoding**: LocationIQ API
+- **Routing**: Fast Routing OSRM (RapidAPI)
+- **Travel Times**: OpenRouteService Matrix API
+- **POI Search**: LocationIQ Nearby API
 
-## Recent Changes & Refinements
+#### Pro/Business Tiers
+- **Geocoding**: LocationIQ API
+- **Routing**: Fast Routing OSRM (RapidAPI)
+- **Travel Times**: **HERE Matrix API v8 (with traffic data)**
+- **POI Search**: LocationIQ Nearby API
+- **Fallback**: ORS Matrix API if HERE unavailable
 
-1.  **Map Stability**: Fixed Leaflet rendering errors by simplifying map component lifecycle management and ensuring proper cleanup.
-2.  **POI Interaction**: 
-    - Clicking a POI marker triggers a smooth `flyTo` animation.
-    - Popup opens reliably on a single click.
-    - Repeated clicks on an already selected/focused marker do not trigger re-animation.
-    - Removed manual map panning after `flyTo`, relying on Leaflet's `autoPan` for better popup visibility.
-3.  **API Usage**: Clarified the distinct roles of LocationIQ (Geocoding, POI Search), OSRM (Routing), and ORS (Travel Time Matrix).
-4.  **Alternate Route Logic**: Implemented the strategy to select the most geographically distinct alternate route based on midpoint distance.
-5.  **Data Flow**: Ensured the fully enriched `combinedPois` data (with travel times) is used for both the POI list display and the map marker popups.
+### 2. HERE API Integration (`lib/providers/here-platform.ts`)
+- **Traffic-Aware Routing**: Real-time traffic data for accurate ETAs
+- **Matrix Calculations**: Batch processing for multiple origins/destinations
+- **Error Handling**: Comprehensive fallback strategies
+- **Cost Management**: Usage monitoring and optimization
 
-## Future Improvements
-1. Add more POI categories & filtering options.
-2. Implement user accounts to save searches.
-3. Add route comparison features (e.g., elevation, road types).
-4. Now uses Fast Routing OSRM (RapidAPI) for robust routing service. Consider additional providers for redundancy if needed.
-5. Add unit/integration tests.
+### 3. Multi-Origin Algorithms
 
-## Tech Stack Breakdown (Summary)
+#### 2-Location Mode
+- Calculate main and alternate routes
+- Find midpoints of both routes
+- Search POIs around both midpoints
+- Display comparative travel data
 
-- **Frontend**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS, shadcn/ui, react-leaflet, react-hook-form, next-themes
-- **Backend/APIs**: Next.js Server Actions, LocationIQ, Fast Routing OSRM (RapidAPI), OpenRouteService
-- **Database**: Supabase (PostgreSQL) with Drizzle ORM
-- **Authentication**: Clerk
-- **Rate Limiting**: Upstash Redis with @upstash/ratelimit
-- **State Management**: React Context (for Theme, potentially Auth), Server State via Server Actions, Local Component State, `react-hook-form` for forms.
+#### 3+ Location Mode
+- Calculate geometric centroid of all locations
+- Search POIs around central meeting point
+- Calculate travel matrix from all origins to each POI
+- Optimize for minimal total travel time
 
-## Directory Structure (Enhanced)
+## State Management & Data Flow
+
+### 1. Subscription State
+- **Plan Information**: Current tier, limits, features
+- **Billing Status**: Active, past due, cancelled
+- **Feature Access**: Real-time tier enforcement
+
+### 2. Location State
+- **Dynamic Inputs**: 2-10 location inputs based on tier
+- **Geocoded Data**: Validated coordinates and addresses
+- **Validation State**: Real-time error handling
+
+### 3. Results State
+- **Route Data**: Main/alternate routes or centroid calculation
+- **POI Data**: Enriched with travel times from all origins
+- **Loading States**: Progressive data loading with user feedback
+
+### 4. UI State
+- **Modal Management**: Upgrade modal, error dialogs
+- **Selection State**: Active POI, map focus
+- **Responsive State**: Mobile/desktop optimizations
+
+## Security & Performance
+
+### 1. Authentication & Authorization
+- **Clerk Integration**: Secure user authentication
+- **Plan Enforcement**: Server-side tier validation
+- **API Protection**: Rate limiting and access control
+
+### 2. Rate Limiting (`lib/rate-limit.ts`)
+- **Upstash Redis**: Distributed rate limiting
+- **Tier-Based Limits**: Different limits per subscription tier
+- **API Protection**: Prevents abuse and ensures fair usage
+
+### 3. Error Handling
+- **Graceful Degradation**: Fallback strategies for API failures
+- **User Feedback**: Clear error messages and recovery options
+- **Monitoring**: Comprehensive error tracking and alerting
+
+### 4. Performance Optimization
+- **Caching**: Strategic caching of geocoding and routing data
+- **Batch Processing**: Efficient API usage for multi-origin calculations
+- **Progressive Loading**: Staged data loading for better UX
+
+## Analytics & Monitoring
+
+### 1. PostHog Integration (`lib/providers/posthog.ts`)
+- **User Behavior**: Search patterns, feature usage, conversion tracking
+- **Performance Metrics**: API response times, error rates
+- **Business Metrics**: Subscription conversions, churn analysis
+
+### 2. Event Tracking
+- **Search Events**: Multi-origin usage, success rates
+- **Subscription Events**: Upgrades, downgrades, cancellations
+- **Feature Usage**: Tier-specific feature adoption
+
+### 3. Error Monitoring
+- **API Failures**: External service availability and performance
+- **User Errors**: Form validation, geocoding failures
+- **System Errors**: Server errors, database issues
+
+## Production Architecture
+
+### 1. Environment Configuration
+```env
+# Core APIs
+NEXT_PUBLIC_LOCATIONIQ_KEY=production_key
+RAPIDAPI_FAST_ROUTING_KEY=production_key
+OPENROUTESERVICE_API_KEY=production_key
+HERE_API_KEY=production_key
+
+# Subscription & Billing
+STRIPE_SECRET_KEY=sk_live_production_key
+STRIPE_WEBHOOK_SECRET=whsec_production_secret
+
+# Database & Auth
+DATABASE_URL=production_database_url
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=production_clerk_key
+CLERK_SECRET_KEY=production_clerk_secret
+
+# Rate Limiting
+UPSTASH_REDIS_URL=production_redis_url
+UPSTASH_REDIS_TOKEN=production_redis_token
+
+# Analytics
+NEXT_PUBLIC_POSTHOG_KEY=production_posthog_key
+```
+
+### 2. Deployment Considerations
+- **Stripe Webhooks**: Production webhook endpoints configured
+- **API Quotas**: Production-level API limits and monitoring
+- **Database**: Optimized indexes and connection pooling
+- **CDN**: Static asset optimization and caching
+- **Monitoring**: Comprehensive uptime and performance monitoring
+
+## Directory Structure (Production)
 
 ```
-├── actions/                  # Server Actions for API calls & DB interactions
-│   ├── locationiq-actions.ts # Geocoding, OSRM Routing, POI Search
-│   └── ors-actions.ts        # ORS Matrix API calls
+├── actions/
+│   ├── db/                   # Database operations
+│   ├── stripe/               # Subscription & billing
+│   ├── locationiq-actions.ts # Geocoding & POI search
+│   ├── osrm-actions.ts       # Routing (OSRM)
+│   ├── ors-actions.ts        # Travel time matrix (ORS)
+│   └── here-actions.ts       # Traffic data (HERE API)
 ├── app/
-│   └── (main routes like /meet-me-halfway/, /login, /profile, etc.)
-│       └── meet-me-halfway/
-│           ├── _components/      # Specific UI Components for this route
-│           │   ├── map-component.tsx
-│           │   ├── points-of-interest.tsx
-│           │   ├── results-map.tsx
-│           │   ├── search-interface.tsx
-│           │   └── meet-me-halfway-app.tsx
-│           └── page.tsx          # Page entry point
+│   ├── (auth)/               # Authentication pages
+│   │   ├── login/
+│   │   └── signup/
+│   ├── api/
+│   │   ├── stripe/webhooks/  # Stripe webhook handlers
+│   │   └── webhooks/clerk/   # Clerk webhook handlers
+│   ├── meet-me-halfway/
+│   │   ├── _components/      # Feature components
+│   │   │   ├── meet-me-halfway-app.tsx
+│   │   │   ├── meet-me-halfway-form.tsx
+│   │   │   ├── results-map.tsx
+│   │   │   ├── map-component.tsx
+│   │   │   └── points-of-interest.tsx
+│   │   ├── saved-searches/   # Saved searches feature
+│   │   └── page.tsx
+│   └── pricing/              # Pricing page
 ├── components/
-│   ├── providers/           # Context Providers (Theme, Auth?)
-│   └── ui/                  # Reusable UI Components (shadcn/ui based)
+│   ├── auth/                 # Authentication components
+│   ├── providers/            # Context providers
+│   ├── ui/                   # shadcn/ui components
+│   └── upgrade-modal.tsx     # Subscription upgrade modal
 ├── db/
-│   ├── migrations/           # Drizzle migration files
-│   └── schema/               # Drizzle schema definitions
+│   ├── migrations/           # Database migrations
+│   └── schema/               # Database schema
 │       ├── profiles-schema.ts
 │       ├── locations-schema.ts
-│       ├── searches-schema.ts
-│       └── (other schemas like pois-schema.ts if exist)
-├── hooks/                    # Custom React Hooks
-├── lib/                      # Utilities
-│   ├── rate-limit.ts         # Rate Limiting logic
-│   └── utils.ts              # General utility functions
-├── logs/                     # Log files (if configured)
-├── public/                   # Static assets
-├── types/                    # TypeScript types
-├── .env.local                # Local environment variables
-├── middleware.ts             # Clerk auth and Rate Limiting middleware
-├── drizzle.config.ts         # Drizzle configuration
-├── next.config.mjs           # Next.js configuration
-├── package.json
-└── README.md
+│       └── searches-schema.ts
+├── lib/
+│   ├── auth/
+│   │   └── plan.ts           # Plan management
+│   ├── providers/
+│   │   ├── here-platform.ts  # HERE API integration
+│   │   └── posthog.ts        # Analytics
+│   ├── stripe/
+│   │   └── tier-map.ts       # Tier configuration
+│   ├── rate-limit.ts         # Rate limiting
+│   └── utils.ts
+├── docs/                     # Comprehensive documentation
+│   ├── app-structure.md      # This document
+│   ├── SUBSCRIPTION_BILLING.md
+│   ├── HERE_API_INTEGRATION.md
+│   ├── MULTI_ORIGIN_FEATURE.md
+│   ├── UPGRADE_MODAL_IMPLEMENTATION.md
+│   ├── PRODUCTION.md
+│   └── MONITORING.md
+└── middleware.ts             # Auth & rate limiting
 ```
 
-## Key Implementation Snippets
+## Key Implementation Patterns
 
-### Map Component - POI Click Handler (Simplified Logic)
+### 1. Tier-Based Feature Access
 ```typescript
-// Inside MapComponent useEffect for rendering POIs
-marker.on('click', () => {
-  if (!map) return;
+// Plan enforcement in components
+const { tier } = usePlan();
+const maxLocations = getMaxLocations(tier);
 
-  if (onPoiSelect) {
-    onPoiSelect(uniqueKey);
-  }
-
-  const targetLatLng = L.latLng(poiLat, poiLon);
-  const targetZoom = 15;
-  const currentCenter = map.getCenter();
-  const currentZoom = map.getZoom();
-
-  // Prevent re-animation if already focused
-  if (currentZoom === targetZoom && currentCenter.distanceTo(targetLatLng) < 10) {
-    if (!marker.isPopupOpen()) marker.openPopup();
+if (locations.length >= maxLocations) {
+  onOpenUpgradeModal?.();
     return;
   }
+```
 
-  // Fly to marker
-  map.flyTo(targetLatLng, targetZoom, { duration: 0.8 });
-
-  // Open popup on arrival (Leaflet autoPan handles visibility)
-  map.once('moveend', () => {
-    const currentMarker = poiMarkers.current.get(uniqueKey);
-    if (currentMarker && !currentMarker.isPopupOpen()) {
-      currentMarker.openPopup();
-    }
+### 2. API Selection Based on Plan
+```typescript
+// Traffic-aware routing for Pro users
+if (plan === 'pro' || plan === 'business') {
+  const hereResult = await getTrafficMatrixHereAction({
+    origins: matrixSourceCoords,
+    destinations: poiDestinations
   });
-});
-```
-
-### Results Map - Passing Props
-```typescript
-// Inside ResultsMap component return
-<MapComponent
-  // ... other props
-  mainRoute={mainRoute}
-  alternateRoute={alternateRoute}
-  pois={mapComponentPois} // Enriched POIs
-  showPois={showPois}
-  showAlternateRoute={!!alternateRoute} // Show if exists
-  selectedPoiId={selectedPoiId}
-  onPoiSelect={setSelectedPoiId}
-/>
-<PointsOfInterest
-  pois={combinedPois} // Enriched POIs
-  // ... other props
-  onPoiSelect={setSelectedPoiId}
-  isLoading={isPoiTravelTimeLoading || isMapDataLoading}
-/>
-```
-
-### Alternate Route Action - Selection Concept
-```typescript
-// Conceptual logic within getAlternateRouteAction
-async function getAlternateRouteAction(...) {
-  // 1. Fetch routes from OSRM (alternatives=3)
-  const osrmResponse = await fetchOsrmRoutes(...);
-  const mainRoute = osrmResponse.routes[0];
-  const potentialAlternates = osrmResponse.routes.slice(1);
-
-  // 2. Filter long alternatives
-  const validAlternates = potentialAlternates.filter(alt => 
-    alt.distance < mainRoute.distance * 1.4 // Example: max 40% longer
+} else {
+  const orsResult = await getTravelTimeMatrixAction(
+    coordinatesString,
+    sourcesString,
+    destinationsString
   );
-
-  // 3. Calculate midpoints
-  const mainMidpoint = calculateRouteMidpoint(mainRoute);
-  const alternateMidpoints = validAlternates.map(calculateRouteMidpoint);
-
-  // 4. Find furthest midpoint
-  let bestAlternate = null;
-  let maxDistance = -1;
-
-  validAlternates.forEach((alt, index) => {
-    const altMidpoint = alternateMidpoints[index];
-    if (mainMidpoint && altMidpoint) {
-      const distance = calculateGeoDistance(mainMidpoint, altMidpoint);
-      if (distance > maxDistance) {
-        maxDistance = distance;
-        bestAlternate = alt;
-      }
-    }
-  });
-
-  // 5. Return bestAlternate (or null/fallback)
-  return { isSuccess: true, data: bestAlternate }; 
 }
 ```
 
-## Environment Variables
-```env
-# Required environment variables
-NEXT_PUBLIC_LOCATIONIQ_KEY=your_locationiq_api_key_here
-
-# Optional for future features (Rate Limiting, DB, Auth)
-# UPSTASH_REDIS_URL=
-# UPSTASH_REDIS_TOKEN=
-# DATABASE_URL=
-# NEXT_PUBLIC_SUPABASE_URL=
-# NEXT_PUBLIC_SUPABASE_ANON_KEY=
-# NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-# CLERK_SECRET_KEY=
-# NEXT_PUBLIC_CLERK_SIGN_IN_URL=...
-# NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=...
+### 3. Multi-Origin Centroid Calculation
+```typescript
+const calculateCentroid = (origins: GeocodedOrigin[]) => {
+  const totalLat = origins.reduce((sum, origin) => 
+    sum + parseFloat(origin.lat), 0);
+  const totalLng = origins.reduce((sum, origin) => 
+    sum + parseFloat(origin.lng), 0);
+  
+  return {
+    lat: totalLat / origins.length,
+    lng: totalLng / origins.length
+  };
+};
 ```
 
-## Deployment Considerations
-- Ensure `NEXT_PUBLIC_LOCATIONIQ_KEY` is set in the deployment environment (e.g., Vercel).
-- The app currently relies on free tiers/public endpoints (OSRM Demo, ORS free tier). Consider dedicated/paid services for production use to ensure reliability and higher rate limits.
+### 4. Subscription Webhook Handling
+```typescript
+// Stripe webhook processing
+switch (event.type) {
+  case "checkout.session.completed":
+    await handleCheckoutSession(event);
+    break;
+  case "customer.subscription.updated":
+  case "customer.subscription.deleted":
+    await handleSubscriptionChange(event);
+    break;
+}
+```
 
-## Security Measures
-- **API Key**: The LocationIQ key is public (`NEXT_PUBLIC_`). While necessary for client-side use in some scenarios, ideally, sensitive API calls (especially if paid) should be proxied through Server Actions or API routes to hide the key.
-- **Rate Limiting**: Currently not implemented for OSRM/ORS calls but recommended for production, especially if using paid services.
-- **Input Validation**: Basic validation exists, but robust server-side validation in actions is crucial.
+## Recent Major Updates
 
-## Authentication (Clerk)
+### 1. Subscription System Implementation
+- **Live Stripe Integration**: Production-ready billing with webhooks
+- **Tier-Based Access**: Comprehensive feature enforcement
+- **Upgrade Flow**: Seamless subscription management
+- **Billing Portal**: Customer self-service capabilities
 
-- **Integration**: Uses `@clerk/nextjs` for frontend and backend integration.
-- **Middleware (`middleware.ts`)**: Protects routes based on authentication status. Public routes are explicitly defined, and all others require login.
-- **UI Components**: Leverages Clerk components like `<SignIn />`, `<SignUp />`, `<UserButton />` for login, registration, and user profile management.
-- **Hooks**: Uses hooks like `useAuth()` and `useUser()` to access authentication state and user information in client components.
-- **Server Actions**: Clerk helpers (`auth()`) are used within Server Actions to get the `userId` and protect actions requiring authentication.
+### 2. Multi-Origin Feature
+- **Advanced Algorithms**: Centroid calculation for 3+ locations
+- **Scalable Architecture**: Supports up to 10 locations for Business tier
+- **Performance Optimization**: Efficient matrix calculations
+- **User Experience**: Intuitive multi-location interface
 
-## Database (Supabase & Drizzle)
+### 3. HERE API Integration
+- **Traffic-Aware Routing**: Real-time traffic data for Pro subscribers
+- **Fallback Strategies**: Graceful degradation to ORS
+- **Cost Management**: Usage monitoring and optimization
+- **Error Handling**: Comprehensive error recovery
 
-- **Provider**: Supabase (PostgreSQL) provides the database hosting.
-- **ORM**: Drizzle ORM is used for type-safe database access and schema definition.
-- **Schema (`db/schema/`)**: Defines the database tables:
-    - `profiles-schema.ts`: Stores user profile information, likely linked to Clerk users via `userId`.
-    - `locations-schema.ts`: Stores geocoded location data (latitude, longitude, address string).
-    - `searches-schema.ts`: Stores historical search records, linking two locations (`locationAId`, `locationBId`) to a user (`userId`) and potentially storing midpoint/route information.
-    - `pois-schema.ts`: (Potentially) Stores cached or specific Point of Interest data if needed beyond transient search results.
-- **Migrations**: `drizzle-kit` is used to generate and manage SQL migration files (`db/migrations/`) based on schema changes. Migrations are applied using `npm run db:migrate`.
-- **Interaction**: Server Actions use Drizzle query builder functions (e.g., `db.select().from(...)`, `db.insert(...)`) to interact with the Supabase database.
+### 4. Production Readiness
+- **Security**: Comprehensive authentication and authorization
+- **Performance**: Optimized for production load
+- **Monitoring**: Full analytics and error tracking
+- **Documentation**: Comprehensive technical documentation
 
-## Rate Limiting (Upstash Redis)
+## Future Enhancements
 
-- **Provider**: Upstash Redis provides a serverless Redis instance.
-- **Library**: `@upstash/ratelimit` is used to implement rate limiting logic.
-- **Implementation (`lib/rate-limit.ts`)**: Contains the core rate limiting function, likely configured with different limits (anonymous, authenticated, special) based on environment variables.
-- **Usage (`middleware.ts`)**: The rate limiting function is called within the middleware for requests targeting `/api/` routes, using the user's IP address or potentially `userId` (if available and authenticated) as the identifier. It returns appropriate 429 responses if limits are exceeded.
+### Planned Features
+1. **Team Management**: Multi-user Business accounts
+2. **Advanced Analytics**: ML-powered meeting point optimization
+3. **Mobile App**: Native iOS/Android applications
+4. **Enterprise Features**: Custom integrations and white-labeling
+5. **International Expansion**: Multi-language and currency support
 
-## State Management
+### Technical Improvements
+1. **Microservices**: Service decomposition for scalability
+2. **Real-time Collaboration**: Live location sharing
+3. **Offline Support**: Progressive Web App capabilities
+4. **Advanced Caching**: Redis-based caching layer
+5. **A/B Testing**: Conversion optimization framework
 
-- **Route State**: `mainRoute`, `alternateRoute` (containing geometry, duration, distance).
-- **Midpoint State**: `currentMidpoint`, `alternateMidpoint` (calculated `{lat, lng}` coordinates).
-- **POI State**: 
-    - `initialPois`: Raw POIs fetched from LocationIQ for both midpoints, deduplicated.
-    - `combinedPois`: Enriched POIs after processing with ORS travel time matrix data.
-- **Loading State**: `isMapDataLoading` (for routes/initial POIs), `isPoiTravelTimeLoading` (for ORS matrix calculation).
+## Tech Stack Summary
 
-This documentation serves as a comprehensive guide reflecting the current state of the Meet-Me-Halfway application. 
+- **Frontend**: Next.js 14, React 18, TypeScript, Tailwind CSS, shadcn/ui
+- **Backend**: Next.js Server Actions, Supabase PostgreSQL, Drizzle ORM
+- **Authentication**: Clerk with webhook integration
+- **Payments**: Stripe with live billing and webhooks
+- **APIs**: LocationIQ, Fast Routing OSRM, OpenRouteService, HERE API
+- **Infrastructure**: Vercel deployment, Upstash Redis, PostHog analytics
+- **Monitoring**: PostHog, Stripe Dashboard, comprehensive logging
+
+This documentation reflects the current production-ready state of the Meet Me Halfway application with live subscription billing, multi-origin support, and traffic-aware routing capabilities. 

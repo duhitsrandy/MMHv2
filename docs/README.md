@@ -5,15 +5,18 @@ Welcome to the documentation for **Meet Me Halfway v2**! All project documentati
 ## Table of Contents
 
 - [Api Docs](api-docs.md)
-- [App Structure V2](app-structure-v2.md)
-- [App Structure](app-structure.md)
+- [App Structure](app-structure.md) - **Definitive comprehensive guide**
 - [Auth Docs](auth-docs.md)
 - [Db Schema Docs](db-schema-docs.md)
+- [HERE API Integration](HERE_API_INTEGRATION.md)
 - [MONITORING](MONITORING.md)
+- [Multi-Origin Feature](MULTI_ORIGIN_FEATURE.md)
 - [POTENTIAL FUTURE FEATURES](POTENTIAL_FUTURE_FEATURES.md)
 - [PRODUCTION](PRODUCTION.md)
 - [Rate Limit Docs](rate-limit-docs.md)
+- [Subscription & Billing](SUBSCRIPTION_BILLING.md)
 - [Theme Docs](theme-docs.md)
+- [Upgrade Modal Implementation](UPGRADE_MODAL_IMPLEMENTATION.md)
 
 ## How to Use
 - Each document covers a specific area of the app or its infrastructure.
