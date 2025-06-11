@@ -141,4 +141,15 @@ export async function createBillingPortalSessionAction(): Promise<{ url: string 
 //     console.error('[Billing Portal] Error creating session:', error);
 //     return null;
 //   }
-// } 
+// }
+
+export async function createProMonthlyCheckoutSession(): Promise<{ url: string | null; error?: string }> {
+  const priceId = process.env.STRIPE_PRICE_PRO_MONTHLY;
+  
+  if (!priceId) {
+    console.error('[Checkout] STRIPE_PRICE_PRO_MONTHLY environment variable not set');
+    return { url: null, error: 'Pricing configuration error. Please contact support.' };
+  }
+  
+  return createCheckoutSession({ priceId });
+} 

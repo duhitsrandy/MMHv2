@@ -19,8 +19,15 @@ Notepad Name: Sonnet Roadmap
 - ✅ Stripe backend integration (webhooks work)
 
 ## **What Actually Needs Completion**
-- ❌ Frontend upgrade modal UI component
-- ❌ Stripe checkout session creation flow
+- ✅ Frontend upgrade modal UI component (ENHANCED - shows required tier + option to view/select other plans + link to full pricing page)
+- ✅ Stripe checkout session creation flow (VERIFIED - full integration with all tiers)
+- ✅ Parameter mismatch bug: FIXED - upgrade modal now uses proper createCheckoutSession with priceId
+- ✅ Upgrade flow integration: VERIFIED - form → triggers → modal → Stripe checkout  
+- ✅ CRITICAL BUG FIXED: usePlan hook returned 'tier' but form expected 'plan' - now fixed
+- ✅ Tier comparison logic: Fixed 'free' → 'starter' to match actual tier system
+- ✅ Modal props alignment: FIXED - modal now supports feature/requiredTier props as documented
+- ✅ PostHog analytics (ENABLED - comprehensive tracking implemented with centralized events, analytics hook, and key user journey tracking)
+- ❌ Ad monetization integration  
 - ❌ Payment success/failure handling in UI
 - ❌ Production deployment configuration
 

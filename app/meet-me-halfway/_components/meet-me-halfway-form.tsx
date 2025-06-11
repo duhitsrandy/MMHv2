@@ -22,6 +22,8 @@ import { geocodeLocationAction } from "@/actions/locationiq-actions"
 import { createSearchAction } from "@/actions/db/searches-actions"
 import { createLocationAction } from "@/actions/db/locations-actions"
 import { usePlan } from "@/hooks/usePlan"
+import { useAnalytics } from "@/hooks/useAnalytics"
+import { ANALYTICS_EVENTS } from "@/lib/analytics-events"
 
 interface MeetMeHalfwayFormProps {
   initialLocations: Location[]
@@ -38,7 +40,8 @@ export default function MeetMeHalfwayForm({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const { plan, isLoading: isPlanLoading, error: planError } = usePlan();
+  const { tier: plan, isLoading: isPlanLoading, error: planError } = usePlan();
+  const { trackLocationChange, trackSearch, track } = useAnalytics();
 
   const [origins, setOrigins] = useState<OriginInput[]>([
     { id: `origin-${Date.now()}-0`, address: '', selectedLocationId: 'custom', isSaving: false },
@@ -168,17 +171,24 @@ export default function MeetMeHalfwayForm({
         maxLocations,
      });
      if (!canAddLocation) {
-          if ((plan === 'free' || plan === null) && !isPlanLoading) {
-            onOpenUpgradeModal();
+          if ((plan === 'starter' || plan === null) && !isPlanLoading) {
+            onOpenUpgradeModal?.();
           } else if (plan === 'pro') {
               toast.info('Maximum of 5 locations reached.');
           }
           return;
       }
-      setOrigins(currentOrigins => [
+      setOrigins(currentOrigins => {
+        const newOrigins = [
           ...currentOrigins,
           { id: `origin-${Date.now()}-${currentOrigins.length}`, address: '', selectedLocationId: 'custom', isSaving: false }
-      ]);
+        ];
+        
+        // Track location addition
+        trackLocationChange('added', newOrigins.length);
+        
+        return newOrigins;
+      });
   };
 
   const removeOrigin = (indexToRemove: number) => {
@@ -186,7 +196,14 @@ export default function MeetMeHalfwayForm({
           toast.error("Minimum of two locations required.");
           return;
       }
-      setOrigins(currentOrigins => currentOrigins.filter((_, index) => index !== indexToRemove));
+      setOrigins(currentOrigins => {
+        const newOrigins = currentOrigins.filter((_, index) => index !== indexToRemove);
+        
+        // Track location removal
+        trackLocationChange('removed', newOrigins.length);
+        
+        return newOrigins;
+      });
   };
 
   useEffect(() => {
@@ -234,6 +251,10 @@ export default function MeetMeHalfwayForm({
 
     setIsLoading(true)
 
+    // Track search start
+    const searchStartTime = Date.now();
+    trackSearch(origins.length);
+
     try {
        const geocodedOrigins = await Promise.all(
          origins.map(async (origin) => {
@@ -275,9 +296,24 @@ export default function MeetMeHalfwayForm({
 
        router.replace(pathname, { scroll: false });
 
+       // Track successful search completion
+       track(ANALYTICS_EVENTS.SEARCH_COMPLETED, {
+         location_count: origins.length,
+         search_duration_ms: Date.now() - searchStartTime,
+         has_saved_locations: origins.some(o => o.selectedLocationId && o.selectedLocationId !== 'custom'),
+       });
+
     } catch (error: any) {
       console.error("Error during geocoding/submission:", error)
       toast.error(error.message || "An error occurred during submission.")
+      
+             // Track search failure
+       track(ANALYTICS_EVENTS.SEARCH_FAILED, {
+        location_count: origins.length,
+        search_duration_ms: Date.now() - searchStartTime,
+        error_message: error.message,
+        error_type: 'geocoding_submission',
+      });
     } finally {
       setIsLoading(false)
     }
@@ -390,7 +426,7 @@ export default function MeetMeHalfwayForm({
                  >
                     <PlusCircle className="mr-2 h-4 w-4" />
                      Add Location
-                     {!canAddLocation && plan === 'free' && !isPlanLoading && ' (Upgrade for more)'}
+                     {!canAddLocation && plan === 'starter' && !isPlanLoading && ' (Upgrade for more)'}
                      {!canAddLocation && plan === 'pro' && ' (Max 5 reached)'}
                  </Button>
            </div>

@@ -13,6 +13,7 @@ import MeetMeHalfwayForm from "./meet-me-halfway-form"
 import SavedLocations from "./saved-locations"
 import RecentSearches from "./recent-searches"
 import UpgradeModal from "@/components/upgrade-modal"
+import { AdBanner } from "@/components/ads/AdBanner"
 
 const ResultsMap = dynamic(
   () => import("./results-map").then((mod) => mod.default),
@@ -205,7 +206,8 @@ export default function MeetMeHalfwayApp() {
       <UpgradeModal
         isOpen={isUpgradeModalOpen}
         onClose={closeUpgradeModal}
-        onUpgrade={handleUpgradeAction}
+        feature="more than 2 locations"
+        requiredTier="plus"
       />
     </div>
   )

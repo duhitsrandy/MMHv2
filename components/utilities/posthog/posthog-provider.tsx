@@ -11,7 +11,7 @@ import posthog from "posthog-js"
 import { PostHogProvider } from "posthog-js/react"
 
 // Temporarily disabled PostHog initialization
-const isPostHogEnabled = false
+const isPostHogEnabled = true
 
 if (
   typeof window !== "undefined" &&

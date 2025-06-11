@@ -22,6 +22,8 @@ import { ActionState } from "@/types"
 import { OsrmRoute } from "@/types/meet-me-halfway-types"
 import { GeocodedOrigin, Point, UserPlan } from "@/types"
 import { usePlan } from "@/hooks/usePlan"
+import { useAnalytics } from "@/hooks/useAnalytics"
+import { ANALYTICS_EVENTS } from "@/lib/analytics-events"
 import { calculateCentroid, calculateMidpointFromRoute } from "@/lib/geo-utils"
 import { toast } from "sonner"
 import ResultsSkeleton from "./results-skeleton"
@@ -113,6 +115,7 @@ function getMidpoint(route: OsrmRoute | null): { lat: number; lng: number } | nu
 
 function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
   const { tier } = usePlan();
+  const { track } = useAnalytics();
   
   // Convert Tier to UserPlan for compatibility
   const plan: UserPlan | null = tier === 'pro' || tier === 'business' ? 'pro' : 
@@ -147,6 +150,9 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
       }
 
       console.log(`[MapData] Fetching for ${geocodedOrigins.length} origins with plan: ${plan}`);
+
+      // Track search performance
+      const searchStartTime = Date.now();
 
       setIsMapDataLoading(true)
       setIsPoiTravelTimeLoading(false)
@@ -314,6 +320,13 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
           }
         } else if (geocodedOrigins.length > 2) {
           console.log('[MapData] Calculating for >2 origins...');
+          
+          // Track multi-location search
+          track(ANALYTICS_EVENTS.MULTI_LOCATION_SEARCH, {
+            location_count: geocodedOrigins.length,
+            plan: plan,
+          });
+          
           // Moved plan check here to ensure plan state is resolved
           if (plan !== 'pro') {
             console.error('[MapData >2] Pro plan required, but current plan is:', plan);
@@ -446,8 +459,28 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
         setCentralMidpoint(calculatedCentralMidpoint); // Now setting the central midpoint
         setCombinedPois(finalCombinedPois); // Set the final POIs
 
+        // Track successful completion
+        const searchDuration = Date.now() - searchStartTime;
+        if (searchDuration > 5000) {
+          track(ANALYTICS_EVENTS.SLOW_SEARCH, {
+            location_count: geocodedOrigins.length,
+            search_duration_ms: searchDuration,
+            plan: plan,
+          });
+        }
+
       } catch (error: any) {
         console.error("[MapData] Error fetching map data:", error)
+        
+        // Track search failure
+        track(ANALYTICS_EVENTS.API_ERROR, {
+          error_type: 'map_data_fetch',
+          error_message: error.message,
+          location_count: geocodedOrigins.length,
+          plan: plan,
+          search_duration_ms: Date.now() - searchStartTime,
+        });
+        
         setMapError(error.message || "An unexpected error occurred.")
         setMainRoute(null)
         setAlternateRoute(null)

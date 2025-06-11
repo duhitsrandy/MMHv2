@@ -42,6 +42,8 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
 import { GeocodedOrigin, UserPlan } from "@/types"
+import { useAnalytics } from "@/hooks/useAnalytics"
+import { ANALYTICS_EVENTS } from "@/lib/analytics-events"
 
 interface PointsOfInterestProps {
   pois: EnrichedPoi[]
@@ -65,6 +67,8 @@ export default function PointsOfInterest({
   onPoiSelect,
   plan,
 }: PointsOfInterestProps) {
+  const { trackPOIInteraction, track } = useAnalytics();
+  
   // Debug the full pois prop structure
   if (process.env.NODE_ENV === 'development') {
     console.log('[PointsOfInterest] Raw pois prop:', JSON.stringify(pois, null, 2));
@@ -206,9 +210,21 @@ export default function PointsOfInterest({
   }
 
   const toggleFavorite = (poiId: string) => {
+    const poi = pois.find(p => (p.osm_id || `${p.lat}-${p.lon}`) === poiId);
+    
     setFavorites(prev => {
       const key = poiId
-      if (prev.includes(key)) {
+      const isCurrentlyFavorited = prev.includes(key);
+      
+      // Track the favorite/unfavorite action
+      if (poi) {
+        trackPOIInteraction(
+          isCurrentlyFavorited ? 'unfavorited' : 'favorited', 
+          poi
+        );
+      }
+      
+      if (isCurrentlyFavorited) {
         return prev.filter(id => id !== key)
       } else {
         return [...prev, key]
@@ -226,7 +242,7 @@ export default function PointsOfInterest({
           travelTimeFromEnd: poi.travelInfo?.[1]?.duration,
           distanceFromStart: poi.travelInfo?.[0]?.distance,
           distanceFromEnd: poi.travelInfo?.[1]?.distance,
-          totalTravelTime: poi.travelInfo?.[0]?.duration + (poi.travelInfo?.[1]?.duration || 0),
+          totalTravelTime: (poi.travelInfo?.[0]?.duration || 0) + (poi.travelInfo?.[1]?.duration || 0),
           travelTimeDifference: Math.abs((poi.travelInfo?.[0]?.duration || 0) - (poi.travelInfo?.[1]?.duration || 0))
         })));
       }
@@ -241,7 +257,15 @@ export default function PointsOfInterest({
           <Button
             variant={showOnlyFavorites ? "default" : "outline"}
             size="sm"
-            onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
+            onClick={() => {
+              const newValue = !showOnlyFavorites;
+              track(ANALYTICS_EVENTS.POI_FAVORITES_TOGGLED, {
+                showing_favorites: newValue,
+                favorites_count: favorites.length,
+                total_poi_count: pois.length
+              });
+              setShowOnlyFavorites(newValue);
+            }}
             className={`${showOnlyFavorites ? "bg-yellow-400 hover:bg-yellow-500 border-yellow-400" : ""} disabled:opacity-50`}
             title={showOnlyFavorites ? "Show all POIs" : "Show favorites only"}
             disabled={isLoading}
@@ -258,7 +282,15 @@ export default function PointsOfInterest({
         <Tabs
           defaultValue="all"
           value={activeTab}
-          onValueChange={value => setActiveTab(value as FilterOption)}
+          onValueChange={value => {
+            const newTab = value as FilterOption;
+            track(ANALYTICS_EVENTS.POI_FILTER_CHANGED, {
+              previous_filter: activeTab,
+              new_filter: newTab,
+              poi_count: pois.length
+            });
+            setActiveTab(newTab);
+          }}
           className="flex flex-col flex-grow"
         >
           <div className="border-b px-6 flex-shrink-0">
@@ -294,6 +326,7 @@ export default function PointsOfInterest({
                         selectedPoiId === poiKey ? "ring-primary ring-2" : ""
                       }`}
                       onClick={() => {
+                        trackPOIInteraction('clicked', poi);
                         onPoiSelect?.(poiKey)
                       }}
                     >
@@ -387,6 +420,11 @@ export default function PointsOfInterest({
                                 <DropdownMenuItem
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    track(ANALYTICS_EVENTS.POI_EXTERNAL_LINK_CLICKED, {
+                                      poi_id: poi.osm_id || `${poi.lat}-${poi.lon}`,
+                                      poi_name: poi.name,
+                                      map_service: 'google_maps'
+                                    });
                                     window.open(
                                       `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
                                       "_blank"
@@ -398,6 +436,11 @@ export default function PointsOfInterest({
                                 <DropdownMenuItem
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    track(ANALYTICS_EVENTS.POI_EXTERNAL_LINK_CLICKED, {
+                                      poi_id: poi.osm_id || `${poi.lat}-${poi.lon}`,
+                                      poi_name: poi.name,
+                                      map_service: 'apple_maps'
+                                    });
                                     window.open(
                                       `http://maps.apple.com/?ll=${poi.lat},${poi.lon}`,
                                       "_blank"
@@ -409,6 +452,11 @@ export default function PointsOfInterest({
                                 <DropdownMenuItem
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    track(ANALYTICS_EVENTS.POI_EXTERNAL_LINK_CLICKED, {
+                                      poi_id: poi.osm_id || `${poi.lat}-${poi.lon}`,
+                                      poi_name: poi.name,
+                                      map_service: 'waze'
+                                    });
                                     window.open(
                                       `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
                                       "_blank"
