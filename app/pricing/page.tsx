@@ -222,7 +222,7 @@ export default function PricingPage() {
               { q: "Is there a discount for annual billing?", a: "Yes, you save approximately 17% (equivalent to 2 months free) by choosing an annual plan over monthly." },
               { q: "What's the difference between traffic data and basic routing?", a: "Pro and Business plans include real-time traffic data for more accurate travel times, while other plans use standard routing algorithms." },
               { q: "How many locations can I use for finding meeting points?", a: "Starter: 2 locations, Plus: 3 locations, Pro: 5 locations, Business: 10 locations." },
-              { q: "Do you offer refunds?", a: "We offer a 14-day money-back guarantee on all paid plans." },
+              { q: "Do you offer refunds?", a: "We offer a 7-day money-back guarantee on all paid plans." },
             ].map((faq, i) => (
               <div key={i} className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow ring-1 ring-gray-900/5 dark:ring-white/10">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
