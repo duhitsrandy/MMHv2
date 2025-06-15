@@ -46,13 +46,13 @@ export const TIER_DETAILS = {
   },
   plus: {
     name: 'Plus',
-    description: 'For enhanced features and more frequent use.',
-    priceMonthly: 9, // Example price
+    description: 'Perfect for friends, families, and small teams.',
+    priceMonthly: 4.99, // Updated competitive price
     features: [
-      "Up to 3 locations for midpoint calculation", // Example feature differentiation
-      "Faster route calculations",
+      "Up to 3 locations for midpoint calculation",
+      "Ad-free experience",
       "Save up to 10 favorite locations",
-      "Basic email support",
+      "Priority email support",
     ],
     stripePriceIds: {
       weekly: process.env.STRIPE_PRICE_PLUS_WEEKLY!,
@@ -60,9 +60,9 @@ export const TIER_DETAILS = {
       yearly: process.env.STRIPE_PRICE_PLUS_YEARLY!,
     },
     displayPrices: { // For UI display
-      weekly: 2.49,
-      monthly: 9,
-      yearly: 90, // Equivalent to $7.50/month
+      weekly: 1.49,
+      monthly: 4.99,
+      yearly: 49, // Equivalent to ~$4.08/month
     }
   },
   pro: {
@@ -89,14 +89,17 @@ export const TIER_DETAILS = {
   },
   business: {
     name: 'Business',
-    description: 'For teams and businesses needing robust solutions.',
-    priceMonthly: 99, // Example price
+    description: 'Complete solution for teams and enterprises.',
+    priceMonthly: 99,
     features: [
       "Up to 10 locations for midpoint calculation",
-      "Includes 5 seats (user licenses)",
+      "5 user seats included",
       "All Pro features",
-      "Dedicated account manager (Coming Soon)",
-      "Custom integration options (Coming Soon)",
+      "Team management dashboard",
+      "Priority support & training",
+      "API Access",
+      "Custom integrations",
+      "Dedicated account manager",
     ],
     stripePriceIds: {
       weekly: process.env.STRIPE_PRICE_BUSINESS_WEEKLY!,

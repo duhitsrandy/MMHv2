@@ -51,7 +51,17 @@ export default function MeetMeHalfwayForm({
   const [isLoading, setIsLoading] = useState(false)
   const [locations, setLocations] = useState<Location[]>(initialLocations)
 
-  const maxLocations = plan === 'pro' ? 5 : 2;
+  const getMaxLocations = (tier: string | null | undefined): number => {
+    switch (tier) {
+      case 'starter': return 2;
+      case 'plus': return 3;
+      case 'pro': return 5;
+      case 'business': return 10;
+      default: return 2; // Default to starter limits
+    }
+  };
+
+  const maxLocations = getMaxLocations(plan);
   const canAddLocation = origins.length < maxLocations;
 
   const handleOriginAddressChange = (index: number, value: string) => {
@@ -173,8 +183,8 @@ export default function MeetMeHalfwayForm({
      if (!canAddLocation) {
           if ((plan === 'starter' || plan === null) && !isPlanLoading) {
             onOpenUpgradeModal?.();
-          } else if (plan === 'pro') {
-              toast.info('Maximum of 5 locations reached.');
+          } else {
+            toast.info(`Maximum of ${maxLocations} locations reached for ${plan} tier.`);
           }
           return;
       }
@@ -244,8 +254,9 @@ export default function MeetMeHalfwayForm({
        toast.error("Please ensure all location fields are filled.")
        return
     }
-    if (origins.length > 2 && plan !== 'pro') {
-        toast.error("Adding more than two locations requires a Pro plan.");
+    if (origins.length > maxLocations) {
+        const tierName = plan === 'plus' ? 'Plus' : plan === 'pro' ? 'Pro' : plan === 'business' ? 'Business' : 'Pro';
+        toast.error(`This search requires ${origins.length} locations. Please upgrade to ${tierName} or higher.`);
         return;
     }
 
@@ -421,13 +432,13 @@ export default function MeetMeHalfwayForm({
                      variant="outline"
                      className="w-full"
                      onClick={addOrigin}
-                     disabled={(plan === 'pro' && !canAddLocation) || isLoading || isPlanLoading}
+                     disabled={!canAddLocation || isLoading || isPlanLoading}
                      aria-label="Add another location"
                  >
                     <PlusCircle className="mr-2 h-4 w-4" />
                      Add Location
-                     {!canAddLocation && plan === 'starter' && !isPlanLoading && ' (Upgrade for more)'}
-                     {!canAddLocation && plan === 'pro' && ' (Max 5 reached)'}
+                     {!canAddLocation && (plan === 'starter' || plan === null) && !isPlanLoading && ' (Upgrade for more)'}
+                     {!canAddLocation && plan && plan !== 'starter' && ` (Max ${maxLocations} reached)`}
                  </Button>
            </div>
 

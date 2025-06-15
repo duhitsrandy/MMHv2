@@ -48,16 +48,16 @@ const tiers: PricingTier[] = [
     name: "Plus",
     id: "tier-plus",
     href: "/signup?tier=plus",
-    price: { weekly: "$2.49", monthly: "$9.00", annually: "$90.00" },
-    description: "More power for individuals and small teams.",
+    price: { weekly: "$1.49", monthly: "$4.99", annually: "$49.00" },
+    description: "Perfect for friends, families, and small teams.",
     features: [
       { text: "Up to 20 saved searches per month" },
-      { text: "Up to 5 locations per search" },
+      { text: "Up to 3 locations per search" },
+      { text: "Ad-free experience" },
+      { text: "Save up to 10 favorite locations" },
       { text: "Priority email support" },
-      { text: "Weekly search cadence" },
-      { text: "Daily search cadence" },
-      { text: "Chat support", unavailable: true },
-      { text: "Hourly search cadence", unavailable: true },
+      { text: "Real-time traffic data", unavailable: true },
+      { text: "Unlimited saved searches", unavailable: true },
       { text: "API Access", unavailable: true },
       { text: "Dedicated account manager", unavailable: true },
     ],
@@ -69,15 +69,15 @@ const tiers: PricingTier[] = [
     id: "tier-pro",
     href: "/signup?tier=pro",
     price: { weekly: "$4.99", monthly: "$19.00", annually: "$190.00" },
-    description: "Unlock the full potential with unlimited access.",
+    description: "Advanced features for professionals and power users.",
     features: [
       { text: "Unlimited saved searches" },
-      { text: "Up to 10 locations per search" },
+      { text: "Up to 5 locations per search" },
+      { text: "Real-time traffic data for accurate ETAs" },
+      { text: "Ad-free experience" },
+      { text: "Unlimited saved locations" },
+      { text: "Advanced route optimization" },
       { text: "Priority email support" },
-      { text: "Chat support" },
-      { text: "Weekly search cadence" },
-      { text: "Daily search cadence" },
-      { text: "Hourly search cadence" },
       { text: "API Access", unavailable: true },
       { text: "Dedicated account manager", unavailable: true },
     ],
@@ -86,20 +86,22 @@ const tiers: PricingTier[] = [
   {
     name: "Business",
     id: "tier-business",
-    href: "/contact-sales",
-    price: { weekly: "Custom", monthly: "Custom", annually: "Custom" },
-    description: "Tailored solutions for large organizations and specific needs.",
+    href: "/signup?tier=business",
+    price: { weekly: "$24.99", monthly: "$99.00", annually: "$990.00" },
+    description: "Complete solution for teams and enterprises.",
     features: [
       { text: "All Pro features" },
-      { text: "Custom number of locations" },
-      { text: "Dedicated account manager & support" },
-      { text: "Custom search cadences" },
+      { text: "Up to 10 locations per search" },
+      { text: "5 user seats included" },
+      { text: "Team management dashboard" },
+      { text: "Priority support & training" },
       { text: "API Access" },
-      { text: "Team features (seat-based)" },
-      { text: "Custom onboarding & training" },
+      { text: "Custom integrations" },
+      { text: "Dedicated account manager" },
+      { text: "Advanced analytics" },
     ],
-    cta: "Contact Sales",
-    isCustom: true,
+    cta: "Choose Business",
+    isCustom: false,
   },
 ];
 
@@ -216,6 +218,28 @@ export default function PricingPage() {
               </CardFooter>
             </Card>
           ))}
+        </div>
+
+        {/* Day Pass Option */}
+        <div className="mt-16 text-center">
+          <div className="mx-auto max-w-lg rounded-2xl bg-gradient-to-r from-blue-500 to-purple-600 p-8 text-white shadow-xl">
+            <h3 className="text-2xl font-bold">Need Pro Features for a Day?</h3>
+            <p className="mt-4 text-blue-100">
+              Get 24-hour access to all Pro features including real-time traffic data and up to 5 locations.
+            </p>
+            <div className="mt-6">
+              <span className="text-4xl font-bold">$1.99</span>
+              <span className="text-lg text-blue-100"> for 24 hours</span>
+            </div>
+            <Button asChild className="mt-6 bg-white text-blue-600 hover:bg-blue-50" size="lg">
+              <Link href="/signup?tier=daypass">
+                Get Day Pass
+              </Link>
+            </Button>
+            <p className="mt-3 text-sm text-blue-200">
+              Perfect for events, road trips, or testing Pro features
+            </p>
+          </div>
         </div>
 
         <div className="mt-16 text-center">
