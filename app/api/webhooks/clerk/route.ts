@@ -89,7 +89,7 @@ export async function POST(req: Request) {
         userId: userId,
         email: email,  // Add email field
         username: username,  // Add username field
-        membership: 'free',  // Keep existing field
+        membership: 'starter',  // Use valid enum value - starter is the default free tier
         // Add other fields as needed, e.g., loginType if you track it
       });
 

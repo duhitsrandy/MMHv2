@@ -5,7 +5,7 @@ import { auth } from '@clerk/nextjs/server';
 
 export type UserPlan = {
   isPro: boolean;
-  membership: 'free' | 'pro' | null; // Match the db column type
+  membership: 'starter' | 'plus' | 'pro' | 'business' | null; // Match the actual db enum
   stripeCustomerId: string | null;
   // Add other relevant fields if needed, e.g., subscription end date
 }
@@ -20,7 +20,7 @@ export async function getUserSubscriptionPlan(userId?: string): Promise<UserPlan
   // Default plan for unauthenticated users or users not found
   const defaultPlan: UserPlan = {
     isPro: false,
-    membership: 'free',
+    membership: 'starter', // starter is the default/free tier
     stripeCustomerId: null,
   };
 
@@ -47,7 +47,7 @@ export async function getUserSubscriptionPlan(userId?: string): Promise<UserPlan
 
     return {
       isPro,
-      membership: userProfile.membership || 'free', // Default to free if null/undefined
+      membership: userProfile.membership || 'starter', // Default to starter (free tier) if null/undefined
       stripeCustomerId: userProfile.stripeCustomerId,
     };
   } catch (error) {
