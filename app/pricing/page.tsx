@@ -31,16 +31,13 @@ const tiers: PricingTier[] = [
     price: { weekly: "$0", monthly: "$0", annually: "$0" },
     description: "Get started with our basic features, completely free.",
     features: [
-      { text: "Up to 5 saved searches per month" },
       { text: "Up to 2 locations per search" },
-      { text: "Standard email support" },
-      { text: "Weekly search cadence" },
-      { text: "Priority email support", unavailable: true },
-      { text: "Chat support", unavailable: true },
-      { text: "Daily search cadence", unavailable: true },
-      { text: "Hourly search cadence", unavailable: true },
-      { text: "API Access", unavailable: true },
-      { text: "Dedicated account manager", unavailable: true },
+      { text: "Basic route calculations" },
+      { text: "Points of interest discovery" },
+      { text: "Email support (standard response time)" },
+      { text: "Documentation and guides" },
+      { text: "Ad-free experience", unavailable: true },
+      { text: "Real-time traffic data", unavailable: true },
     ],
     cta: "Get Started",
   },
@@ -51,15 +48,13 @@ const tiers: PricingTier[] = [
     price: { weekly: "$1.49", monthly: "$4.99", annually: "$49.00" },
     description: "Perfect for friends, families, and small teams.",
     features: [
-      { text: "Up to 20 saved searches per month" },
       { text: "Up to 3 locations per search" },
       { text: "Ad-free experience" },
-      { text: "Save up to 10 favorite locations" },
+      { text: "Basic route calculations" },
+      { text: "Points of interest discovery" },
       { text: "Priority email support" },
       { text: "Real-time traffic data", unavailable: true },
-      { text: "Unlimited saved searches", unavailable: true },
-      { text: "API Access", unavailable: true },
-      { text: "Dedicated account manager", unavailable: true },
+      { text: "Advanced route optimization", unavailable: true },
     ],
     cta: "Choose Plus",
     mostPopular: true,
@@ -71,15 +66,13 @@ const tiers: PricingTier[] = [
     price: { weekly: "$4.99", monthly: "$19.00", annually: "$190.00" },
     description: "Advanced features for professionals and power users.",
     features: [
-      { text: "Unlimited saved searches" },
       { text: "Up to 5 locations per search" },
       { text: "Real-time traffic data for accurate ETAs" },
-      { text: "Ad-free experience" },
-      { text: "Unlimited saved locations" },
       { text: "Advanced route optimization" },
+      { text: "Ad-free experience" },
       { text: "Priority email support" },
-      { text: "API Access", unavailable: true },
-      { text: "Dedicated account manager", unavailable: true },
+      { text: "Points of interest discovery" },
+      { text: "Faster route calculations" },
     ],
     cta: "Choose Pro",
   },
@@ -92,13 +85,11 @@ const tiers: PricingTier[] = [
     features: [
       { text: "All Pro features" },
       { text: "Up to 10 locations per search" },
-      { text: "5 user seats included" },
-      { text: "Team management dashboard" },
-      { text: "Priority support & training" },
-      { text: "API Access" },
-      { text: "Custom integrations" },
-      { text: "Dedicated account manager" },
-      { text: "Advanced analytics" },
+      { text: "Real-time traffic data" },
+      { text: "Advanced route optimization" },
+      { text: "Priority email support" },
+      { text: "Team collaboration features" },
+      { text: "Enhanced analytics" },
     ],
     cta: "Choose Business",
     isCustom: false,
@@ -220,38 +211,18 @@ export default function PricingPage() {
           ))}
         </div>
 
-        {/* Day Pass Option */}
-        <div className="mt-16 text-center">
-          <div className="mx-auto max-w-lg rounded-2xl bg-gradient-to-r from-blue-500 to-purple-600 p-8 text-white shadow-xl">
-            <h3 className="text-2xl font-bold">Need Pro Features for a Day?</h3>
-            <p className="mt-4 text-blue-100">
-              Get 24-hour access to all Pro features including real-time traffic data and up to 5 locations.
-            </p>
-            <div className="mt-6">
-              <span className="text-4xl font-bold">$1.99</span>
-              <span className="text-lg text-blue-100"> for 24 hours</span>
-            </div>
-            <Button asChild className="mt-6 bg-white text-blue-600 hover:bg-blue-50" size="lg">
-              <Link href="/signup?tier=daypass">
-                Get Day Pass
-              </Link>
-            </Button>
-            <p className="mt-3 text-sm text-blue-200">
-              Perfect for events, road trips, or testing Pro features
-            </p>
-          </div>
-        </div>
+
 
         <div className="mt-16 text-center">
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Frequently Asked Questions</h2>
           <div className="mt-8 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
             {[
-              { q: "Can I change my plan later?", a: "Yes, you can upgrade or downgrade your plan at any time. Changes will be prorated." },
-              { q: "What payment methods do you accept?", a: "We accept all major credit cards. For Business plans, we can also arrange invoicing." },
+              { q: "Can I change my plan later?", a: "Yes, you can upgrade or downgrade your plan at any time through your account settings." },
+              { q: "What payment methods do you accept?", a: "We accept all major credit cards through our secure Stripe payment processor." },
               { q: "Is there a discount for annual billing?", a: "Yes, you save approximately 17% (equivalent to 2 months free) by choosing an annual plan over monthly." },
-              { q: "What happens if I exceed my plan limits?", a: "For metered features like saved searches, you'll be prompted to upgrade if you consistently exceed limits." },
+              { q: "What's the difference between traffic data and basic routing?", a: "Pro and Business plans include real-time traffic data for more accurate travel times, while other plans use standard routing algorithms." },
+              { q: "How many locations can I use for finding meeting points?", a: "Starter: 2 locations, Plus: 3 locations, Pro: 5 locations, Business: 10 locations." },
               { q: "Do you offer refunds?", a: "We offer a 14-day money-back guarantee on all paid plans." },
-              { q: "How does support work?", a: "Support channels vary by plan, ranging from standard email to dedicated account managers for Business clients." },
             ].map((faq, i) => (
               <div key={i} className="rounded-lg bg-white dark:bg-gray-800 p-6 shadow ring-1 ring-gray-900/5 dark:ring-white/10">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">

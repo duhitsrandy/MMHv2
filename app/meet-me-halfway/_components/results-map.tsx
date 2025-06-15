@@ -117,9 +117,9 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
   const { tier } = usePlan();
   const { track } = useAnalytics();
   
-  // Convert Tier to UserPlan for compatibility - Plus and above get traffic data
-  const plan: UserPlan | null = tier === 'plus' || tier === 'pro' || tier === 'business' ? 'pro' : 
-                                tier === 'starter' ? 'free' : 
+  // Convert Tier to UserPlan for compatibility - Only Pro and Business get traffic data
+  const plan: UserPlan | null = tier === 'pro' || tier === 'business' ? 'pro' : 
+                                tier === 'starter' || tier === 'plus' ? 'free' : 
                                 null;
 
   const [mainRoute, setMainRoute] = useState<OsrmRoute | null>(null)
@@ -575,9 +575,9 @@ export default function ResultsMap({ geocodedOrigins }: ResultsMapProps) {
   const [selectedPoiId, setSelectedPoiId] = useState<string | undefined>(undefined)
   const { tier } = usePlan();
   
-  // Convert Tier to UserPlan for compatibility - Plus and above get traffic data
-  const plan: UserPlan | null = tier === 'plus' || tier === 'pro' || tier === 'business' ? 'pro' : 
-                                tier === 'starter' ? 'free' : 
+  // Convert Tier to UserPlan for compatibility - Only Pro and Business get traffic data
+  const plan: UserPlan | null = tier === 'pro' || tier === 'business' ? 'pro' : 
+                                tier === 'starter' || tier === 'plus' ? 'free' : 
                                 null;
 
   useEffect(() => {

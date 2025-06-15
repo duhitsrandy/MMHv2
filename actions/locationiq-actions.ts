@@ -33,36 +33,16 @@ const redisCache = Redis.fromEnv();
 // const apiCache: Record<string, { data: any, timestamp: number }> = {};
 // const CACHE_TTL_SECONDS = 24 * 60 * 60; // Moved to constants.ts
 
-// Helper function to enforce rate limiting with retry logic
+// Helper function to enforce rate limiting with retry logic (Redis caching removed for performance)
 export async function rateLimitedFetch(
   url: string,
   options?: RequestInit,
   maxRetries = 3,
-  cacheKey?: string,
+  cacheKey?: string, // Keep parameter for backward compatibility
   timeoutMs = 30000,
-  initialBackoffMs = 1000 // Add initial backoff delay parameter
+  initialBackoffMs = 1000
 ): Promise<Response> {
-  const effectiveCacheKey = `api_cache:${cacheKey || url}`;
-
-  // --- Check Redis cache first ---
-  try {
-    const cachedData = await redisCache.get(effectiveCacheKey);
-    if (cachedData) {
-      console.log(`[Redis Cache] HIT for Key: ${effectiveCacheKey}`);
-      // Assuming cached data is stored as a JSON string
-      return new Response(JSON.stringify(cachedData), { // Re-stringify for the Response object
-        status: 200,
-        statusText: 'OK (Cached)',
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-  } catch (redisError) {
-    console.error(`[Redis Cache] Error getting key ${effectiveCacheKey}:`, redisError);
-    // Proceed without cache if Redis fails
-  }
-  // --- End Redis cache check ---
-
-  console.log(`[Redis Cache] MISS for Key: ${effectiveCacheKey}`);
+  // Note: Redis caching removed to improve performance
   let retries = 0;
   let lastError: Error | null = null;
 
@@ -72,9 +52,9 @@ export async function rateLimitedFetch(
 
     try {
       // Check rate limit before making request
-      const rateLimitResult = await rateLimit({ type: 'authenticated' }); // Consider making type configurable if needed
+      const rateLimitResult = await rateLimit({ type: 'authenticated' });
       if (!rateLimitResult.success) {
-        clearTimeout(timeoutId); // Clear timeout before throwing
+        clearTimeout(timeoutId);
         throw new Error('Rate limit exceeded. Please try again later.');
       }
 
@@ -83,41 +63,27 @@ export async function rateLimitedFetch(
         ...options,
         signal: controller.signal,
         headers: {
-          // Use User-Agent from constants
           'User-Agent': DEFAULT_USER_AGENT,
           'Accept-Language': 'en-US,en;q=0.9',
           ...(options?.headers || {}),
         }
       };
-      console.log(`[Fetch] Making request to ${url} (timeout: ${timeoutMs}ms) with options:`, mergedOptions);
+      
       const response = await fetch(url, mergedOptions);
       clearTimeout(timeoutId);
-
-      // Cache successful responses in Redis using the effective key
-      if (response.ok) {
-        try {
-          const data = await response.clone().json();
-          // Use TTL from constants
-          await redisCache.setex(effectiveCacheKey, CACHE_TTL_SECONDS, data);
-          console.log(`[Redis Cache] Stored response for Key: ${effectiveCacheKey} with TTL ${CACHE_TTL_SECONDS}s`);
-        } catch (jsonError) {
-          console.warn(`[Cache] Response for ${effectiveCacheKey} was OK but not valid JSON. Not caching.`);
-        }
-      }
+      
       return response;
     } catch (error) {
-      clearTimeout(timeoutId); // Clear timeout if fetch failed
+      clearTimeout(timeoutId);
 
       if (error instanceof Error && error.name === 'AbortError') {
         lastError = new Error(`Request timed out after ${timeoutMs}ms`);
-        // Don't retry on timeout, break the loop
         break; 
       } else {
         lastError = error as Error;
         retries++;
         if (retries < maxRetries) {
-          // Use initialBackoffMs in delay calculation
-          const delay = Math.pow(2, retries - 1) * initialBackoffMs; // Adjusted formula for clarity
+          const delay = Math.pow(2, retries - 1) * initialBackoffMs;
           console.log(`[Fetch] Retrying (${retries}/${maxRetries}) after ${delay}ms error: ${lastError.message}`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
