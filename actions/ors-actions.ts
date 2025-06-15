@@ -50,13 +50,16 @@ export async function geocodeLocationAction(
       };
     }
 
-    const response = await fetch('/api/ors/geocode', {
+    // Call OpenRouteService directly instead of going through our API route
+    const response = await fetch('https://api.openrouteservice.org/geocode/search', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Authorization': apiKey,
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        address
+        text: address,
+        size: 1
       })
     });
 
