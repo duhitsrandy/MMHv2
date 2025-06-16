@@ -10,7 +10,7 @@ import { auth } from "@clerk/nextjs/server";
 export async function createPoiAction(
   poi: InsertPoi
 ): Promise<ActionState<SelectPoi>> {
-  const { userId: authenticatedUserId } = await auth();
+  const { userId: authenticatedUserId } = auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -44,7 +44,7 @@ export async function createPoiAction(
 export async function getPoisBySearchAction(
   searchId: string
 ): Promise<ActionState<SelectPoi[]>> {
-  const { userId: authenticatedUserId } = await auth();
+  const { userId: authenticatedUserId } = auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -82,7 +82,7 @@ export async function getPoisBySearchAction(
 export async function getPoiAction(
   id: string
 ): Promise<ActionState<SelectPoi>> {
-  const { userId: authenticatedUserId } = await auth();
+  const { userId: authenticatedUserId } = auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -125,7 +125,7 @@ export async function updatePoiAction(
   id: string,
   data: Partial<Omit<InsertPoi, 'id' | 'searchId' | 'createdAt'>>
 ): Promise<ActionState<SelectPoi>> {
-  const { userId: authenticatedUserId } = await auth();
+  const { userId: authenticatedUserId } = auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -177,7 +177,7 @@ export async function updatePoiAction(
 }
 
 export async function deletePoiAction(id: string): Promise<ActionState<void>> {
-  const { userId: authenticatedUserId } = await auth();
+  const { userId: authenticatedUserId } = auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -222,7 +222,7 @@ export async function deletePoiAction(id: string): Promise<ActionState<void>> {
 export async function deletePoisBySearchAction(
   searchId: string
 ): Promise<ActionState<void>> {
-  const { userId: authenticatedUserId } = await auth();
+  const { userId: authenticatedUserId } = auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }

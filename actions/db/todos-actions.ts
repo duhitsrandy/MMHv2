@@ -15,8 +15,7 @@ import { auth } from "@clerk/nextjs/server";
 export async function createTodoAction(
   todoData: Omit<InsertTodo, 'userId' | 'id' | 'createdAt' | 'updatedAt'> // Assuming timestamps exist
 ): Promise<ActionState<SelectTodo>> {
-  console.log("[DB Action] createTodoAction called with:", todoData);
-  const { userId } = await auth();
+  const { userId } = auth();
   if (!userId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -41,7 +40,7 @@ export async function createTodoAction(
 export async function getTodosAction(
   targetUserId: string
 ): Promise<ActionState<SelectTodo[]>> {
-  const { userId: authenticatedUserId } = await auth();
+  const { userId: authenticatedUserId } = auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -64,39 +63,11 @@ export async function getTodosAction(
   }
 }
 
-export async function getTodoAction(
-  id: string
-): Promise<ActionState<SelectTodo>> {
-  const { userId: authenticatedUserId } = await auth();
-  if (!authenticatedUserId) {
-    return { isSuccess: false, message: "Error: User is not authenticated." };
-  }
-
-  try {
-    const todo = await db.query.todos.findFirst({
-      where: eq(todosTable.id, id)
-    });
-
-    if (!todo) {
-      return { isSuccess: false, message: "Todo not found." };
-    }
-
-    return {
-      isSuccess: true,
-      message: "Todo retrieved successfully",
-      data: todo
-    };
-  } catch (error) {
-    console.error("Error getting todo:", error);
-    return { isSuccess: false, message: "An internal error occurred while retrieving the todo." };
-  }
-}
-
 export async function updateTodoAction(
   id: string,
   data: Partial<Omit<InsertTodo, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>
 ): Promise<ActionState<SelectTodo>> {
-  const { userId: authenticatedUserId } = await auth();
+  const { userId: authenticatedUserId } = auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -141,7 +112,7 @@ export async function updateTodoAction(
 }
 
 export async function deleteTodoAction(id: string): Promise<ActionState<void>> {
-  const { userId: authenticatedUserId } = await auth();
+  const { userId: authenticatedUserId } = auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }

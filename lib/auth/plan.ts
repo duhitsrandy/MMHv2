@@ -21,7 +21,7 @@ export type UserPlanInfo = {
 export async function getUserPlanInfo(): Promise<UserPlanInfo | null> { // RENAMED and new return type
   try {
     console.log('[getUserPlanInfo] Starting plan fetch...');
-    const { userId } = await auth()
+    const { userId } = auth()
     
     if (!userId) {
       console.log('[getUserPlanInfo] No userId from auth, returning null');
@@ -83,7 +83,7 @@ export async function getUserPlanInfo(): Promise<UserPlanInfo | null> { // RENAM
  * @throws {Error} If user does not meet criteria.
  */
 export async function requirePlan(requiredTiers: Tier[]): Promise<UserPlanInfo> {
-  const { userId } = await auth()
+  const { userId } = auth()
   if (!userId) {
     throw new Error("UNAUTHORIZED: Authentication required.")
   }
