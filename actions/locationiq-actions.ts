@@ -22,9 +22,10 @@ import {
   DEFAULT_POI_RADIUS,
   DEFAULT_USER_AGENT,
 } from '@/lib/constants'; // Import constants
-import { trackApiEvent } from '../app/lib/monitoring'; // <-- Import monitoring function (Corrected Path)
-import { auth } from "@clerk/nextjs/server"; // <-- Add Clerk auth import
-import { osrmRoute } from "@/actions/osrm-actions"                    // new
+// TEMPORARY: Removed problematic imports that cause 500 errors in production
+// import { trackApiEvent } from '../app/lib/monitoring'; // <-- Import monitoring function (Corrected Path)
+// import { auth } from "@clerk/nextjs/server"; // <-- Add Clerk auth import
+// import { osrmRoute } from "@/actions/osrm-actions"                    // new
 
 // Initialize Redis client for caching
 const redisCache = Redis.fromEnv();

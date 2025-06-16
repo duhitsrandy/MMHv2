@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select"
 import { Loader2, MapPin, Bookmark, Check, PlusCircle, XCircle } from "lucide-react"
 import { toast } from "sonner"
-import { geocodeLocationAction } from "@/actions/locationiq-actions"
+import { geocodeLocationAction } from "@/actions/geocoding-test"
 import { createSearchAction } from "@/actions/db/searches-actions"
 import { createLocationAction } from "@/actions/db/locations-actions"
 import { usePlan } from "@/hooks/usePlan"
