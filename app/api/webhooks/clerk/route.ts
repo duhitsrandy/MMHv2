@@ -1,12 +1,17 @@
 import { Webhook } from 'svix'
 import { headers } from 'next/headers'
 import { WebhookEvent } from '@clerk/nextjs/server'
-import { db } from '@/db/db'
-import { profilesTable } from '@/db/schema/profiles-schema'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 // This secret comes from your Clerk Dashboard -> Webhooks -> Endpoint signing secret
 const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
+
+// Create Supabase client with service role key to bypass RLS
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function POST(req: Request) {
   console.log('[Webhook Clerk] Received webhook event');
@@ -63,18 +68,16 @@ export async function POST(req: Request) {
   // Handle the 'user.created' event
   if (eventType === 'user.created') {
     const userId = evt.data.id;
-    // Optional: Extract email, username, etc. if needed
-    // const email = evt.data.email_addresses?.[0]?.email_address;
-    // const username = evt.data.username;
 
     console.log(`[Webhook Clerk] User created event for userId: ${userId}`);
 
     try {
-      // Check if profile already exists
-      const existingProfile = await db.query.profiles.findFirst({
-        where: (profiles, { eq }) => eq(profiles.userId, userId),
-        columns: { userId: true }
-      });
+      // Check if profile already exists using Supabase admin client
+      const { data: existingProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('user_id')
+        .eq('user_id', userId)
+        .single();
 
       if (existingProfile) {
         console.warn(`[Webhook Clerk] Profile already exists for userId: ${userId}. Skipping creation.`);
@@ -82,16 +85,22 @@ export async function POST(req: Request) {
       }
 
       // Extract and save additional fields
-      const email = evt.data.email_addresses?.[0]?.email_address || null;  // Safely get first email
-      const username = evt.data.username || null;  // Get username if available
+      const email = evt.data.email_addresses?.[0]?.email_address || null;
+      const username = evt.data.username || null;
 
-      await db.insert(profilesTable).values({
-        userId: userId,
-        email: email,  // Add email field
-        username: username,  // Add username field
-        membership: 'starter',  // Use valid enum value - starter is the default free tier
-        // Add other fields as needed, e.g., loginType if you track it
-      });
+      // Insert profile using Supabase admin client (bypasses RLS)
+      const { error: insertError } = await supabaseAdmin
+        .from('profiles')
+        .insert({
+          user_id: userId,
+          email: email,
+          username: username,
+          membership: 'starter',
+        });
+
+      if (insertError) {
+        throw insertError;
+      }
 
       console.log(`[Webhook Clerk] Successfully created profile for userId: ${userId} with email and username`);
       return NextResponse.json({ message: 'User profile created successfully.' }, { status: 201 });
