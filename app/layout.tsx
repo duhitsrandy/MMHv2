@@ -4,7 +4,7 @@ The root server layout for the app.
 </ai_context>
 */
 
-import { type Metadata } from "next"
+import { type Metadata, type Viewport } from "next"
 import { Inter } from "next/font/google"
 
 import { AuthProvider } from "@/components/auth/auth-provider"
@@ -21,6 +21,15 @@ export const metadata: Metadata = {
     shortcut: '/icon.svg',
     apple: '/icon.svg',
   },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  // Optimize for mobile devices
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({

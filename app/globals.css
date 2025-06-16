@@ -91,5 +91,61 @@ Global styles for the app.
   body {
     @apply bg-background text-foreground;
     @apply transition-colors duration-200;
+    /* Mobile-specific optimizations */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Mobile touch interactions */
+  button, [role="button"], input[type="submit"], input[type="button"] {
+    touch-action: manipulation;
+  }
+
+  /* Improve tap targets on mobile */
+  @media (max-width: 768px) {
+    button, [role="button"], input[type="submit"], input[type="button"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+
+  /* Safe area support for mobile devices */
+  @supports (padding: max(0px)) {
+    .safe-area-padding {
+      padding-left: max(1rem, env(safe-area-inset-left));
+      padding-right: max(1rem, env(safe-area-inset-right));
+    }
+  }
+
+  /* Prevent horizontal scrolling on mobile */
+  html {
+    overflow-x: hidden;
+  }
+
+  /* Optimize map rendering on mobile */
+  .leaflet-container {
+    touch-action: pan-x pan-y;
+  }
+
+  /* Custom scrollbar for mobile */
+  @media (max-width: 768px) {
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 3px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 0, 0, 0.5);
+    }
   }
 }

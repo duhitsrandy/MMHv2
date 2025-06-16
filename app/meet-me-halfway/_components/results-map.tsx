@@ -676,11 +676,11 @@ export default function ResultsMap({ geocodedOrigins }: ResultsMapProps) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-[calc(100vh-150px)]">
-      <div className="md:col-span-2 h-full">
+    <div className="flex flex-col lg:grid lg:grid-cols-1 xl:grid-cols-3 gap-4 min-h-[calc(100vh-200px)] lg:min-h-[calc(100vh-150px)]">
+      <div className="xl:col-span-2 h-[60vh] sm:h-[70vh] lg:h-full order-1 lg:order-none">
         <MapComponent {...mapComponentProps} />
       </div>
-      <div className="h-full overflow-y-auto">
+      <div className="h-[40vh] sm:h-[50vh] lg:h-full overflow-y-auto order-2 lg:order-none">
         <PointsOfInterest {...pointsOfInterestProps} />
       </div>
     </div>
