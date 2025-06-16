@@ -1,5 +1,6 @@
-import fs from 'fs';
-import path from 'path';
+// FILESYSTEM OPERATIONS DISABLED FOR VERCEL COMPATIBILITY
+// import fs from 'fs';
+// import path from 'path';
 import { PostHog } from 'posthog-node';
 
 interface ApiEvent {
@@ -18,13 +19,13 @@ interface ApiEvent {
   [key: string]: any;
 }
 
-const LOG_DIR = path.join(process.cwd(), 'logs');
-const API_LOG_FILE = path.join(LOG_DIR, 'api.log');
+// DISABLED FOR VERCEL: const LOG_DIR = path.join(process.cwd(), 'logs');
+// DISABLED FOR VERCEL: const API_LOG_FILE = path.join(LOG_DIR, 'api.log');
 
-// Ensure log directory exists
-if (!fs.existsSync(LOG_DIR)) {
-  fs.mkdirSync(LOG_DIR, { recursive: true });
-}
+// DISABLED FOR VERCEL: Ensure log directory exists
+// if (!fs.existsSync(LOG_DIR)) {
+//   fs.mkdirSync(LOG_DIR, { recursive: true });
+// }
 
 // Initialize PostHog for server-side analytics
 const posthog = new PostHog(
@@ -40,11 +41,11 @@ export async function trackApiEvent(event: ApiEvent) {
       environment: process.env.NODE_ENV
     };
 
-    // Append to log file (backup)
-    fs.appendFileSync(
-      API_LOG_FILE,
-      JSON.stringify(logEntry) + '\n'
-    );
+    // DISABLED FOR VERCEL: Append to log file (backup)
+    // fs.appendFileSync(
+    //   API_LOG_FILE,
+    //   JSON.stringify(logEntry) + '\n'
+    // );
 
     // Log to console in development
     if (process.env.NODE_ENV === 'development') {
@@ -70,23 +71,23 @@ export async function trackApiEvent(event: ApiEvent) {
       },
     });
 
-    // If there's an error, log it separately
-    if (event.error) {
-      const errorLogFile = path.join(LOG_DIR, 'errors.log');
-      fs.appendFileSync(
-        errorLogFile,
-        JSON.stringify({ ...logEntry, type: 'error' }) + '\n'
-      );
-    }
+    // DISABLED FOR VERCEL: If there's an error, log it separately
+    // if (event.error) {
+    //   const errorLogFile = path.join(LOG_DIR, 'errors.log');
+    //   fs.appendFileSync(
+    //     errorLogFile,
+    //     JSON.stringify({ ...logEntry, type: 'error' }) + '\n'
+    //   );
+    // }
 
-    // If rate limit is low, log it as a warning
-    if (event.rateLimit && event.rateLimit.remaining < 3) {
-      const warningLogFile = path.join(LOG_DIR, 'warnings.log');
-      fs.appendFileSync(
-        warningLogFile,
-        JSON.stringify({ ...logEntry, type: 'rate_limit_warning' }) + '\n'
-      );
-    }
+    // DISABLED FOR VERCEL: If rate limit is low, log it as a warning
+    // if (event.rateLimit && event.rateLimit.remaining < 3) {
+    //   const warningLogFile = path.join(LOG_DIR, 'warnings.log');
+    //   fs.appendFileSync(
+    //     warningLogFile,
+    //     JSON.stringify({ ...logEntry, type: 'rate_limit_warning' }) + '\n'
+    //   );
+    // }
   } catch (error) {
     console.error('Failed to track API event:', error);
   }
