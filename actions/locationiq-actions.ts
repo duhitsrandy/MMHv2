@@ -158,7 +158,7 @@ export async function geocodeLocationAction(
   let errorMsg: string | undefined = undefined; // <-- Error message holder
   let result: ActionState<GeocodingResult> | null = null; // <-- Result holder
   let primaryServiceUsed = 'LocationIQ'; // Track which service was ultimately used
-  const { userId } = auth(); // <-- Get userId from Clerk
+  const { userId } = await auth(); // <-- Get userId from Clerk
 
   try {
     // --- Validation Start ---
@@ -292,7 +292,7 @@ export async function searchPoisAction(
   }
 ): Promise<ActionState<PoiResponse[]>> {
   const startTime = Date.now();
-  const { userId } = auth();
+  const { userId } = await auth();
   let result: ActionState<PoiResponse[]> | null = null;
   let errorMsg: string | undefined = undefined;
   // --> Variables to capture success data
@@ -565,7 +565,7 @@ export async function getRouteAction(
   }
 ): Promise<ActionState<OrsRoute>> {
   const startTime = Date.now();
-  const { userId } = auth();
+  const { userId } = await auth();
   let result: ActionState<OrsRoute> | null = null;
   let errorMsg: string | undefined = undefined;
   let status = 500; // Default status
@@ -832,7 +832,7 @@ export async function calculateMidpointAction(
   }
 ): Promise<ActionState<{ lat: string; lon: string }>> {
   const startTime = Date.now();
-  const { userId } = auth();
+  const { userId } = await auth();
   let result: ActionState<{ lat: string; lon: string }> | null = null;
   let errorMsg: string | undefined = undefined;
   let status = 500; // Default status
@@ -972,7 +972,7 @@ export async function getAlternateRouteAction(
   }
 ): Promise<ActionState<OrsRoute>> {
   const startTime = Date.now();
-  const { userId } = auth();
+  const { userId } = await auth();
   let result: ActionState<OrsRoute> | null = null;
   let errorMsg: string | undefined = undefined;
   let status = 500; // Default status
@@ -1284,7 +1284,7 @@ export async function calculateAlternateMidpointAction(
   }
 ): Promise<ActionState<{ lat: string; lon: string }>> {
   const startTime = Date.now();
-  const { userId } = auth();
+  const { userId } = await auth();
   let result: ActionState<{ lat: string; lon: string }> | null = null;
   let errorMsg: string | undefined = undefined;
   let status = 500; // Default status
