@@ -1,4 +1,8 @@
-import 'dotenv-safe/config.js'
+// Load environment variables (more flexible than dotenv-safe)
+import dotenv from 'dotenv'
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config({ path: '.env.local' })
+}
 import withBundleAnalyzer from '@next/bundle-analyzer'
 
 /*
