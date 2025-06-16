@@ -40,11 +40,17 @@ export async function trackApiEvent(event: ApiEvent) {
       environment: process.env.NODE_ENV
     };
 
-    // Append to log file (backup)
-    fs.appendFileSync(
-      API_LOG_FILE,
-      JSON.stringify(logEntry) + '\n'
-    );
+    // Only write to file in development (not available in Vercel serverless)
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        fs.appendFileSync(
+          API_LOG_FILE,
+          JSON.stringify(logEntry) + '\n'
+        );
+      } catch (fsError) {
+        console.warn('Could not write to log file:', fsError);
+      }
+    }
 
     // Log to console in development
     if (process.env.NODE_ENV === 'development') {
@@ -70,22 +76,30 @@ export async function trackApiEvent(event: ApiEvent) {
       },
     });
 
-    // If there's an error, log it separately
-    if (event.error) {
-      const errorLogFile = path.join(LOG_DIR, 'errors.log');
-      fs.appendFileSync(
-        errorLogFile,
-        JSON.stringify({ ...logEntry, type: 'error' }) + '\n'
-      );
+    // If there's an error, log it separately (only in development)
+    if (event.error && process.env.NODE_ENV === 'development') {
+      try {
+        const errorLogFile = path.join(LOG_DIR, 'errors.log');
+        fs.appendFileSync(
+          errorLogFile,
+          JSON.stringify({ ...logEntry, type: 'error' }) + '\n'
+        );
+      } catch (fsError) {
+        console.warn('Could not write to error log file:', fsError);
+      }
     }
 
-    // If rate limit is low, log it as a warning
-    if (event.rateLimit && event.rateLimit.remaining < 3) {
-      const warningLogFile = path.join(LOG_DIR, 'warnings.log');
-      fs.appendFileSync(
-        warningLogFile,
-        JSON.stringify({ ...logEntry, type: 'rate_limit_warning' }) + '\n'
-      );
+    // If rate limit is low, log it as a warning (only in development)
+    if (event.rateLimit && event.rateLimit.remaining < 3 && process.env.NODE_ENV === 'development') {
+      try {
+        const warningLogFile = path.join(LOG_DIR, 'warnings.log');
+        fs.appendFileSync(
+          warningLogFile,
+          JSON.stringify({ ...logEntry, type: 'rate_limit_warning' }) + '\n'
+        );
+      } catch (fsError) {
+        console.warn('Could not write to warning log file:', fsError);
+      }
     }
   } catch (error) {
     console.error('Failed to track API event:', error);

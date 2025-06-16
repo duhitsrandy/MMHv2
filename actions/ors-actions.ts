@@ -39,11 +39,12 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 export async function geocodeLocationAction(
   address: string
 ): Promise<ActionState<GeocodingResult>> {
+  console.log('[GEOCODING] Starting geocoding for address:', address);
   try {
-    console.log('Geocoding address:', address);
     const apiKey = process.env.OPENROUTESERVICE_API_KEY;
+    console.log('[GEOCODING] API Key exists:', !!apiKey);
     if (!apiKey) {
-      console.error('OpenRouteService API key is missing');
+      console.error('[GEOCODING] OpenRouteService API key is missing');
       return {
         isSuccess: false,
         message: "OpenRouteService API key is not configured"
@@ -51,6 +52,7 @@ export async function geocodeLocationAction(
     }
 
     // Call OpenRouteService directly instead of going through our API route
+    console.log('[GEOCODING] Making API call to OpenRouteService...');
     const response = await fetch('https://api.openrouteservice.org/geocode/search', {
       method: 'POST',
       headers: {
@@ -63,10 +65,11 @@ export async function geocodeLocationAction(
       })
     });
 
+    console.log('[GEOCODING] Response status:', response.status);
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Geocoding API error:', response.status, '-', response.statusText);
-      console.error('Error details:', errorText);
+      console.error('[GEOCODING] API error:', response.status, '-', response.statusText);
+      console.error('[GEOCODING] Error details:', errorText);
       return {
         isSuccess: false,
         message: "Failed to geocode location"
@@ -74,7 +77,7 @@ export async function geocodeLocationAction(
     }
 
     const data = await response.json();
-    console.log('Geocoding API response:', data);
+    console.log('[GEOCODING] API response received:', JSON.stringify(data, null, 2));
 
     if (!data || !data.features || data.features.length === 0) {
       return {
@@ -94,7 +97,12 @@ export async function geocodeLocationAction(
       }
     };
   } catch (error) {
-    console.error("Error geocoding location:", error);
+    console.error("[GEOCODING] Error in geocodeLocationAction:", error);
+    if (error instanceof Error) {
+      console.error("[GEOCODING] Error name:", error.name);
+      console.error("[GEOCODING] Error message:", error.message);
+      console.error("[GEOCODING] Error stack:", error.stack);
+    }
     return { isSuccess: false, message: "Failed to geocode location" };
   }
 }
