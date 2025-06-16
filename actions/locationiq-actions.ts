@@ -1104,18 +1104,8 @@ export async function getAlternateRouteAction(
     const duration = Date.now() - startTime;
     const finalDistance = result?.isSuccess ? result.data?.distance : capturedRouteDistance;
     const finalDuration = result?.isSuccess ? result.data?.duration : capturedRouteDuration;
-    await trackApiEvent({
-      endpoint: 'getAlternateRouteAction',
-      method: 'ACTION',
-      status: result?.isSuccess ? status : (status === 200 ? 500 : status),
-      duration: duration,
-      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown ORS alt route action error'),
-      userId: userId ?? 'anonymous',
-      routeDistance: finalDistance,
-      routeDuration: finalDuration,
-      usedFallback: capturedUsedFallback || (result?.isSuccess === false && !!result?.message?.includes('fallback')),
-      serviceUsed,                              // CHANGED
-    });
+    // TEMPORARILY DISABLED: trackApiEvent call
+    console.log('[DISABLED] trackApiEvent would be called for getAlternateRouteAction');
   }
 }
 
@@ -1282,13 +1272,7 @@ export async function calculateAlternateMidpointAction(
     return result;
   } finally {
     const duration = Date.now() - startTime;
-    await trackApiEvent({
-      endpoint: 'calculateAlternateMidpointAction',
-      method: 'ACTION',
-      status: result?.isSuccess ? status : (status !== 500 ? status : (result?.message?.includes('Invalid input') ? 400 : 500)),
-      duration: duration,
-      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown alternate midpoint calculation error'),
-      userId: userId ?? 'anonymous',
-    });
+    // TEMPORARILY DISABLED: trackApiEvent call
+    console.log('[DISABLED] trackApiEvent would be called for calculateAlternateMidpointAction');
   }
 } 
