@@ -361,19 +361,38 @@ export default function MeetMeHalfwayForm({
                  <Label htmlFor={`origin-input-${index}`} className="text-sm sm:text-base font-medium">
                     Location {index + 1}
                  </Label>
-                 {origins.length > 2 && index >= 0 && (
+                 <div className="flex items-center gap-2">
+                   {isSignedIn && (
                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeOrigin(index)}
-                        disabled={isLoading}
-                        className="h-8 w-8 sm:h-6 sm:w-6 text-muted-foreground hover:text-destructive shrink-0"
-                        aria-label={`Remove location ${index + 1}`}
+                       type="button"
+                       variant="outline"
+                       size="icon"
+                       onClick={() => handleSaveOriginLocation(index)}
+                       disabled={!origin.address || isLoading || origin.isSaving}
+                       aria-label={`Save location ${index + 1}`}
+                       className="h-7 w-7 sm:h-6 sm:w-6 shrink-0"
                      >
-                        <XCircle className="h-4 w-4" />
+                       {origin.isSaving ? (
+                         <Loader2 className="h-3 w-3 animate-spin" />
+                       ) : (
+                         <Bookmark className="h-3 w-3" />
+                       )}
                      </Button>
-                 )}
+                   )}
+                   {origins.length > 2 && index >= 0 && (
+                       <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeOrigin(index)}
+                          disabled={isLoading}
+                          className="h-7 w-7 sm:h-6 sm:w-6 text-muted-foreground hover:text-destructive shrink-0"
+                          aria-label={`Remove location ${index + 1}`}
+                       >
+                          <XCircle className="h-3 w-3" />
+                       </Button>
+                   )}
+                 </div>
                </div>
 
               {locations.length > 0 && (
@@ -396,33 +415,16 @@ export default function MeetMeHalfwayForm({
                 </Select>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 sm:items-center pt-2">
+              <div className="pt-2">
                 <Input
                   id={`origin-input-${index}`}
                   placeholder={`Enter address for location ${index + 1}`}
                   value={origin.address}
                   onChange={(e) => handleOriginAddressChange(index, e.target.value)}
                   disabled={isLoading || origin.isSaving}
-                  className="flex-grow h-12 sm:h-10 text-base sm:text-sm"
+                  className="w-full h-12 sm:h-10 text-base sm:text-sm"
                   required
                 />
-                {isSignedIn && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleSaveOriginLocation(index)}
-                    disabled={!origin.address || isLoading || origin.isSaving}
-                    aria-label={`Save location ${index + 1}`}
-                    className="h-12 w-12 sm:h-10 sm:w-10 shrink-0"
-                  >
-                    {origin.isSaving ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Bookmark className="h-4 w-4" />
-                    )}
-                  </Button>
-                )}
               </div>
             </div>
           ))}
