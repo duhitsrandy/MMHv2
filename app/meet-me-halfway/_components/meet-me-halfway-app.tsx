@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useAuth } from "@clerk/nextjs"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { History } from "lucide-react"
@@ -14,6 +15,7 @@ import SavedLocations from "./saved-locations"
 import RecentSearches from "./recent-searches"
 import UpgradeModal from "@/components/upgrade-modal"
 import { AdBanner } from "@/components/ads/AdBanner"
+import { usePlan } from "@/hooks/usePlan"
 
 const ResultsMap = dynamic(
   () => import("./results-map").then((mod) => mod.default),
@@ -28,19 +30,61 @@ const ResultsMap = dynamic(
 )
 
 type AppState = "input" | "results"
-
-interface AppData {
+type AppData = {
   origins?: GeocodedOrigin[]
+}
+
+// Debug component to help diagnose production issues
+function DebugInfo({ 
+  isLoaded, 
+  userId, 
+  isSignedIn, 
+  locations, 
+  searches, 
+  isLoading, 
+  userDataError,
+  planInfo,
+  isPlanLoading,
+  planError 
+}: any) {
+  // Only show in development or when explicitly enabled
+  const showDebug = process.env.NODE_ENV === 'development' || 
+    (typeof window !== 'undefined' && window.location.search.includes('debug=true'));
+  
+  if (!showDebug) return null;
+
+  return (
+    <div className="mb-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-md text-sm">
+      <h3 className="font-bold mb-2">Debug Info:</h3>
+      <div className="space-y-1">
+        <div>Environment: {process.env.NODE_ENV}</div>
+        <div>Auth Loaded: {isLoaded ? '✅' : '❌'}</div>
+        <div>User ID: {userId || 'null'}</div>
+        <div>Is Signed In: {isSignedIn ? '✅' : '❌'}</div>
+        <div>Locations Count: {locations?.length || 0}</div>
+        <div>Searches Count: {searches?.length || 0}</div>
+        <div>User Data Loading: {isLoading ? '⏳' : '✅'}</div>
+        <div>User Data Error: {userDataError || 'none'}</div>
+        <div>Plan: {planInfo?.tier || 'unknown'}</div>
+        <div>Plan Loading: {isPlanLoading ? '⏳' : '✅'}</div>
+        <div>Plan Error: {planError?.message || 'none'}</div>
+      </div>
+    </div>
+  );
 }
 
 export default function MeetMeHalfwayApp() {
   const { isLoaded, userId, isSignedIn } = useAuth()
+  const router = useRouter()
   const [appState, setAppState] = useState<AppState>("input")
   const [appData, setAppData] = useState<AppData>({})
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
 
   // Use the custom hook to manage user data
   const { locations, searches, isLoading, error: userDataError, setSearches } = useUserData(isLoaded ? userId : undefined);
+  
+  // Get plan information
+  const { tier, planInfo, isLoading: isPlanLoading, error: planError } = usePlan();
 
   // Callback for the search saver hook to update local state
   const handleSearchSaved = useCallback((newSearch: Search) => {
@@ -53,12 +97,36 @@ export default function MeetMeHalfwayApp() {
     onSearchSaved: handleSearchSaved
   });
 
+  // Log production issues
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') {
+      console.log('[Production Debug] App state:', {
+        isLoaded,
+        userId: userId ? 'present' : 'missing',
+        isSignedIn,
+        locationsCount: locations?.length || 0,
+        searchesCount: searches?.length || 0,
+        isUserDataLoading: isLoading,
+        userDataError: userDataError || 'none',
+        plan: tier,
+        isPlanLoading,
+        planError: planError?.message || 'none'
+      });
+    }
+  }, [isLoaded, userId, isSignedIn, locations, searches, isLoading, userDataError, tier, isPlanLoading, planError]);
+
   // Modal Handlers
   const openUpgradeModal = () => setIsUpgradeModalOpen(true)
   const closeUpgradeModal = () => setIsUpgradeModalOpen(false)
   const handleUpgradeAction = () => {
     console.log("Upgrade action triggered!")
     closeUpgradeModal()
+  }
+
+  // Handle View All Saved Searches button click
+  const handleViewAllSavedSearches = () => {
+    console.log('[Debug] View All Saved Searches clicked, navigating to /meet-me-halfway/saved-searches');
+    router.push('/meet-me-halfway/saved-searches')
   }
 
   // Load user data on mount
@@ -112,54 +180,61 @@ export default function MeetMeHalfwayApp() {
     setAppState("input")
   }
 
-  // Use isLoading from the hook, wait for Clerk to be loaded too
-  if (!isLoaded || isLoading) {
-    // Show Skeleton UI while loading
+  // Show loading state while user data loads
+  if (!isLoaded || (isSignedIn && isLoading)) {
     return (
-      <div className="container mx-auto max-w-7xl px-4 py-8">
-        <div className="mb-8 flex items-center justify-between">
-          <Skeleton className="h-9 w-64" /> {/* Title Skeleton */}
-          <Skeleton className="h-10 w-48" /> {/* Button Skeleton */}
+      <div className="container mx-auto max-w-7xl px-4 py-4 sm:py-8">
+        <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h1 className="text-2xl sm:text-3xl font-bold">Meet Me Halfway</h1>
+          <Skeleton className="h-10 w-48" />
         </div>
-
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-4">
-            {/* Form Skeletons */}
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-1/3" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-1/3" />
-            <Skeleton className="h-12 w-48 mt-4" /> {/* Submit Button Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+          <div className="lg:col-span-2 w-full">
+            <Skeleton className="h-96 w-full" />
           </div>
-
-          <div className="space-y-8">
-            {/* Saved Locations Skeleton */}
-            <div>
-              <Skeleton className="h-6 w-40 mb-4" />
-              <Skeleton className="h-8 w-full mb-2" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-            {/* Recent Searches Skeleton */}
-            <div>
-              <Skeleton className="h-6 w-40 mb-4" />
-              <Skeleton className="h-8 w-full mb-2" />
-              <Skeleton className="h-8 w-full" />
-            </div>
+          <div className="space-y-6 lg:space-y-8">
+            <Skeleton className="h-48 w-full" />
+            <Skeleton className="h-48 w-full" />
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-4 sm:py-8">
+      <DebugInfo 
+        isLoaded={isLoaded}
+        userId={userId}
+        isSignedIn={isSignedIn}
+        locations={locations}
+        searches={searches}
+        isLoading={isLoading}
+        userDataError={userDataError}
+        planInfo={planInfo}
+        isPlanLoading={isPlanLoading}
+        planError={planError}
+      />
+      
+      {/* Show error state if critical data failed to load */}
+      {userDataError && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+          <p className="text-red-800 font-medium">Error loading user data:</p>
+          <p className="text-red-600 text-sm">{userDataError}</p>
+        </div>
+      )}
+
       {appState === "input" && (
         <>
           <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold">Meet Me Halfway</h1>
-            <Button variant="outline" className="flex items-center gap-2 w-full sm:w-auto">
-              {/* <History className="size-4" /> */}
+            <Button 
+              variant="outline" 
+              className="flex items-center gap-2 w-full sm:w-auto"
+              onClick={handleViewAllSavedSearches}
+              disabled={!isSignedIn}
+            >
+              <History className="size-4" />
               <span className="truncate">View All Saved Searches</span>
             </Button>
           </div>

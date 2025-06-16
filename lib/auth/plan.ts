@@ -20,10 +20,15 @@ export type UserPlanInfo = {
  */
 export async function getUserPlanInfo(): Promise<UserPlanInfo | null> { // RENAMED and new return type
   try {
+    console.log('[getUserPlanInfo] Starting plan fetch...');
     const { userId } = auth()
+    
     if (!userId) {
+      console.log('[getUserPlanInfo] No userId from auth, returning null');
       return null // Not authenticated
     }
+
+    console.log(`[getUserPlanInfo] Fetching plan for userId: ${userId}`);
 
     const result: Pick<SelectProfile, 'membership' | 'stripeCustomerId' | 'stripeSubscriptionId' | 'stripePriceId' | 'seatCount'>[] = await db
       .select({
@@ -37,9 +42,15 @@ export async function getUserPlanInfo(): Promise<UserPlanInfo | null> { // RENAM
       .where(eq(profilesTable.userId, userId))
       .limit(1)
 
+    console.log(`[getUserPlanInfo] Database query result:`, {
+      resultCount: result.length,
+      hasData: result.length > 0,
+      membership: result[0]?.membership || 'none'
+    });
+
     if (result.length > 0 && result[0].membership) {
       const profileData = result[0]
-      // console.log(`[getUserPlanInfo] Found profile for ${userId}, membership: ${profileData.membership}`);
+      console.log(`[getUserPlanInfo] Found profile for ${userId}, membership: ${profileData.membership}`);
       return {
         tier: profileData.membership as Tier, // Cast as Tier, assuming DB schema is updated
         stripeCustomerId: profileData.stripeCustomerId,
@@ -49,11 +60,18 @@ export async function getUserPlanInfo(): Promise<UserPlanInfo | null> { // RENAM
       }
     } else {
       // If no profile, or no membership, they are effectively 'starter' tier
-      // console.warn(`[getUserPlanInfo] Profile/membership not found for userId: ${userId}. Defaulting to 'starter'.`);
+      console.warn(`[getUserPlanInfo] Profile/membership not found for userId: ${userId}. Defaulting to 'starter'.`);
       return { tier: 'starter' } // Default to starter if no specific plan found
     }
   } catch (error) {
-    console.error("Error fetching user plan info:", error)
+    console.error("[getUserPlanInfo] Error fetching user plan info:", error)
+    console.error("[getUserPlanInfo] Error details:", {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      cause: error instanceof Error ? error.cause : undefined,
+      type: typeof error
+    });
     return { tier: 'starter' } // Fallback to starter on error
   }
 }
