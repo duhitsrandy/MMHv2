@@ -22,10 +22,19 @@ import {
   DEFAULT_POI_RADIUS,
   DEFAULT_USER_AGENT,
 } from '@/lib/constants'; // Import constants
-// TEMPORARY: Removed problematic imports that cause 500 errors in production
-// import { trackApiEvent } from '../app/lib/monitoring'; // <-- Import monitoring function (Corrected Path)
-// import { auth } from "@clerk/nextjs/server"; // <-- Add Clerk auth import
-// import { osrmRoute } from "@/actions/osrm-actions"                    // new
+import { auth } from "@clerk/nextjs/server"; // <-- Add Clerk auth import
+// TEMPORARILY DISABLED: import { trackApiEvent } from '../app/lib/monitoring'; 
+// TEMPORARILY DISABLED: import { osrmRoute } from "@/actions/osrm-actions"
+
+// Temporary stub functions to prevent build errors
+const trackApiEvent = async (event: any) => {
+  console.log('[DISABLED] trackApiEvent called with:', event);
+};
+
+const osrmRoute = async (...args: any[]): Promise<any> => {
+  console.log('[DISABLED] osrmRoute called with:', args);
+  return { routes: [] }; // Return empty routes instead of throwing
+};
 
 // Initialize Redis client for caching
 const redisCache = Redis.fromEnv();
