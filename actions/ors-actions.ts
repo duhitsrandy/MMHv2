@@ -40,70 +40,27 @@ export async function geocodeLocationAction(
   address: string
 ): Promise<ActionState<GeocodingResult>> {
   console.log('[GEOCODING] Starting geocoding for address:', address);
+  
+  // TEMPORARY TEST: Return success without any external calls
   try {
-    const apiKey = process.env.OPENROUTESERVICE_API_KEY;
-    console.log('[GEOCODING] API Key exists:', !!apiKey);
-    if (!apiKey) {
-      console.error('[GEOCODING] OpenRouteService API key is missing');
-      return {
-        isSuccess: false,
-        message: "OpenRouteService API key is not configured"
-      };
-    }
-
-    // Call OpenRouteService directly instead of going through our API route
-    console.log('[GEOCODING] Making API call to OpenRouteService...');
-    const response = await fetch('https://api.openrouteservice.org/geocode/search', {
-      method: 'POST',
-      headers: {
-        'Authorization': apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        text: address,
-        size: 1
-      })
-    });
-
-    console.log('[GEOCODING] Response status:', response.status);
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[GEOCODING] API error:', response.status, '-', response.statusText);
-      console.error('[GEOCODING] Error details:', errorText);
-      return {
-        isSuccess: false,
-        message: "Failed to geocode location"
-      };
-    }
-
-    const data = await response.json();
-    console.log('[GEOCODING] API response received:', JSON.stringify(data, null, 2));
-
-    if (!data || !data.features || data.features.length === 0) {
-      return {
-        isSuccess: false,
-        message: "No results found for the provided address"
-      };
-    }
-
-    const feature = data.features[0];
+    console.log('[GEOCODING] Test mode - returning mock data');
     return {
       isSuccess: true,
-      message: "Location geocoded successfully",
+      message: "Test geocoding successful",
       data: {
-        lat: feature.geometry.coordinates[1].toString(),
-        lon: feature.geometry.coordinates[0].toString(),
-        display_name: feature.properties.label
+        lat: "40.7128",
+        lon: "-74.0060",
+        display_name: "Test Location: " + address
       }
     };
   } catch (error) {
-    console.error("[GEOCODING] Error in geocodeLocationAction:", error);
+    console.error("[GEOCODING] Error in test geocoding:", error);
     if (error instanceof Error) {
       console.error("[GEOCODING] Error name:", error.name);
-      console.error("[GEOCODING] Error message:", error.message);
+      console.error("[GEOCODING] Error message:", error.message); 
       console.error("[GEOCODING] Error stack:", error.stack);
     }
-    return { isSuccess: false, message: "Failed to geocode location" };
+    return { isSuccess: false, message: "Test geocoding failed" };
   }
 }
 
