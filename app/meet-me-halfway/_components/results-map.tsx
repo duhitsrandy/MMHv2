@@ -114,13 +114,17 @@ function getMidpoint(route: OsrmRoute | null): { lat: number; lng: number } | nu
 }
 
 function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
-  const { tier } = usePlan();
+  const { tier, isLoading: isPlanLoading } = usePlan();
   const { track } = useAnalytics();
   
   // Convert Tier to UserPlan for compatibility - Only Pro and Business get traffic data
-  const plan: UserPlan | null = tier === 'pro' || tier === 'business' ? 'pro' : 
-                                tier === 'starter' || tier === 'plus' ? 'free' : 
-                                null;
+  // Use useMemo to prevent unnecessary re-renders and add loading check
+  const plan: UserPlan | null = useMemo(() => {
+    if (isPlanLoading) return null; // Don't process plan while loading
+    if (tier === 'pro' || tier === 'business') return 'pro';
+    if (tier === 'starter' || tier === 'plus') return 'free';
+    return null;
+  }, [tier, isPlanLoading]);
 
   const [mainRoute, setMainRoute] = useState<OsrmRoute | null>(null)
   const [alternateRoute, setAlternateRoute] = useState<OsrmRoute | null>(null)
@@ -143,9 +147,9 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
         return;
       }
 
-      // Wait for plan to be loaded before proceeding
-      if (plan === undefined) {
-        console.log('[MapData] Waiting for plan to load...');
+      // Wait for plan to be loaded and stable before proceeding
+      if (isPlanLoading || plan === null) {
+        console.log('[MapData] Waiting for plan to load... isPlanLoading:', isPlanLoading, 'plan:', plan);
         return;
       }
 

@@ -31,7 +31,9 @@ export function usePlan() {
     }
 
     let isMounted = true
-    async function fetchPlanInfo() {
+    let timeoutId: NodeJS.Timeout
+    
+    const fetchPlanInfo = async () => {
       // Ensure loading is true at the start of fetch
       if (isMounted) setIsLoading(true);
       setError(null)
@@ -55,10 +57,12 @@ export function usePlan() {
       }
     }
 
-    fetchPlanInfo()
+    // Add debouncing to prevent excessive API calls
+    timeoutId = setTimeout(fetchPlanInfo, 100)
 
     return () => {
       isMounted = false // Prevent state updates on unmounted component
+      clearTimeout(timeoutId) // Clear the timeout
     }
     // Re-fetch when user loads or userId changes
   }, [userId, isUserLoaded])

@@ -22,19 +22,9 @@ import {
   DEFAULT_POI_RADIUS,
   DEFAULT_USER_AGENT,
 } from '@/lib/constants'; // Import constants
+import { trackApiEvent } from '../app/lib/monitoring'; // <-- Import monitoring function (Corrected Path)
 import { auth } from "@clerk/nextjs/server"; // <-- Add Clerk auth import
-// TEMPORARILY DISABLED: import { trackApiEvent } from '../app/lib/monitoring'; 
-// TEMPORARILY DISABLED: import { osrmRoute } from "@/actions/osrm-actions"
-
-// Temporary stub functions to prevent build errors
-const trackApiEvent = async (event: any) => {
-  // Completely disabled - do nothing
-};
-
-const osrmRoute = async (...args: any[]): Promise<any> => {
-  console.log('[DISABLED] osrmRoute called with:', args);
-  return { routes: [] }; // Return empty routes instead of throwing
-};
+import { osrmRoute } from "@/actions/osrm-actions"                    // new
 
 // Initialize Redis client for caching
 const redisCache = Redis.fromEnv();
@@ -159,31 +149,135 @@ async function fallbackGeocodeAction(
   }
 }
 
-// TEMPORARY TEST - Minimal geocoding function to isolate the 500 error
+// Modify the geocodeLocationAction to use the fallback if LocationIQ fails
 export async function geocodeLocationAction(
   address: string
 ): Promise<ActionState<GeocodingResult>> {
-  console.log('[GEOCODING] Starting test geocoding for address:', address);
-  
+  const startTime = Date.now(); // <-- Start timer
+  let status = 500; // <-- Default status (error)
+  let errorMsg: string | undefined = undefined; // <-- Error message holder
+  let result: ActionState<GeocodingResult> | null = null; // <-- Result holder
+  let primaryServiceUsed = 'LocationIQ'; // Track which service was ultimately used
+  const { userId } = auth(); // <-- Get userId from Clerk
+
   try {
-    console.log('[GEOCODING] Test mode - returning mock data');
-    return {
-      isSuccess: true,
-      message: "Test geocoding successful",
-      data: {
-        lat: "40.7128",
-        lon: "-74.0060",
-        display_name: "Test Location: " + address
-      }
-    };
-  } catch (error) {
-    console.error("[GEOCODING] Error in test geocoding:", error);
-    if (error instanceof Error) {
-      console.error("[GEOCODING] Error name:", error.name);
-      console.error("[GEOCODING] Error message:", error.message); 
-      console.error("[GEOCODING] Error stack:", error.stack);
+    // --- Validation Start ---
+    const validationResult = AddressSchema.safeParse(address);
+    if (!validationResult.success) {
+      const errorMessage = formatZodError(validationResult.error);
+      console.error("Validation failed for geocodeLocationAction:", errorMessage);
+      // Set specific status for validation error
+      status = 400;
+      errorMsg = `Invalid input: ${errorMessage}`;
+      result = { isSuccess: false, message: errorMsg };
+      // Don't proceed further if validation fails
+      return result; 
     }
-    return { isSuccess: false, message: "Test geocoding failed" };
+    const validatedAddress = validationResult.data;
+    // --- Validation End ---
+
+    // --- Main Logic Start (Moved inside the main try block) ---
+    console.log('Geocoding address:', validatedAddress);
+    const apiKey = process.env.LOCATIONIQ_KEY;
+    if (!apiKey) {
+      console.error('LocationIQ API key is missing');
+      status = 500;
+      errorMsg = "LocationIQ API key is not configured";
+      result = { isSuccess: false, message: errorMsg };
+      return result;
+    }
+
+    const url = `${LOCATIONIQ_API_BASE}/search.php?key=${apiKey}&q=${encodeURIComponent(validatedAddress)}&format=json&limit=1`;
+
+    try {
+      const response = await rateLimitedFetch(url);
+      status = response.status; // Capture status from primary attempt
+      console.log('LocationIQ API response status:', status);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Could not read error body');
+        console.warn(`LocationIQ API error ${response.status} (${response.statusText}): ${errorText}. Trying fallback.`);
+        // Note: status variable already holds the LocationIQ error status
+        primaryServiceUsed = 'Nominatim (Fallback)';
+        result = await fallbackGeocodeAction(validatedAddress);
+        // Update status based on fallback result
+        status = result.isSuccess ? 200 : 500; // Assuming fallback gives 200 on success
+        if (!result.isSuccess) {
+          errorMsg = result.message; // Capture fallback error message
+        }
+      } else {
+        const data = await response.json();
+        console.log('LocationIQ API response:', data);
+
+        if (!data || data.length === 0) {
+          console.warn('No results from LocationIQ. Trying fallback.');
+          status = 404; // Indicate LocationIQ found nothing
+          primaryServiceUsed = 'Nominatim (Fallback)';
+          result = await fallbackGeocodeAction(validatedAddress);
+          // Update status based on fallback result
+          status = result.isSuccess ? 200 : 500; // Assuming fallback gives 200 on success
+          if (!result.isSuccess) {
+            errorMsg = result.message; // Capture fallback error message
+          }
+        } else {
+          // Success with LocationIQ
+          result = {
+            isSuccess: true,
+            message: "Location geocoded successfully",
+            data: {
+              lat: data[0].lat,
+              lon: data[0].lon,
+              display_name: data[0].display_name
+            }
+          };
+          status = 200; // Explicitly set success status
+        }
+      }
+    } catch (error) {
+      // This catches errors during the rateLimitedFetch call itself (e.g., network, timeout)
+      console.warn("Error with primary geocoding service (fetch level):", error);
+      status = 500; // Indicate fetch/network error
+      errorMsg = error instanceof Error ? error.message : 'Unknown error during primary fetch';
+      primaryServiceUsed = 'Nominatim (Fallback)';
+      result = await fallbackGeocodeAction(validatedAddress);
+      // Update status based on fallback result
+      status = result.isSuccess ? 200 : 500;
+      if (!result.isSuccess) {
+        errorMsg = result.message; // Overwrite with fallback error if it also failed
+      }
+    }
+    // --- Main Logic End ---
+
+    // If result is still null here, something went wrong before returning
+    if (!result) { 
+      throw new Error("Geocoding result was unexpectedly null.");
+    }
+    return result;
+
+  } catch (error) {
+    // This catches errors *outside* the main logic try-catch (e.g., validation, API key check, unexpected errors)
+    console.error("Outer error in geocodeLocationAction:", error);
+    errorMsg = error instanceof Error ? error.message : "Failed to geocode location due to an unexpected error";
+    // Status is already likely 400 or 500 if caught here
+    // Ensure result is set for the finally block
+    if (!result) {
+      result = { isSuccess: false, message: errorMsg };
+    }
+    // Make sure to return the error result
+    return result; 
+  } finally {
+    // --- Monitoring Call ---
+    const duration = Date.now() - startTime;
+    await trackApiEvent({
+      endpoint: 'geocodeLocationAction',
+      method: 'ACTION',
+      status: result?.isSuccess ? status : (status === 200 ? 500 : status), // Ensure error status if not success
+      duration: duration,
+      error: result?.isSuccess ? undefined : errorMsg,
+      userId: userId ?? 'anonymous', // <-- Add userId to event
+      serviceUsed: primaryServiceUsed // <-- Pass serviceUsed directly
+      // Rate limit details omitted as they are not easily available here
+    });
   }
 }
 
@@ -650,8 +744,18 @@ export async function getRouteAction(
     const duration = Date.now() - startTime;
     const finalDistance = result?.isSuccess ? result.data?.distance : capturedRouteDistance;
     const finalDuration = result?.isSuccess ? result.data?.duration : capturedRouteDuration;
-    // TEMPORARILY DISABLED: trackApiEvent call
-    console.log('[DISABLED] trackApiEvent would be called for getRouteAction');
+    await trackApiEvent({
+      endpoint: 'getRouteAction',
+      method: 'ACTION',
+      status: result?.isSuccess ? status : (status === 200 ? 500 : status),
+      duration: duration,
+      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown ORS route action error'),
+      userId: userId ?? 'anonymous',
+      routeDistance: finalDistance,
+      routeDuration: finalDuration,
+      usedFallback: capturedUsedFallback || (result?.isSuccess === false && !!result?.message?.includes('fallback')),
+      serviceUsed,                              // CHANGED
+    });
   }
 }
 
@@ -830,8 +934,14 @@ export async function calculateMidpointAction(
     return result;
   } finally {
     const duration = Date.now() - startTime;
-    // TEMPORARILY DISABLED: trackApiEvent call
-    console.log('[DISABLED] trackApiEvent would be called for calculateMidpointAction');
+    await trackApiEvent({
+      endpoint: 'calculateMidpointAction',
+      method: 'ACTION',
+      status: result?.isSuccess ? status : (status !== 500 ? status : (result?.message?.includes('Invalid input') ? 400 : 500)),
+      duration: duration,
+      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown midpoint calculation error'),
+      userId: userId ?? 'anonymous',
+    });
   }
 }
 
@@ -1104,8 +1214,18 @@ export async function getAlternateRouteAction(
     const duration = Date.now() - startTime;
     const finalDistance = result?.isSuccess ? result.data?.distance : capturedRouteDistance;
     const finalDuration = result?.isSuccess ? result.data?.duration : capturedRouteDuration;
-    // TEMPORARILY DISABLED: trackApiEvent call
-    console.log('[DISABLED] trackApiEvent would be called for getAlternateRouteAction');
+    await trackApiEvent({
+      endpoint: 'getAlternateRouteAction',
+      method: 'ACTION',
+      status: result?.isSuccess ? status : (status === 200 ? 500 : status),
+      duration: duration,
+      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown ORS alt route action error'),
+      userId: userId ?? 'anonymous',
+      routeDistance: finalDistance,
+      routeDuration: finalDuration,
+      usedFallback: capturedUsedFallback || (result?.isSuccess === false && !!result?.message?.includes('fallback')),
+      serviceUsed,                              // CHANGED
+    });
   }
 }
 
@@ -1272,7 +1392,13 @@ export async function calculateAlternateMidpointAction(
     return result;
   } finally {
     const duration = Date.now() - startTime;
-    // TEMPORARILY DISABLED: trackApiEvent call
-    console.log('[DISABLED] trackApiEvent would be called for calculateAlternateMidpointAction');
+    await trackApiEvent({
+      endpoint: 'calculateAlternateMidpointAction',
+      method: 'ACTION',
+      status: result?.isSuccess ? status : (status !== 500 ? status : (result?.message?.includes('Invalid input') ? 400 : 500)),
+      duration: duration,
+      error: result?.isSuccess ? undefined : (result?.message || errorMsg || 'Unknown alternate midpoint calculation error'),
+      userId: userId ?? 'anonymous',
+    });
   }
 } 
