@@ -33,6 +33,16 @@ export default function RecentSearches({ searches }: RecentSearchesProps) {
   }
 
   const handleRunSearchAgain = (search: SelectSearch) => {
+    // For multi-origin searches, we need to get the origins data
+    // Since recent searches doesn't have access to origins, we'll use a different approach
+    if (search.originCount && search.originCount > 2) {
+      // For multi-origin searches, redirect to saved searches where we have full origin data
+      toast.info("This multi-origin search is available in your Saved Searches. Redirecting...");
+      router.push('/meet-me-halfway/saved-searches');
+      return;
+    }
+    
+    // For legacy 2-location searches, use the old format
     if (search.startLocationAddress && search.endLocationAddress) {
       const params = new URLSearchParams({
         start: search.startLocationAddress,

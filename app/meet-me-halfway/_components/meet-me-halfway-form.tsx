@@ -229,23 +229,70 @@ export default function MeetMeHalfwayForm({
   useEffect(() => {
     const startQuery = searchParams.get('start');
     const endQuery = searchParams.get('end');
+    
+    // Check for multi-origin parameters (location0, location1, etc.)
+    const locationParams: string[] = [];
+    let locationIndex = 0;
+    while (true) {
+      const locationParam = searchParams.get(`location${locationIndex}`);
+      if (locationParam) {
+        locationParams.push(locationParam);
+        locationIndex++;
+      } else {
+        break;
+      }
+    }
 
-    setOrigins(currentOrigins => {
+    if (locationParams.length > 0) {
+      // Handle multi-origin search parameters
+      console.log('[Form Init] Found multi-origin params:', locationParams);
+      
+      // Ensure we have enough origin slots
+      const neededOrigins = Math.max(locationParams.length, 2);
+      setOrigins(currentOrigins => {
+        const newOrigins = [...currentOrigins];
+        
+        // Add more origins if needed
+        while (newOrigins.length < neededOrigins) {
+          newOrigins.push({
+            id: `origin-${Date.now()}-${newOrigins.length}`,
+            address: '',
+            selectedLocationId: 'custom',
+            isSaving: false
+          });
+        }
+        
+        // Populate with the location parameters
+        locationParams.forEach((address, index) => {
+          if (newOrigins[index]) {
+            newOrigins[index] = {
+              ...newOrigins[index],
+              address: address,
+              selectedLocationId: 'custom'
+            };
+          }
+        });
+        
+        return newOrigins;
+      });
+    } else if (startQuery || endQuery) {
+      // Handle legacy 2-location parameters
+      setOrigins(currentOrigins => {
         let updated = false;
         const newOrigins = [...currentOrigins];
         if (startQuery && newOrigins[0] && !newOrigins[0].address) {
-            console.log('[Form Init] Populating origin 0 from query param:', startQuery);
-            newOrigins[0] = { ...newOrigins[0], address: startQuery, selectedLocationId: 'custom' };
-            updated = true;
+          console.log('[Form Init] Populating origin 0 from query param:', startQuery);
+          newOrigins[0] = { ...newOrigins[0], address: startQuery, selectedLocationId: 'custom' };
+          updated = true;
         }
-         if (endQuery && newOrigins[1] && !newOrigins[1].address) {
-            console.log('[Form Init] Populating origin 1 from query param:', endQuery);
-            newOrigins[1] = { ...newOrigins[1], address: endQuery, selectedLocationId: 'custom' };
-            updated = true;
+        if (endQuery && newOrigins[1] && !newOrigins[1].address) {
+          console.log('[Form Init] Populating origin 1 from query param:', endQuery);
+          newOrigins[1] = { ...newOrigins[1], address: endQuery, selectedLocationId: 'custom' };
+          updated = true;
         }
         return updated ? newOrigins : currentOrigins;
-    });
-
+      });
+    }
   }, [searchParams, router, pathname]);
 
   useEffect(() => {

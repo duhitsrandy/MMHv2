@@ -331,10 +331,15 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
             plan: plan,
           });
           
-          // Moved plan check here to ensure plan state is resolved
+          // Check plan requirements for >2 origins - wait for plan to load
+          if (isPlanLoading) {
+            console.log('[MapData >2] Plan still loading, waiting...');
+            return; // Exit early if plan is still loading
+          }
+          
           if (plan !== 'pro') {
-            console.error('[MapData >2] Pro plan required, but current plan is:', plan);
-            throw new Error("Calculating midpoint for more than two locations requires a Pro plan.");
+            console.error('[MapData >2] Pro or Business plan required, but current plan is:', plan, 'tier:', tier);
+            throw new Error("Calculating midpoint for more than two locations requires a Pro or Business plan.");
           }
 
           // --- Revert to Geocentric Midpoint Calculation for >2 Origins ---
