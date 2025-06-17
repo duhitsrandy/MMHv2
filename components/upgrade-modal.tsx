@@ -27,12 +27,13 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
   const tierConfigs = {
     plus: {
       name: "Plus",
-      price: "$9.00",
+      price: "$4.99",
       features: [
-        "Up to 5 locations per search",
-        "Up to 20 saved searches per month", 
-        "Priority email support",
-        "Daily search cadence"
+        "Up to 3 locations per search",
+        "Ad-free experience", 
+        "Basic route calculations",
+        "Points of interest discovery",
+        "Priority email support"
       ],
       priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PLUS_MONTHLY || "price_plus_monthly"
     },
@@ -40,25 +41,27 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
       name: "Pro", 
       price: "$19.00",
       features: [
-        "Up to 10 locations per search",
-        "Unlimited saved searches",
-        "Real-time traffic data for accurate ETAs", 
-        "Priority email & chat support",
-        "Hourly search cadence"
+        "Up to 5 locations per search",
+        "Real-time traffic data for accurate ETAs",
+        "Advanced route optimization", 
+        "Ad-free experience",
+        "Priority email support"
       ],
       priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY || "price_pro_monthly"
     },
     business: {
       name: "Business",
-      price: "Custom",
+      price: "$99.00",
       features: [
-        "Custom number of locations",
+        "Up to 10 locations per search",
         "All Pro features",
-        "Dedicated account manager & support",
-        "API Access",
-        "Team features"
+        "Real-time traffic data",
+        "Advanced route optimization",
+        "Priority email support",
+        "Team collaboration features",
+        "Enhanced analytics"
       ],
-      priceId: null
+      priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_BUSINESS_MONTHLY || "price_business_monthly"
     }
   };
 
@@ -88,12 +91,6 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
 
     setIsRedirecting(true);
     try {
-      if (tierToUpgrade === 'business') {
-        // Redirect to contact sales
-        window.location.href = '/contact-sales';
-        return;
-      }
-
       const upgradeConfig = tierConfigs[tierToUpgrade];
       if (!upgradeConfig.priceId) {
         toast.error("Pricing configuration error. Please contact support.");
@@ -208,7 +205,7 @@ const UpgradeModal: React.FC<UpgradeModalProps> = ({
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-medium text-gray-900">Need even more?</h4>
-                  <p className="text-sm text-gray-600">Pro plan includes traffic data + up to 10 locations</p>
+                  <p className="text-sm text-gray-600">Pro plan includes traffic data + up to 5 locations</p>
                 </div>
                 <div className="text-right">
                   <div className="font-bold text-gray-900">$19.00</div>
