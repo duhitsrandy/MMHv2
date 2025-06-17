@@ -5,6 +5,12 @@
 
 A modern web application that helps users find the perfect meeting point between two locations, with support for alternate routes, points of interest, and travel time calculations.
 
+## Recent Updates
+
+- **Fixed Upgrade Modal**: Resolved issue with upgrade links not working by adding proper environment variables for Stripe price IDs
+- **Enhanced GPS Integration**: Improved POI linking to Google Maps, Apple Maps, and Waze with better location recognition
+- **Subscription System**: Full Stripe integration with tier-based feature access (Starter, Plus, Pro, Business)
+
 ## Features
 
 ### Core Functionality
