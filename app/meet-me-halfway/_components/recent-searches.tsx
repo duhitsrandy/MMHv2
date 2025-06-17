@@ -75,7 +75,7 @@ export default function RecentSearches({ searches }: RecentSearchesProps) {
     }
   }
 
-  const displayedSearches = localSearches.slice(-5).reverse();
+  const displayedSearches = localSearches.slice(0, 5);
 
   return (
     <Card>
