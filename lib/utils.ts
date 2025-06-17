@@ -15,9 +15,20 @@ export function cn(...inputs: ClassValue[]) {
 // Function to get the base URL for the application
 export function getBaseUrl() {
   if (typeof window !== "undefined") return ""; // browser should use relative url
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}` // Vercel
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL // Custom env var
-  return `http://localhost:${process.env.PORT ?? 3000}` // Default to localhost
+  
+  // Priority 1: Custom app URL (for production domain)
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  
+  // Priority 2: Hardcoded production domain (safety fallback)
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://meetmehalfway.co';
+  }
+  
+  // Priority 3: Vercel URL (for preview deployments)
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  
+  // Priority 4: Default to localhost for development
+  return `http://localhost:${process.env.PORT ?? 3000}`;
 }
 
 // Helper function to safely parse JSON
