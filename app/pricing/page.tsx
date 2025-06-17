@@ -7,6 +7,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
+import { createCheckoutSession } from "@/actions/stripe/createCheckoutSession";
+import { toast } from "sonner";
+import { useAnalytics } from "@/hooks/useAnalytics";
+import { ANALYTICS_EVENTS } from "@/lib/analytics-events";
 
 type Cadence = "weekly" | "monthly" | "annually";
 type Tier = "Starter" | "Plus" | "Pro" | "Business";
@@ -14,20 +18,19 @@ type Tier = "Starter" | "Plus" | "Pro" | "Business";
 interface PricingTier {
   name: Tier;
   id: string;
-  href: string;
   price: { weekly: string; monthly: string; annually: string };
   description: string;
   features: { text: string; unavailable?: boolean }[];
   mostPopular?: boolean;
   cta: string;
   isCustom?: boolean;
+  stripePriceId?: string;
 }
 
 const tiers: PricingTier[] = [
   {
     name: "Starter",
     id: "tier-starter",
-    href: "/signup?tier=starter",
     price: { weekly: "$0", monthly: "$0", annually: "$0" },
     description: "Get started with our basic features, completely free.",
     features: [
@@ -44,7 +47,6 @@ const tiers: PricingTier[] = [
   {
     name: "Plus",
     id: "tier-plus",
-    href: "/signup?tier=plus",
     price: { weekly: "$1.49", monthly: "$4.99", annually: "$49.00" },
     description: "Perfect for friends, families, and small teams.",
     features: [
@@ -58,11 +60,11 @@ const tiers: PricingTier[] = [
     ],
     cta: "Choose Plus",
     mostPopular: true,
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PLUS_MONTHLY,
   },
   {
     name: "Pro",
     id: "tier-pro",
-    href: "/signup?tier=pro",
     price: { weekly: "$4.99", monthly: "$19.00", annually: "$190.00" },
     description: "Advanced features for professionals and power users.",
     features: [
@@ -75,11 +77,11 @@ const tiers: PricingTier[] = [
       { text: "Faster route calculations" },
     ],
     cta: "Choose Pro",
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY,
   },
   {
     name: "Business",
     id: "tier-business",
-    href: "/signup?tier=business",
     price: { weekly: "$24.99", monthly: "$99.00", annually: "$990.00" },
     description: "Complete solution for teams and enterprises.",
     features: [
@@ -93,6 +95,7 @@ const tiers: PricingTier[] = [
     ],
     cta: "Choose Business",
     isCustom: false,
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_BUSINESS_MONTHLY,
   },
 ];
 
@@ -106,12 +109,54 @@ const tierIcons = {
 
 export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<Cadence>("monthly");
+  const [isRedirecting, setIsRedirecting] = useState<string | null>(null);
+  const { track } = useAnalytics();
 
   const getPriceSuffix = (cycle: Cadence) => {
     if (cycle === "weekly") return "/week";
     if (cycle === "monthly") return "/month";
     if (cycle === "annually") return "/year";
     return "";
+  };
+
+  const handleCheckout = async (tier: PricingTier) => {
+    if (tier.name === "Starter") {
+      // For starter tier, just redirect to the app
+      window.location.href = "/meet-me-halfway";
+      return;
+    }
+
+    if (!tier.stripePriceId) {
+      toast.error("Pricing configuration error. Please contact support.");
+      return;
+    }
+
+    setIsRedirecting(tier.id);
+    
+    // Track the checkout attempt
+    track(ANALYTICS_EVENTS.CHECKOUT_STARTED, {
+      tier: tier.name.toLowerCase(),
+      billing_cycle: billingCycle,
+      source: 'pricing_page'
+    });
+
+    try {
+      const result = await createCheckoutSession({ priceId: tier.stripePriceId });
+
+      if (result.url) {
+        window.location.href = result.url;
+      } else if (result.error) {
+        toast.error(result.error);
+        setIsRedirecting(null);
+      } else {
+        toast.error("Could not initiate checkout. Please try again.");
+        setIsRedirecting(null);
+      }
+    } catch (error) {
+      console.error("Checkout error:", error);
+      toast.error("An unexpected error occurred. Please try again.");
+      setIsRedirecting(null);
+    }
   };
 
   return (
@@ -200,18 +245,20 @@ export default function PricingPage() {
                 </ul>
               </CardContent>
               <CardFooter className="mt-8 p-6">
-                 <Button asChild className="w-full" variant={tier.mostPopular ? 'default' : 'outline'} size="lg">
-                  <Link href={tier.href}>
-                    {tier.cta}
-                    {isRedirectingToStripeForTier(tier.id, billingCycle) && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
-                  </Link>
+                <Button 
+                  className="w-full" 
+                  variant={tier.mostPopular ? 'default' : 'outline'} 
+                  size="lg" 
+                  onClick={() => handleCheckout(tier)}
+                  disabled={isRedirecting !== null}
+                >
+                  {tier.cta}
+                  {isRedirecting === tier.id && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
                 </Button>
               </CardFooter>
             </Card>
           ))}
         </div>
-
-
 
         <div className="mt-16 text-center">
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Frequently Asked Questions</h2>
@@ -240,44 +287,4 @@ export default function PricingPage() {
       </div>
     </div>
   );
-}
-
-const isRedirectingToStripeForTier = (tierId: string, cadence: Cadence) => {
-  console.log(`Checking redirect state for ${tierId} with ${cadence} billing`);
-  return false; 
-};
-
-const STRIPE_PRICE_IDS = {
-  starter: {
-    monthly: "starter_monthly"
-  },
-  plus: {
-    weekly: "plus_weekly",
-    monthly: "plus_monthly",
-    annually: "plus_yearly"
-  },
-  pro: {
-    weekly: "pro_weekly",
-    monthly: "pro_monthly",
-    annually: "pro_yearly"
-  },
-  business: {
-    weekly: "business_weekly",
-    monthly: "business_monthly",
-    annually: "business_yearly"
-  }
-};
-
-function getStripePriceId(tierName: Tier, cadence: Cadence): string | null {
-  if (tierName === "Starter") {
-    if (cadence === "monthly") return STRIPE_PRICE_IDS.starter.monthly;
-    return null;
-  } else if (tierName === "Plus") {
-    return STRIPE_PRICE_IDS.plus[cadence];
-  } else if (tierName === "Pro") {
-    return STRIPE_PRICE_IDS.pro[cadence];
-  } else if (tierName === "Business") {
-    return STRIPE_PRICE_IDS.business[cadence];
-  }
-  return null;
 } 
