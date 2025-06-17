@@ -108,7 +108,9 @@ export default function Header() {
 
           <SignedIn>
             <div className="flex items-center gap-2">
-              <PlanBadge size="sm" />
+              <div className="hidden md:block">
+                <PlanBadge size="sm" />
+              </div>
               <UserButton afterSignOutUrl="/" />
             </div>
           </SignedIn>
@@ -134,6 +136,14 @@ export default function Header() {
       {isMenuOpen && (
         <nav className="border-t bg-background p-4 md:hidden">
           <ul className="space-y-3">
+            <SignedIn>
+              <li className="mb-3 pb-3 border-b">
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <span className="text-sm text-muted-foreground">Plan:</span>
+                  <PlanBadge size="sm" />
+                </div>
+              </li>
+            </SignedIn>
             {alwaysVisibleLinks.map(link => (
               <li key={link.href}>
                 <Link
