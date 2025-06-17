@@ -1,6 +1,7 @@
 /*
 <ai_context>
 Initializes the database connection and schema for the app.
+Database uses IPv4-compatible pooler for Vercel serverless compatibility.
 </ai_context>
 */
 
