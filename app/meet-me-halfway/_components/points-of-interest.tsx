@@ -249,6 +249,43 @@ export default function PointsOfInterest({
     }
   }, [sortedAndFilteredPois, isLoading])
 
+  const buildSearchQuery = (poi: EnrichedPoi): string => {
+    // Start with the POI name, handle unnamed locations
+    let query = poi.name || 'Unnamed Location';
+    
+    // Add address components if available
+    const addressParts = [];
+    if (poi.address?.street) {
+      addressParts.push(poi.address.street);
+    }
+    if (poi.address?.city) {
+      addressParts.push(poi.address.city);
+    }
+    if (poi.address?.state) {
+      addressParts.push(poi.address.state);
+    }
+    if (poi.address?.postal_code) {
+      addressParts.push(poi.address.postal_code);
+    }
+    
+    // If we have address parts, append them to the query
+    if (addressParts.length > 0) {
+      query += `, ${addressParts.join(', ')}`;
+    }
+    
+    // If no address info is available, try using OSM ID for more precise targeting
+    if (addressParts.length === 0 && poi.osm_id) {
+      query = `${query} (OSM: ${poi.osm_id})`;
+    }
+    
+    // Final fallback to coordinates
+    if (addressParts.length === 0 && !poi.osm_id) {
+      query = `${query} at ${poi.lat}, ${poi.lon}`;
+    }
+    
+    return query.trim();
+  }
+
   return (
     <Card className="relative h-full overflow-hidden flex flex-col">
       <CardHeader className="pb-3 flex-shrink-0">
@@ -425,8 +462,11 @@ export default function PointsOfInterest({
                                       poi_name: poi.name,
                                       map_service: 'google_maps'
                                     });
+                                    
+                                    // Build search query with POI name and address for better results
+                                    const searchQuery = buildSearchQuery(poi);
                                     window.open(
-                                      `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
+                                      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`,
                                       "_blank"
                                     );
                                   }}
@@ -441,8 +481,11 @@ export default function PointsOfInterest({
                                       poi_name: poi.name,
                                       map_service: 'apple_maps'
                                     });
+                                    
+                                    // Build search query with POI name and address for better results
+                                    const searchQuery = buildSearchQuery(poi);
                                     window.open(
-                                      `http://maps.apple.com/?ll=${poi.lat},${poi.lon}`,
+                                      `http://maps.apple.com/?q=${encodeURIComponent(searchQuery)}`,
                                       "_blank"
                                     );
                                   }}
@@ -457,10 +500,25 @@ export default function PointsOfInterest({
                                       poi_name: poi.name,
                                       map_service: 'waze'
                                     });
-                                    window.open(
-                                      `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
-                                      "_blank"
-                                    );
+                                    
+                                    // Waze works well with both search queries and coordinates
+                                    // Try search query first for better POI identification, fallback to coordinates
+                                    const searchQuery = buildSearchQuery(poi);
+                                    const hasAddress = poi.address?.street || poi.address?.city;
+                                    
+                                    if (hasAddress) {
+                                      // Use search query if we have address information
+                                      window.open(
+                                        `https://www.waze.com/ul?q=${encodeURIComponent(searchQuery)}&navigate=yes`,
+                                        "_blank"
+                                      );
+                                    } else {
+                                      // Fallback to coordinates for more precise navigation
+                                      window.open(
+                                        `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
+                                        "_blank"
+                                      );
+                                    }
                                   }}
                                 >
                                   Open in Waze
