@@ -18,6 +18,7 @@ import { Menu, Route, X } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { ThemeSwitcher } from "./utilities/theme-switcher"
+import { PlanBadge } from "./ui/plan-badge"
 
 const signedInLinks = [
   { href: "/meet-me-halfway/saved-searches", label: "Search History" }
@@ -106,7 +107,10 @@ export default function Header() {
           </SignedOut>
 
           <SignedIn>
-            <UserButton afterSignOutUrl="/" />
+            <div className="flex items-center gap-2">
+              <PlanBadge size="sm" />
+              <UserButton afterSignOutUrl="/" />
+            </div>
           </SignedIn>
 
           <div className="md:hidden">
