@@ -426,19 +426,28 @@ export default function PointsOfInterest({
                                       map_service: 'google_maps'
                                     });
                                     
-                                    // Google Maps: Use coordinates for precision
+                                    // Google Maps: Use name + address for better POI recognition
+                                    const poiName = poi.name || 'Location';
+                                    const address = poi.address?.street && poi.address?.city 
+                                      ? `${poi.address.street}, ${poi.address.city}`
+                                      : poi.address?.city || '';
+                                    
+                                    const searchQuery = address 
+                                      ? `${poiName}, ${address}`
+                                      : `${poiName} at ${poi.lat}, ${poi.lon}`;
                                     
                                     // Debug logging in development
                                     if (process.env.NODE_ENV === 'development') {
                                       console.log('[GPS Link] Google Maps:', {
                                         poi_name: poi.name,
-                                        coordinates: `${poi.lat}, ${poi.lon}`,
-                                        address: poi.address
+                                        search_query: searchQuery,
+                                        address: poi.address,
+                                        coordinates: `${poi.lat}, ${poi.lon}`
                                       });
                                     }
                                     
                                     window.open(
-                                      `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
+                                      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`,
                                       "_blank"
                                     );
                                   }}
@@ -454,21 +463,31 @@ export default function PointsOfInterest({
                                       map_service: 'apple_maps'
                                     });
                                     
-                                    // Apple Maps: Use coordinates for precision
+                                    // Apple Maps: Use name with location context for better recognition
+                                    const poiName = poi.name || 'Location';
+                                    const hasAddress = poi.address?.street && poi.address?.city;
+                                    
+                                    let appleMapsUrl;
+                                    if (hasAddress && poi.address) {
+                                      // Use name + address for better POI recognition
+                                      const address = `${poi.address.street}, ${poi.address.city}`;
+                                      appleMapsUrl = `http://maps.apple.com/?q=${encodeURIComponent(poiName)}&address=${encodeURIComponent(address)}`;
+                                    } else {
+                                      // Use name with coordinates for context
+                                      appleMapsUrl = `http://maps.apple.com/?q=${encodeURIComponent(poiName)}&sll=${poi.lat},${poi.lon}&z=15`;
+                                    }
                                     
                                     // Debug logging in development
                                     if (process.env.NODE_ENV === 'development') {
                                       console.log('[GPS Link] Apple Maps:', {
                                         poi_name: poi.name,
-                                        coordinates: `${poi.lat}, ${poi.lon}`,
-                                        address: poi.address
+                                        url: appleMapsUrl,
+                                        address: poi.address,
+                                        coordinates: `${poi.lat}, ${poi.lon}`
                                       });
                                     }
                                     
-                                    window.open(
-                                      `http://maps.apple.com/?ll=${poi.lat},${poi.lon}`,
-                                      "_blank"
-                                    );
+                                    window.open(appleMapsUrl, "_blank");
                                   }}
                                 >
                                   Open in Apple Maps
@@ -482,19 +501,28 @@ export default function PointsOfInterest({
                                       map_service: 'waze'
                                     });
                                     
-                                    // Waze: Use coordinates for precision
+                                    // Waze: Use name + coordinates for best POI recognition
+                                    const poiName = poi.name || 'Location';
+                                    const address = poi.address?.street && poi.address?.city 
+                                      ? `${poi.address.street}, ${poi.address.city}`
+                                      : poi.address?.city || '';
+                                    
+                                    const searchQuery = address 
+                                      ? `${poiName}, ${address}`
+                                      : poiName;
                                     
                                     // Debug logging in development
                                     if (process.env.NODE_ENV === 'development') {
                                       console.log('[GPS Link] Waze:', {
                                         poi_name: poi.name,
-                                        coordinates: `${poi.lat}, ${poi.lon}`,
-                                        address: poi.address
+                                        search_query: searchQuery,
+                                        address: poi.address,
+                                        coordinates: `${poi.lat}, ${poi.lon}`
                                       });
                                     }
                                     
                                     window.open(
-                                      `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
+                                      `https://www.waze.com/ul?q=${encodeURIComponent(searchQuery)}&ll=${poi.lat},${poi.lon}&navigate=yes`,
                                       "_blank"
                                     );
                                   }}
