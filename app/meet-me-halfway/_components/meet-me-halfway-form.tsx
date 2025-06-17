@@ -229,6 +229,7 @@ export default function MeetMeHalfwayForm({
   useEffect(() => {
     const startQuery = searchParams.get('start');
     const endQuery = searchParams.get('end');
+    const isRerun = searchParams.get('rerun') === 'true';
     
     // Check for multi-origin parameters (location0, location1, etc.)
     const locationParams: string[] = [];
@@ -262,6 +263,11 @@ export default function MeetMeHalfwayForm({
           });
         }
         
+        // Remove extra origins if we have too many
+        while (newOrigins.length > neededOrigins) {
+          newOrigins.pop();
+        }
+        
         // Populate with the location parameters
         locationParams.forEach((address, index) => {
           if (newOrigins[index]) {
@@ -280,12 +286,12 @@ export default function MeetMeHalfwayForm({
       setOrigins(currentOrigins => {
         let updated = false;
         const newOrigins = [...currentOrigins];
-        if (startQuery && newOrigins[0] && !newOrigins[0].address) {
+        if (startQuery && newOrigins[0] && (isRerun || !newOrigins[0].address)) {
           console.log('[Form Init] Populating origin 0 from query param:', startQuery);
           newOrigins[0] = { ...newOrigins[0], address: startQuery, selectedLocationId: 'custom' };
           updated = true;
         }
-        if (endQuery && newOrigins[1] && !newOrigins[1].address) {
+        if (endQuery && newOrigins[1] && (isRerun || !newOrigins[1].address)) {
           console.log('[Form Init] Populating origin 1 from query param:', endQuery);
           newOrigins[1] = { ...newOrigins[1], address: endQuery, selectedLocationId: 'custom' };
           updated = true;
