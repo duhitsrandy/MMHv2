@@ -185,7 +185,6 @@ export default function MeetMeHalfwayApp() {
     return (
       <div className="container mx-auto max-w-7xl px-4 py-4 sm:py-8">
         <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h1 className="text-2xl sm:text-3xl font-bold">Meet Me Halfway</h1>
           <Skeleton className="h-10 w-48" />
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
@@ -229,7 +228,6 @@ export default function MeetMeHalfwayApp() {
       {appState === "input" && (
         <>
           <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold">Meet Me Halfway</h1>
             <Button 
               variant="outline" 
               className="flex items-center gap-2 w-full sm:w-auto"
