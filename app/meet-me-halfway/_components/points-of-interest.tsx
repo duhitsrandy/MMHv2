@@ -426,23 +426,30 @@ export default function PointsOfInterest({
                                       map_service: 'google_maps'
                                     });
                                     
-                                    // Google Maps: Use name + address for better POI recognition
-                                    const poiName = poi.name || 'Location';
-                                    const address = poi.address?.street && poi.address?.city 
-                                      ? `${poi.address.street}, ${poi.address.city}`
-                                      : poi.address?.city || '';
+                                    // Google Maps: Use coordinates-first approach with label in parentheses
+                                    const latLon = `${poi.lat},${poi.lon}`;
+                                    const poiName = poi.name?.replace(/[, ]+/g, ' ') || 'Meeting point';
                                     
-                                    const searchQuery = address 
-                                      ? `${poiName}, ${address}`
-                                      : `${poiName} at ${poi.lat}, ${poi.lon}`;
+                                    // Step 1: Coordinates first with label in parentheses (anchors search to exact location)
+                                    let searchQuery = `${latLon} (${poiName})`;
+                                    
+                                    // Step 2: Add disambiguating context if we have complete address
+                                    if (poi.address?.street && poi.address?.city) {
+                                      const address = `${poi.address.street}, ${poi.address.city}`;
+                                      searchQuery = `${poiName}, ${address}`;
+                                    } else if (poi.address?.city) {
+                                      // Partial address context
+                                      searchQuery = `${poiName}, ${poi.address.city}`;
+                                    }
                                     
                                     // Debug logging in development
                                     if (process.env.NODE_ENV === 'development') {
                                       console.log('[GPS Link] Google Maps:', {
                                         poi_name: poi.name,
                                         search_query: searchQuery,
+                                        coordinates: latLon,
                                         address: poi.address,
-                                        coordinates: `${poi.lat}, ${poi.lon}`
+                                        strategy: poi.address?.street && poi.address?.city ? 'name+address' : 'coordinates+label'
                                       });
                                     }
                                     
