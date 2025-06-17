@@ -249,96 +249,6 @@ export default function PointsOfInterest({
     }
   }, [sortedAndFilteredPois, isLoading])
 
-  const buildSearchQuery = (poi: EnrichedPoi): string => {
-    // Start with the POI name, handle unnamed locations
-    let query = poi.name || 'Unnamed Location';
-    
-    // Add address components if available
-    const addressParts = [];
-    if (poi.address?.street) {
-      addressParts.push(poi.address.street);
-    }
-    if (poi.address?.city) {
-      addressParts.push(poi.address.city);
-    }
-    if (poi.address?.state) {
-      addressParts.push(poi.address.state);
-    }
-    if (poi.address?.postal_code) {
-      addressParts.push(poi.address.postal_code);
-    }
-    
-    // If we have address parts, append them to the query
-    if (addressParts.length > 0) {
-      query += `, ${addressParts.join(', ')}`;
-    }
-    
-    // If no address info is available, try using OSM ID for more precise targeting
-    if (addressParts.length === 0 && poi.osm_id) {
-      query = `${query} (OSM: ${poi.osm_id})`;
-    }
-    
-    // Final fallback to coordinates
-    if (addressParts.length === 0 && !poi.osm_id) {
-      query = `${query} at ${poi.lat}, ${poi.lon}`;
-    }
-    
-    return query.trim();
-  }
-
-  // Build address-only query for more precise targeting
-  const buildAddressQuery = (poi: EnrichedPoi): string => {
-    const addressParts = [];
-    if (poi.address?.street) {
-      addressParts.push(poi.address.street);
-    }
-    if (poi.address?.city) {
-      addressParts.push(poi.address.city);
-    }
-    if (poi.address?.state) {
-      addressParts.push(poi.address.state);
-    }
-    if (poi.address?.postal_code) {
-      addressParts.push(poi.address.postal_code);
-    }
-    
-    if (addressParts.length > 0) {
-      return addressParts.join(', ');
-    }
-    
-    // Fallback to coordinates if no address
-    return `${poi.lat}, ${poi.lon}`;
-  }
-
-  // Build Google Maps specific query (prioritizes address for precision)
-  const buildGoogleMapsQuery = (poi: EnrichedPoi): string => {
-    // Google Maps works well with "Name, Address" format
-    if (poi.address?.street && poi.address?.city) {
-      return `${poi.name}, ${poi.address.street}, ${poi.address.city}`;
-    }
-    
-    // If we have partial address, use what we have
-    if (poi.address?.street || poi.address?.city) {
-      const addressParts = [];
-      if (poi.address?.street) addressParts.push(poi.address.street);
-      if (poi.address?.city) addressParts.push(poi.address.city);
-      return `${poi.name}, ${addressParts.join(', ')}`;
-    }
-    
-    // Fallback to name with coordinates for precision
-    return `${poi.name} at ${poi.lat}, ${poi.lon}`;
-  }
-
-  // Build Apple Maps specific query (works well with address + name)
-  const buildAppleMapsQuery = (poi: EnrichedPoi): string => {
-    // Apple Maps works well with "Name, Address" format
-    if (poi.address?.street && poi.address?.city) {
-      return `${poi.name}, ${poi.address.street}, ${poi.address.city}`;
-    }
-    
-    return buildSearchQuery(poi);
-  }
-
   return (
     <Card className="relative h-full overflow-hidden flex flex-col">
       <CardHeader className="pb-3 flex-shrink-0">
@@ -516,41 +426,11 @@ export default function PointsOfInterest({
                                       map_service: 'google_maps'
                                     });
                                     
-                                    // Google Maps: Use name + address format, fallback to coordinates
-                                    const searchQuery = buildGoogleMapsQuery(poi);
+                                    // Google Maps: Use coordinates for precision
                                     
                                     // Debug logging in development
                                     if (process.env.NODE_ENV === 'development') {
                                       console.log('[GPS Link] Google Maps:', {
-                                        poi_name: poi.name,
-                                        search_query: searchQuery,
-                                        address: poi.address,
-                                        coordinates: `${poi.lat}, ${poi.lon}`
-                                      });
-                                    }
-                                    
-                                    window.open(
-                                      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`,
-                                      "_blank"
-                                    );
-                                  }}
-                                >
-                                  Open in Google Maps
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    track(ANALYTICS_EVENTS.POI_EXTERNAL_LINK_CLICKED, {
-                                      poi_id: poi.osm_id || `${poi.lat}-${poi.lon}`,
-                                      poi_name: poi.name,
-                                      map_service: 'google_maps_coordinates'
-                                    });
-                                    
-                                    // Google Maps: Direct coordinates (alternative when search doesn't work)
-                                    
-                                    // Debug logging in development
-                                    if (process.env.NODE_ENV === 'development') {
-                                      console.log('[GPS Link] Google Maps (Coordinates):', {
                                         poi_name: poi.name,
                                         coordinates: `${poi.lat}, ${poi.lon}`,
                                         address: poi.address
@@ -563,7 +443,7 @@ export default function PointsOfInterest({
                                     );
                                   }}
                                 >
-                                  Open in Google Maps (Coordinates)
+                                  Open in Google Maps
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={(e) => {
@@ -574,24 +454,19 @@ export default function PointsOfInterest({
                                       map_service: 'apple_maps'
                                     });
                                     
-                                    // Apple Maps: Use address-only query for precision, fallback to name+address
-                                    const hasCompleteAddress = poi.address?.street && poi.address?.city;
-                                    const searchQuery = hasCompleteAddress 
-                                      ? buildAddressQuery(poi)
-                                      : buildAppleMapsQuery(poi);
+                                    // Apple Maps: Use coordinates for precision
                                     
                                     // Debug logging in development
                                     if (process.env.NODE_ENV === 'development') {
                                       console.log('[GPS Link] Apple Maps:', {
                                         poi_name: poi.name,
-                                        has_complete_address: hasCompleteAddress,
-                                        search_query: searchQuery,
+                                        coordinates: `${poi.lat}, ${poi.lon}`,
                                         address: poi.address
                                       });
                                     }
                                     
                                     window.open(
-                                      `http://maps.apple.com/?q=${encodeURIComponent(searchQuery)}`,
+                                      `http://maps.apple.com/?ll=${poi.lat},${poi.lon}`,
                                       "_blank"
                                     );
                                   }}
@@ -607,7 +482,7 @@ export default function PointsOfInterest({
                                       map_service: 'waze'
                                     });
                                     
-                                    // Waze: Always use coordinates for maximum precision
+                                    // Waze: Use coordinates for precision
                                     
                                     // Debug logging in development
                                     if (process.env.NODE_ENV === 'development') {
