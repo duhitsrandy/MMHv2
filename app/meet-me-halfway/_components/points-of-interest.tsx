@@ -312,13 +312,21 @@ export default function PointsOfInterest({
 
   // Build Google Maps specific query (prioritizes address for precision)
   const buildGoogleMapsQuery = (poi: EnrichedPoi): string => {
-    // If we have a complete address, use that for precision
+    // Google Maps works well with "Name, Address" format
     if (poi.address?.street && poi.address?.city) {
-      return `${poi.address.street}, ${poi.address.city}, ${poi.address.state || ''} ${poi.address.postal_code || ''}`.trim();
+      return `${poi.name}, ${poi.address.street}, ${poi.address.city}`;
     }
     
-    // Otherwise use the full search query
-    return buildSearchQuery(poi);
+    // If we have partial address, use what we have
+    if (poi.address?.street || poi.address?.city) {
+      const addressParts = [];
+      if (poi.address?.street) addressParts.push(poi.address.street);
+      if (poi.address?.city) addressParts.push(poi.address.city);
+      return `${poi.name}, ${addressParts.join(', ')}`;
+    }
+    
+    // Fallback to name with coordinates for precision
+    return `${poi.name} at ${poi.lat}, ${poi.lon}`;
   }
 
   // Build Apple Maps specific query (works well with address + name)
@@ -508,19 +516,16 @@ export default function PointsOfInterest({
                                       map_service: 'google_maps'
                                     });
                                     
-                                    // Google Maps: Use address-only query for precision, fallback to full query
-                                    const hasCompleteAddress = poi.address?.street && poi.address?.city;
-                                    const searchQuery = hasCompleteAddress 
-                                      ? buildAddressQuery(poi)
-                                      : buildGoogleMapsQuery(poi);
+                                    // Google Maps: Use name + address format, fallback to coordinates
+                                    const searchQuery = buildGoogleMapsQuery(poi);
                                     
                                     // Debug logging in development
                                     if (process.env.NODE_ENV === 'development') {
                                       console.log('[GPS Link] Google Maps:', {
                                         poi_name: poi.name,
-                                        has_complete_address: hasCompleteAddress,
                                         search_query: searchQuery,
-                                        address: poi.address
+                                        address: poi.address,
+                                        coordinates: `${poi.lat}, ${poi.lon}`
                                       });
                                     }
                                     
@@ -531,6 +536,34 @@ export default function PointsOfInterest({
                                   }}
                                 >
                                   Open in Google Maps
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    track(ANALYTICS_EVENTS.POI_EXTERNAL_LINK_CLICKED, {
+                                      poi_id: poi.osm_id || `${poi.lat}-${poi.lon}`,
+                                      poi_name: poi.name,
+                                      map_service: 'google_maps_coordinates'
+                                    });
+                                    
+                                    // Google Maps: Direct coordinates (alternative when search doesn't work)
+                                    
+                                    // Debug logging in development
+                                    if (process.env.NODE_ENV === 'development') {
+                                      console.log('[GPS Link] Google Maps (Coordinates):', {
+                                        poi_name: poi.name,
+                                        coordinates: `${poi.lat}, ${poi.lon}`,
+                                        address: poi.address
+                                      });
+                                    }
+                                    
+                                    window.open(
+                                      `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
+                                      "_blank"
+                                    );
+                                  }}
+                                >
+                                  Open in Google Maps (Coordinates)
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={(e) => {
