@@ -9,6 +9,9 @@ import { Inter } from "next/font/google"
 
 import { AuthProvider } from "@/components/auth/auth-provider"
 import { ThemeProvider } from "@/components/providers/theme-provider"
+import { CSPostHogProvider } from "@/components/utilities/posthog/posthog-provider"
+import { PostHogPageview } from "@/components/utilities/posthog/posthog-pageview"
+import { PostHogUserIdentify } from "@/components/utilities/posthog/posthog-user-identity"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -40,9 +43,15 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
-        </ThemeProvider>
+        <CSPostHogProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              {children}
+              <PostHogPageview />
+              <PostHogUserIdentify />
+            </AuthProvider>
+          </ThemeProvider>
+        </CSPostHogProvider>
       </body>
     </html>
   )
