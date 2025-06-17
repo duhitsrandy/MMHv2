@@ -115,7 +115,7 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 min-h-screen py-12 sm:py-16">
+    <div className="bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-80px)] py-12 sm:py-16">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <div className="mx-auto max-w-4xl text-center">
           <h1 className="text-base font-semibold leading-7 text-blue-600 dark:text-blue-400">Pricing</h1>
