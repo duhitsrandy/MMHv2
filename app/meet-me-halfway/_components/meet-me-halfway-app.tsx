@@ -180,7 +180,10 @@ export default function MeetMeHalfwayApp() {
     setAppState("input")
   }
 
-  // Show loading state while user data loads
+  // Show loading state while critical data loads
+  console.log('[Debug] Loading check:', { isLoaded, isSignedIn, isLoading, isPlanLoading });
+  
+  // Only show loading if auth isn't loaded, or if user data is still loading (but not plan loading)
   if (!isLoaded || (isSignedIn && isLoading)) {
     return (
       <div className="container mx-auto max-w-7xl px-4 py-4 sm:py-8">
@@ -200,6 +203,8 @@ export default function MeetMeHalfwayApp() {
       </div>
     )
   }
+
+
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-4 sm:py-8">

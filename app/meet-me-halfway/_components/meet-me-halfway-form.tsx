@@ -64,6 +64,8 @@ export default function MeetMeHalfwayForm({
   const maxLocations = getMaxLocations(plan);
   const canAddLocation = origins.length < maxLocations;
 
+
+
   const handleOriginAddressChange = (index: number, value: string) => {
     setOrigins(currentOrigins =>
       currentOrigins.map((origin, i) =>
@@ -179,20 +181,28 @@ export default function MeetMeHalfwayForm({
         isPlanLoading,
         originsLength: origins.length,
         maxLocations,
+        onOpenUpgradeModal: typeof onOpenUpgradeModal,
+        buttonDisabled: !canAddLocation || isLoading || isPlanLoading
      });
      if (!canAddLocation) {
+          console.log('[Add Origin] Cannot add location, checking plan...');
           if ((plan === 'starter' || plan === null) && !isPlanLoading) {
+            console.log('[Add Origin] Opening upgrade modal for starter plan');
             onOpenUpgradeModal?.();
           } else {
+            console.log('[Add Origin] Showing toast for max reached');
             toast.info(`Maximum of ${maxLocations} locations reached for ${plan} tier.`);
           }
           return;
       }
+      console.log('[Add Origin] Adding new origin location');
       setOrigins(currentOrigins => {
         const newOrigins = [
           ...currentOrigins,
           { id: `origin-${Date.now()}-${currentOrigins.length}`, address: '', selectedLocationId: 'custom', isSaving: false }
         ];
+        
+        console.log('[Add Origin] New origins array:', newOrigins);
         
         // Track location addition
         trackLocationChange('added', newOrigins.length);
@@ -395,7 +405,7 @@ export default function MeetMeHalfwayForm({
                  </div>
                </div>
 
-              {locations.length > 0 && (
+              {locations.length > 0 ? (
                 <Select
                   value={origin.selectedLocationId}
                   onValueChange={(value) => handleOriginLocationSelect(index, value)}
@@ -413,6 +423,10 @@ export default function MeetMeHalfwayForm({
                     ))}
                   </SelectContent>
                 </Select>
+              ) : (
+                <div className="text-sm text-muted-foreground p-2 border border-dashed rounded">
+                  No saved locations yet. Save your first location using the bookmark button.
+                </div>
               )}
 
               <div className="pt-2">
@@ -435,14 +449,17 @@ export default function MeetMeHalfwayForm({
                      variant="outline"
                      className="w-full h-12 sm:h-10 text-base sm:text-sm"
                      onClick={addOrigin}
-                     disabled={!canAddLocation || isLoading || isPlanLoading}
+                     disabled={isLoading || isPlanLoading}
                      aria-label="Add another location"
                  >
                     <PlusCircle className="mr-2 h-4 w-4" />
                      <span className="truncate">
-                       Add Location
-                       {!canAddLocation && (plan === 'starter' || plan === null) && !isPlanLoading && ' (Upgrade for more)'}
-                       {!canAddLocation && plan && plan !== 'starter' && ` (Max ${maxLocations} reached)`}
+                       {!canAddLocation && (plan === 'starter' || plan === null) && !isPlanLoading 
+                         ? 'Add Location (Upgrade for more)'
+                         : !canAddLocation && plan && plan !== 'starter' 
+                         ? `Add Location (Max ${maxLocations} reached)`
+                         : 'Add Location'
+                       }
                      </span>
                  </Button>
            </div>
