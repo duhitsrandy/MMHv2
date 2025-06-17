@@ -1,9 +1,28 @@
-import { pgTable, foreignKey, pgPolicy, uuid, text, timestamp, index, boolean, unique, varchar, integer, pgEnum } from "drizzle-orm/pg-core"
+import { pgTable, index, uuid, text, timestamp, integer, json, foreignKey, boolean, unique, varchar, pgEnum } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 export const membershipEnum = pgEnum("membership_enum", ['starter', 'plus', 'pro', 'business'])
 export const poiType = pgEnum("poi_type", ['restaurant', 'cafe', 'park', 'bar', 'library', 'other'])
 
+
+export const searches = pgTable("searches", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	userId: text("user_id").notNull(),
+	startLocationAddress: text("start_location_address"),
+	startLocationLat: text("start_location_lat"),
+	startLocationLng: text("start_location_lng"),
+	endLocationAddress: text("end_location_address"),
+	endLocationLat: text("end_location_lat"),
+	endLocationLng: text("end_location_lng"),
+	midpointLat: text("midpoint_lat"),
+	midpointLng: text("midpoint_lng"),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
+	originCount: integer("origin_count").default(2),
+	searchMetadata: json("search_metadata"),
+}, (table) => [
+	index("searches_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
+]);
 
 export const pois = pgTable("pois", {
 	id: uuid().defaultRandom().primaryKey().notNull(),
@@ -24,29 +43,16 @@ export const pois = pgTable("pois", {
 			foreignColumns: [searches.id],
 			name: "pois_search_id_searches_id_fk"
 		}).onDelete("cascade"),
-	pgPolicy("Allow authenticated users to select", { as: "permissive", for: "select", to: ["public"], using: sql`(auth.uid() IS NOT NULL)` }),
 ]);
 
-export const searches = pgTable("searches", {
+export const todos = pgTable("todos", {
 	id: uuid().defaultRandom().primaryKey().notNull(),
 	userId: text("user_id").notNull(),
-	startLocationAddress: text("start_location_address").notNull(),
-	startLocationLat: text("start_location_lat").notNull(),
-	startLocationLng: text("start_location_lng").notNull(),
-	endLocationAddress: text("end_location_address").notNull(),
-	endLocationLat: text("end_location_lat").notNull(),
-	endLocationLng: text("end_location_lng").notNull(),
-	midpointLat: text("midpoint_lat").notNull(),
-	midpointLng: text("midpoint_lng").notNull(),
+	content: text().notNull(),
+	completed: boolean().default(false).notNull(),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
-}, (table) => [
-	index("searches_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
-	pgPolicy("Users can delete their own searches.", { as: "permissive", for: "delete", to: ["authenticated"], using: sql`((( SELECT auth.uid() AS uid))::text = user_id)` }),
-	pgPolicy("Users can insert searches.", { as: "permissive", for: "insert", to: ["authenticated"] }),
-	pgPolicy("Users can select their own searches.", { as: "permissive", for: "select", to: ["authenticated"] }),
-	pgPolicy("Users can update their own searches.", { as: "permissive", for: "update", to: ["authenticated"] }),
-]);
+});
 
 export const locations = pgTable("locations", {
 	id: uuid().defaultRandom().primaryKey().notNull(),
@@ -59,24 +65,6 @@ export const locations = pgTable("locations", {
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	index("locations_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
-	pgPolicy("delete_policy", { as: "permissive", for: "delete", to: ["public"], using: sql`(auth.uid() IS NOT NULL)` }),
-	pgPolicy("insert_policy", { as: "permissive", for: "insert", to: ["public"] }),
-	pgPolicy("select_policy", { as: "permissive", for: "select", to: ["public"] }),
-	pgPolicy("update_policy", { as: "permissive", for: "update", to: ["public"] }),
-]);
-
-export const todos = pgTable("todos", {
-	id: uuid().defaultRandom().primaryKey().notNull(),
-	userId: text("user_id").notNull(),
-	content: text().notNull(),
-	completed: boolean().default(false).notNull(),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
-}, (table) => [
-	pgPolicy("Users can delete their own todos.", { as: "permissive", for: "delete", to: ["authenticated"], using: sql`((( SELECT auth.uid() AS uid))::text = user_id)` }),
-	pgPolicy("Users can insert todos.", { as: "permissive", for: "insert", to: ["authenticated"] }),
-	pgPolicy("Users can select their own todos.", { as: "permissive", for: "select", to: ["authenticated"] }),
-	pgPolicy("Users can update their own todos.", { as: "permissive", for: "update", to: ["authenticated"] }),
 ]);
 
 export const profiles = pgTable("profiles", {
@@ -93,8 +81,23 @@ export const profiles = pgTable("profiles", {
 }, (table) => [
 	unique("profiles_stripe_customer_id_unique").on(table.stripeCustomerId),
 	unique("profiles_stripe_subscription_id_unique").on(table.stripeSubscriptionId),
-	pgPolicy("Users can delete their own profiles.", { as: "permissive", for: "delete", to: ["authenticated"], using: sql`((( SELECT auth.uid() AS uid))::text = user_id)` }),
-	pgPolicy("Users can insert profiles.", { as: "permissive", for: "insert", to: ["authenticated"] }),
-	pgPolicy("Users can select their own profiles.", { as: "permissive", for: "select", to: ["authenticated"] }),
-	pgPolicy("Users can update their own profiles.", { as: "permissive", for: "update", to: ["authenticated"] }),
+]);
+
+export const searchOrigins = pgTable("search_origins", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	searchId: uuid("search_id").notNull(),
+	orderIndex: integer("order_index").notNull(),
+	address: text().notNull(),
+	latitude: text().notNull(),
+	longitude: text().notNull(),
+	displayName: text("display_name"),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("search_origins_order_idx").using("btree", table.searchId.asc().nullsLast().op("int4_ops"), table.orderIndex.asc().nullsLast().op("int4_ops")),
+	index("search_origins_search_id_idx").using("btree", table.searchId.asc().nullsLast().op("uuid_ops")),
+	foreignKey({
+			columns: [table.searchId],
+			foreignColumns: [searches.id],
+			name: "search_origins_search_id_searches_id_fk"
+		}).onDelete("cascade"),
 ]);

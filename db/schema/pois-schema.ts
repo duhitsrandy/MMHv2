@@ -15,6 +15,7 @@ export const poisTable = pgTable("pois", {
   searchId: uuid("search_id")
     .references(() => searchesTable.id, { onDelete: "cascade" })
     .notNull(),
+  userId: text("user_id"),
   name: text("name").notNull(),
   address: text("address").notNull(),
   latitude: text("latitude").notNull(),

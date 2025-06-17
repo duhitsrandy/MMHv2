@@ -36,6 +36,20 @@
       "when": 1747609927119,
       "tag": "0004_foamy_the_santerians",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1750162702818,
+      "tag": "0005_happy_dexter_bennett",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1750163012279,
+      "tag": "0006_chemical_goliath",
+      "breakpoints": true
     }
   ]
 }

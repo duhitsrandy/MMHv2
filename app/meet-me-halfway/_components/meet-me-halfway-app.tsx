@@ -87,12 +87,12 @@ export default function MeetMeHalfwayApp() {
   const { tier, planInfo, isLoading: isPlanLoading, error: planError } = usePlan();
 
   // Callback for the search saver hook to update local state
-  const handleSearchSaved = useCallback((newSearch: Search) => {
+  const handleSearchSaved = useCallback((newSearch: any) => {
     setSearches((prevSearches) => [newSearch, ...prevSearches]);
   }, [setSearches]);
 
   // Use the search saver hook
-  const { saveSearch, isSaving: isSavingSearch, error: searchSaveError } = useSearchSaver({
+  const { saveSearch, saveMultiOriginSearch, isSaving: isSavingSearch, error: searchSaveError } = useSearchSaver({
     userId,
     onSearchSaved: handleSearchSaved
   });
@@ -149,27 +149,24 @@ export default function MeetMeHalfwayApp() {
     setAppData({ origins: data.origins }); // Set the array of origins
     setAppState("results"); // Switch view
 
-    // --- Save Search Logic (Adaptation Needed) ---
-    // For now, let's only save if exactly 2 origins were provided, using the old structure.
-    // TODO: Decide how to store multi-origin searches in the DB later (Phase 4 Optional).
-    if (data.origins.length === 2) {
-        const startOrigin = data.origins[0];
-        const endOrigin = data.origins[1];
-
-        // Map back to the structure expected by useSearchSaver
-        const newSearchData = {
-            startLocationAddress: startOrigin.display_name || "",
-            startLocationLat: startOrigin.lat,
-            startLocationLng: startOrigin.lng,
-            endLocationAddress: endOrigin.display_name || "",
-            endLocationLat: endOrigin.lat,
-            endLocationLng: endOrigin.lng,
-            midpointLat: "0", // Hook still expects these, though maybe not used
-            midpointLng: "0"
+    // --- Save Search Logic ---
+    // Use the new multi-origin search function to support any number of locations
+    if (data.origins.length >= 2) {
+        const searchData = {
+            origins: data.origins.map(origin => ({
+                address: origin.display_name || "",
+                latitude: origin.lat,
+                longitude: origin.lng,
+                displayName: origin.display_name
+            })),
+            searchMetadata: {
+                searchType: 'meet-me-halfway',
+                locationCount: data.origins.length
+            }
         };
-        await saveSearch(newSearchData); // Call the hook
+        await saveMultiOriginSearch(searchData);
     } else {
-        console.log("[App] Skipping save for multi-origin search (>2 locations).");
+        console.log("[App] Not enough origins to save search (need at least 2).");
     }
     // ----------------------------------------------
   }

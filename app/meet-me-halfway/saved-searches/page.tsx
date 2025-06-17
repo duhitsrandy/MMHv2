@@ -2,7 +2,7 @@
 
 import { Suspense } from "react"
 import { auth } from "@clerk/nextjs/server"
-import { getSearchesAction } from "@/actions/db/searches-actions"
+import { getSearchesWithOriginsAction } from "@/actions/db/searches-actions"
 import SavedSearchesList from "./_components/saved-searches-list"
 import {
   Card,
@@ -27,7 +27,7 @@ async function SavedSearchesContent() {
     )
   }
 
-  const searchesResult = await getSearchesAction(userId)
+  const searchesResult = await getSearchesWithOriginsAction(userId)
 
   if (!searchesResult.isSuccess) {
     return (

@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { searches, pois } from "./schema";
+import { searches, pois, searchOrigins } from "./schema";
 
 export const poisRelations = relations(pois, ({one}) => ({
 	search: one(searches, {
@@ -10,4 +10,12 @@ export const poisRelations = relations(pois, ({one}) => ({
 
 export const searchesRelations = relations(searches, ({many}) => ({
 	pois: many(pois),
+	searchOrigins: many(searchOrigins),
+}));
+
+export const searchOriginsRelations = relations(searchOrigins, ({one}) => ({
+	search: one(searches, {
+		fields: [searchOrigins.searchId],
+		references: [searches.id]
+	}),
 }));

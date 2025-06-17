@@ -1,0 +1,1 @@
+ALTER TABLE "pois" ADD COLUMN "user_id" text;
