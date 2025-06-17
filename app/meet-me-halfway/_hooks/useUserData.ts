@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { getLocationsAction } from '@/actions/db/locations-actions';
 import { getSearchesAction } from '@/actions/db/searches-actions';
-import { Location, Search } from '@/types';
+import { Location } from '@/types';
+import { SelectSearch } from '@/db/schema';
 
 export function useUserData(userId: string | null | undefined) {
   const [locations, setLocations] = useState<Location[]>([]);
-  const [searches, setSearches] = useState<Search[]>([]);
+  const [searches, setSearches] = useState<SelectSearch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search } from "@/types"
+import { SelectSearch } from "@/db/schema"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Trash2, ArrowRight } from "lucide-react"
@@ -10,11 +10,11 @@ import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
 interface RecentSearchesProps {
-  searches: Search[]
+  searches: SelectSearch[]
 }
 
 export default function RecentSearches({ searches }: RecentSearchesProps) {
-  const [localSearches, setLocalSearches] = useState<Search[]>(searches)
+  const [localSearches, setLocalSearches] = useState<SelectSearch[]>(searches)
   const router = useRouter()
 
   useEffect(() => {
@@ -32,13 +32,15 @@ export default function RecentSearches({ searches }: RecentSearchesProps) {
     }
   }
 
-  const handleRunSearchAgain = (search: Search) => {
-    const params = new URLSearchParams({
-      start: search.startLocationAddress,
-      end: search.endLocationAddress,
-      rerun: "true"
-    })
-    router.push(`/meet-me-halfway?${params.toString()}`)
+  const handleRunSearchAgain = (search: SelectSearch) => {
+    if (search.startLocationAddress && search.endLocationAddress) {
+      const params = new URLSearchParams({
+        start: search.startLocationAddress,
+        end: search.endLocationAddress,
+        rerun: "true"
+      })
+      router.push(`/meet-me-halfway?${params.toString()}`)
+    }
   }
 
   const displayedSearches = localSearches.slice(-5).reverse();
@@ -67,6 +69,7 @@ export default function RecentSearches({ searches }: RecentSearchesProps) {
                       size="icon"
                       onClick={() => handleRunSearchAgain(search)}
                       title="Run this search again"
+                      disabled={!search.startLocationAddress || !search.endLocationAddress}
                     >
                       <ArrowRight className="size-4" />
                     </Button>
@@ -82,11 +85,11 @@ export default function RecentSearches({ searches }: RecentSearchesProps) {
                 </div>
                 <div className="flex items-center text-sm">
                   <p className="max-w-[120px] truncate">
-                    {search.startLocationAddress}
+                    {search.startLocationAddress || 'Multi-origin search'}
                   </p>
                   <ArrowRight className="mx-1 size-3 shrink-0" />
                   <p className="max-w-[120px] truncate">
-                    {search.endLocationAddress}
+                    {search.endLocationAddress || `${search.originCount || 0} locations`}
                   </p>
                 </div>
               </div>
