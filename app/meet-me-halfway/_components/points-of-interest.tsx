@@ -286,6 +286,51 @@ export default function PointsOfInterest({
     return query.trim();
   }
 
+  // Build address-only query for more precise targeting
+  const buildAddressQuery = (poi: EnrichedPoi): string => {
+    const addressParts = [];
+    if (poi.address?.street) {
+      addressParts.push(poi.address.street);
+    }
+    if (poi.address?.city) {
+      addressParts.push(poi.address.city);
+    }
+    if (poi.address?.state) {
+      addressParts.push(poi.address.state);
+    }
+    if (poi.address?.postal_code) {
+      addressParts.push(poi.address.postal_code);
+    }
+    
+    if (addressParts.length > 0) {
+      return addressParts.join(', ');
+    }
+    
+    // Fallback to coordinates if no address
+    return `${poi.lat}, ${poi.lon}`;
+  }
+
+  // Build Google Maps specific query (prioritizes address for precision)
+  const buildGoogleMapsQuery = (poi: EnrichedPoi): string => {
+    // If we have a complete address, use that for precision
+    if (poi.address?.street && poi.address?.city) {
+      return `${poi.address.street}, ${poi.address.city}, ${poi.address.state || ''} ${poi.address.postal_code || ''}`.trim();
+    }
+    
+    // Otherwise use the full search query
+    return buildSearchQuery(poi);
+  }
+
+  // Build Apple Maps specific query (works well with address + name)
+  const buildAppleMapsQuery = (poi: EnrichedPoi): string => {
+    // Apple Maps works well with "Name, Address" format
+    if (poi.address?.street && poi.address?.city) {
+      return `${poi.name}, ${poi.address.street}, ${poi.address.city}`;
+    }
+    
+    return buildSearchQuery(poi);
+  }
+
   return (
     <Card className="relative h-full overflow-hidden flex flex-col">
       <CardHeader className="pb-3 flex-shrink-0">
@@ -463,8 +508,22 @@ export default function PointsOfInterest({
                                       map_service: 'google_maps'
                                     });
                                     
-                                    // Build search query with POI name and address for better results
-                                    const searchQuery = buildSearchQuery(poi);
+                                    // Google Maps: Use address-only query for precision, fallback to full query
+                                    const hasCompleteAddress = poi.address?.street && poi.address?.city;
+                                    const searchQuery = hasCompleteAddress 
+                                      ? buildAddressQuery(poi)
+                                      : buildGoogleMapsQuery(poi);
+                                    
+                                    // Debug logging in development
+                                    if (process.env.NODE_ENV === 'development') {
+                                      console.log('[GPS Link] Google Maps:', {
+                                        poi_name: poi.name,
+                                        has_complete_address: hasCompleteAddress,
+                                        search_query: searchQuery,
+                                        address: poi.address
+                                      });
+                                    }
+                                    
                                     window.open(
                                       `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`,
                                       "_blank"
@@ -482,8 +541,22 @@ export default function PointsOfInterest({
                                       map_service: 'apple_maps'
                                     });
                                     
-                                    // Build search query with POI name and address for better results
-                                    const searchQuery = buildSearchQuery(poi);
+                                    // Apple Maps: Use address-only query for precision, fallback to name+address
+                                    const hasCompleteAddress = poi.address?.street && poi.address?.city;
+                                    const searchQuery = hasCompleteAddress 
+                                      ? buildAddressQuery(poi)
+                                      : buildAppleMapsQuery(poi);
+                                    
+                                    // Debug logging in development
+                                    if (process.env.NODE_ENV === 'development') {
+                                      console.log('[GPS Link] Apple Maps:', {
+                                        poi_name: poi.name,
+                                        has_complete_address: hasCompleteAddress,
+                                        search_query: searchQuery,
+                                        address: poi.address
+                                      });
+                                    }
+                                    
                                     window.open(
                                       `http://maps.apple.com/?q=${encodeURIComponent(searchQuery)}`,
                                       "_blank"
@@ -501,24 +574,21 @@ export default function PointsOfInterest({
                                       map_service: 'waze'
                                     });
                                     
-                                    // Waze works well with both search queries and coordinates
-                                    // Try search query first for better POI identification, fallback to coordinates
-                                    const searchQuery = buildSearchQuery(poi);
-                                    const hasAddress = poi.address?.street || poi.address?.city;
+                                    // Waze: Always use coordinates for maximum precision
                                     
-                                    if (hasAddress) {
-                                      // Use search query if we have address information
-                                      window.open(
-                                        `https://www.waze.com/ul?q=${encodeURIComponent(searchQuery)}&navigate=yes`,
-                                        "_blank"
-                                      );
-                                    } else {
-                                      // Fallback to coordinates for more precise navigation
-                                      window.open(
-                                        `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
-                                        "_blank"
-                                      );
+                                    // Debug logging in development
+                                    if (process.env.NODE_ENV === 'development') {
+                                      console.log('[GPS Link] Waze:', {
+                                        poi_name: poi.name,
+                                        coordinates: `${poi.lat}, ${poi.lon}`,
+                                        address: poi.address
+                                      });
                                     }
+                                    
+                                    window.open(
+                                      `https://www.waze.com/ul?ll=${poi.lat},${poi.lon}&navigate=yes`,
+                                      "_blank"
+                                    );
                                   }}
                                 >
                                   Open in Waze
