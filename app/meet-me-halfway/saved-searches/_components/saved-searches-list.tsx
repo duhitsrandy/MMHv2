@@ -182,9 +182,7 @@ export default function SavedSearchesList({
                       }`} />
                       <div>
                         <p className="text-sm font-medium">
-                          {index === 0 ? 'Start' : 
-                           index === displayOrigins.length - 1 ? 'End' : 
-                           `Location ${index + 1}`}
+                          Location {index + 1}
                         </p>
                         <p className="text-muted-foreground text-sm">
                           {origin.address}

@@ -5,9 +5,10 @@ import { SelectSearch } from "@/db/schema"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Trash2, ArrowRight } from "lucide-react"
-import { deleteSearchAction } from "@/actions/db/searches-actions"
+import { deleteSearchAction, getSearchesWithOriginsAction } from "@/actions/db/searches-actions"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { useUser } from "@clerk/nextjs"
 
 interface RecentSearchesProps {
   searches: SelectSearch[]
@@ -16,6 +17,7 @@ interface RecentSearchesProps {
 export default function RecentSearches({ searches }: RecentSearchesProps) {
   const [localSearches, setLocalSearches] = useState<SelectSearch[]>(searches)
   const router = useRouter()
+  const { user } = useUser()
 
   useEffect(() => {
     setLocalSearches(searches);
@@ -32,14 +34,34 @@ export default function RecentSearches({ searches }: RecentSearchesProps) {
     }
   }
 
-  const handleRunSearchAgain = (search: SelectSearch) => {
-    // For multi-origin searches, we need to get the origins data
-    // Since recent searches doesn't have access to origins, we'll use a different approach
+  const handleRunSearchAgain = async (search: SelectSearch) => {
+    if (!user?.id) {
+      toast.error("User not authenticated")
+      return
+    }
+
+    // For multi-origin searches, we need to get the full search data with origins
     if (search.originCount && search.originCount > 2) {
-      // For multi-origin searches, redirect to saved searches where we have full origin data
-      toast.info("This multi-origin search is available in your Saved Searches. Redirecting...");
-      router.push('/meet-me-halfway/saved-searches');
-      return;
+      try {
+        const result = await getSearchesWithOriginsAction(user.id)
+        if (result.isSuccess && result.data) {
+          const fullSearch = result.data.find(s => s.id === search.id)
+          if (fullSearch && fullSearch.origins) {
+            const params = new URLSearchParams()
+            fullSearch.origins.forEach((origin, index) => {
+              params.append(`location${index}`, origin.displayName || origin.address)
+            })
+            params.set("rerun", "true")
+            router.push(`/meet-me-halfway?${params.toString()}`)
+            return
+          }
+        }
+        toast.error("Could not load search details")
+      } catch (error) {
+        toast.error("Error loading search details")
+        console.error("Error loading search details:", error)
+      }
+      return
     }
     
     // For legacy 2-location searches, use the old format
@@ -79,7 +101,7 @@ export default function RecentSearches({ searches }: RecentSearchesProps) {
                       size="icon"
                       onClick={() => handleRunSearchAgain(search)}
                       title="Run this search again"
-                      disabled={!search.startLocationAddress || !search.endLocationAddress}
+                      disabled={!search.startLocationAddress && !search.originCount}
                     >
                       <ArrowRight className="size-4" />
                     </Button>

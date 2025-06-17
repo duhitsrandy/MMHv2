@@ -3,7 +3,7 @@
 import { db } from "@/db/db"
 import { InsertSearch, SelectSearch, searchesTable, InsertSearchOrigin, searchOriginsTable } from "@/db/schema"
 import { ActionState } from "@/types"
-import { and, eq } from "drizzle-orm"
+import { and, eq, desc, asc } from "drizzle-orm"
 import { auth } from "@clerk/nextjs/server";
 
 // Legacy format for backward compatibility
@@ -118,7 +118,7 @@ export async function getSearchesAction(
   try {
     const searches = await db.query.searches.findMany({
       where: eq(searchesTable.userId, targetUserId),
-      orderBy: (searches) => [searches.createdAt]
+      orderBy: (searches) => [desc(searches.createdAt)]
     })
     return {
       isSuccess: true,
@@ -255,7 +255,7 @@ export async function getSearchesWithOriginsAction(
   try {
     const searches = await db.query.searches.findMany({
       where: eq(searchesTable.userId, targetUserId),
-      orderBy: (searches) => [searches.createdAt]
+      orderBy: (searches) => [desc(searches.createdAt)]
     });
 
     // Get origins for each search
