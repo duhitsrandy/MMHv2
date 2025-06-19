@@ -388,11 +388,13 @@ export default function PointsOfInterest({
                                           <td className="py-0.5 truncate" title={originName || `Location ${info.sourceIndex + 1}`}>
                                             {originLabel}
                                           </td>
-                                          <td className="py-0.5 text-right whitespace-nowrap">
-                                            {durationText}
-                                            {plan && plan === 'pro' && info.duration !== null && (
-                                              <span className="text-green-600 ml-1 text-xs font-semibold" title="Travel time includes real-time traffic conditions">(Live)</span>
-                                            )}
+                                          <td className="py-0.5 text-right">
+                                            <div className="flex flex-col items-end gap-0.5">
+                                              <span className="whitespace-nowrap">{durationText}</span>
+                                              {plan && plan === 'pro' && info.duration !== null && (
+                                                <span className="text-green-600 text-xs font-semibold leading-none" title="Travel time includes real-time traffic conditions">(Live)</span>
+                                              )}
+                                            </div>
                                           </td>
                                           <td className="py-0.5 text-right whitespace-nowrap">{distanceText}</td>
                                         </tr>

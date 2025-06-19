@@ -307,11 +307,13 @@ function createPopupContent(poi: EnrichedPoi, originLocations: GeocodedOrigin[],
       
       content += '<tr>';
       content += `<td class="py-0.5 truncate" title="${originName || `Location ${info.sourceIndex + 1}`}">${originLabel}</td>`;
-      content += '<td class="py-0.5 text-right whitespace-nowrap">';
-      content += durationText;
+      content += '<td class="py-0.5 text-right">';
+      content += '<div class="flex flex-col items-end gap-0.5">';
+      content += `<span class="whitespace-nowrap">${durationText}</span>`;
       if (plan && plan === 'pro' && info.duration !== null) {
-        content += '<span class="text-green-500 ml-1 text-xs font-semibold" title="Includes real-time traffic">(Live)</span>';
+        content += '<span class="text-green-500 text-xs font-semibold leading-none" title="Includes real-time traffic">(Live)</span>';
       }
+      content += '</div>';
       content += '</td>';
       content += `<td class="py-0.5 text-right whitespace-nowrap">${distanceText}</td>`;
       content += '</tr>';
