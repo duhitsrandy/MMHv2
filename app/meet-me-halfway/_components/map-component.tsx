@@ -299,21 +299,20 @@ function createPopupContent(poi: EnrichedPoi, originLocations: GeocodedOrigin[],
 
     poi.travelInfo.forEach((info) => {
       const originName = originLocations[info.sourceIndex]?.display_name;
+      // Reduce origin label length to make room for Live tag
       const originLabel = originName 
-        ? (originName.length > 25 ? originName.substring(0, 25) + '...' : originName)
+        ? (originName.length > 18 ? originName.substring(0, 18) + '...' : originName)
         : `Loc ${info.sourceIndex + 1}`;
       const durationText = info.duration != null ? `${Math.round(info.duration / 60)} min` : "N/A";
       const distanceText = info.distance != null ? `${Math.round((info.distance / 1000) * 0.621371)} mi` : "N/A";
       
       content += '<tr>';
       content += `<td class="py-0.5 truncate" title="${originName || `Location ${info.sourceIndex + 1}`}">${originLabel}</td>`;
-      content += '<td class="py-0.5 text-right">';
-      content += '<div class="flex flex-col items-end gap-0.5">';
-      content += `<span class="whitespace-nowrap">${durationText}</span>`;
+      content += '<td class="py-0.5 text-right whitespace-nowrap">';
       if (plan && plan === 'pro' && info.duration !== null) {
-        content += '<span class="text-green-500 text-xs font-semibold leading-none" title="Includes real-time traffic">(Live)</span>';
+        content += '<span class="text-green-500 text-xs font-semibold mr-1" title="Includes real-time traffic">(Live)</span>';
       }
-      content += '</div>';
+      content += durationText;
       content += '</td>';
       content += `<td class="py-0.5 text-right whitespace-nowrap">${distanceText}</td>`;
       content += '</tr>';

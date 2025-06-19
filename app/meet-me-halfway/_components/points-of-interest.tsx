@@ -376,8 +376,9 @@ export default function PointsOfInterest({
                                   <tbody>
                                     {poi.travelInfo.map(info => {
                                       const originName = origins[info.sourceIndex]?.display_name;
+                                      // Reduce origin label length to make room for Live tag
                                       const originLabel = originName 
-                                        ? (originName.length > 30 ? originName.substring(0, 30) + '...' : originName)
+                                        ? (originName.length > 20 ? originName.substring(0, 20) + '...' : originName)
                                         : `Loc ${info.sourceIndex + 1}`;
                                       
                                       const durationText = formatDuration(info.duration);
@@ -388,13 +389,11 @@ export default function PointsOfInterest({
                                           <td className="py-0.5 truncate" title={originName || `Location ${info.sourceIndex + 1}`}>
                                             {originLabel}
                                           </td>
-                                          <td className="py-0.5 text-right">
-                                            <div className="flex flex-col items-end gap-0.5">
-                                              <span className="whitespace-nowrap">{durationText}</span>
-                                              {plan && plan === 'pro' && info.duration !== null && (
-                                                <span className="text-green-600 text-xs font-semibold leading-none" title="Travel time includes real-time traffic conditions">(Live)</span>
-                                              )}
-                                            </div>
+                                          <td className="py-0.5 text-right whitespace-nowrap">
+                                            {plan && plan === 'pro' && info.duration !== null && (
+                                              <span className="text-green-600 text-xs font-semibold mr-1" title="Travel time includes real-time traffic conditions">(Live)</span>
+                                            )}
+                                            {durationText}
                                           </td>
                                           <td className="py-0.5 text-right whitespace-nowrap">{distanceText}</td>
                                         </tr>
