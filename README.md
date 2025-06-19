@@ -294,3 +294,4 @@ This setup syncs user data to the database on events.
 _Last updated: [DATE]_
 
 <!-- Webhook fix: Updated CLERK_WEBHOOK_SECRET - 2025-06-16 -->
+# PostHog client-side tracking fixed Wed Jun 18 22:01:03 EDT 2025
