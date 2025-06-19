@@ -18,14 +18,16 @@ Meet Me Halfway uses Stripe for subscription management and billing. This docume
 
 ### Plus
 - **Pricing**:
-  - Weekly: $2.49/week
-  - Monthly: $9/month
-  - Annually: $90/year (equivalent to $7.50/month)
+  - Weekly: $1.49/week
+  - Monthly: $4.99/month
+  - Annually: $49/year (equivalent to ~$4.08/month)
 - **Features**:
   - Up to 3 locations for midpoint calculation
-  - Faster route calculations
+  - Ad-free experience
   - Save up to 10 favorite locations
-  - Basic email support
+  - Priority email support
+- **Limitations**:
+  - Basic routing only (no traffic data)
 - **Stripe Price IDs**:
   - Weekly: `STRIPE_PRICE_PLUS_WEEKLY`
   - Monthly: `STRIPE_PRICE_PLUS_MONTHLY`

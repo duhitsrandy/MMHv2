@@ -18,10 +18,10 @@ Meet Me Halfway is a production-ready Next.js SaaS application that helps users 
 - **Routing**: Basic routing via OSRM/ORS
 - **Features**: Standard place search, community support
 
-### Plus ($9/month, $90/year)
+### Plus ($4.99/month, $49/year)
 - **Locations**: 3 maximum
-- **Routing**: Faster calculations, saved locations (up to 10)
-- **Features**: Basic email support
+- **Routing**: Basic routing (no traffic data)
+- **Features**: Ad-free experience, saved locations (up to 10), priority email support
 
 ### Pro ($19/month, $190/year)
 - **Locations**: 5 maximum

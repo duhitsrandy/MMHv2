@@ -125,13 +125,15 @@ User profile information, including membership status and Stripe details, is sto
 ```typescript
 import { pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core"
 
-export const membershipEnum = pgEnum("membership", ["free", "pro"])
+export const membershipEnum = pgEnum("membership", ["starter", "plus", "pro", "business"])
 
 export const profilesTable = pgTable("profiles", {
   userId: text("user_id").primaryKey().notNull(), // Links to Clerk User ID
-  membership: membershipEnum("membership").notNull().default("free"),
+  membership: membershipEnum("membership").notNull().default("starter"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  stripePriceId: text("stripe_price_id"),
+  seatCount: text("seat_count").default("1"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()

@@ -6,6 +6,7 @@ The root server layout for the app.
 
 import { type Metadata, type Viewport } from "next"
 import { Inter } from "next/font/google"
+import Script from "next/script"
 
 import { AuthProvider } from "@/components/auth/auth-provider"
 import { ThemeProvider } from "@/components/providers/theme-provider"
@@ -147,6 +148,20 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
+        {/* 
+          Future Script Lazy Loading Examples:
+          
+          Google AdSense (when implemented):
+          - Use strategy="lazyOnload" for non-critical scripts
+          - Add crossOrigin="anonymous" for external scripts
+          
+          Google Analytics (if added):
+          - Use strategy="lazyOnload" for analytics
+          - Load after page interaction starts
+          
+          Pattern: All non-critical third-party scripts should use lazyOnload strategy
+        */}
+
         <CSPostHogProvider>
           <ThemeProvider>
             <AuthProvider>

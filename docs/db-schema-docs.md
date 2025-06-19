@@ -36,13 +36,14 @@ CLERK_WEBHOOK_SECRET= # From Clerk Dashboard -> Webhooks -> Endpoint signing sec
 ```typescript
 import { pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core"
 
-export const membershipEnum = pgEnum("membership", ["free", "pro"])
+export const membershipEnum = pgEnum("membership", ["starter", "plus", "pro", "business"])
 
 export const profilesTable = pgTable("profiles", {
   userId: text("user_id").primaryKey().notNull(),
-  membership: membershipEnum("membership").notNull().default("free"),
+  membership: membershipEnum("membership").notNull().default("starter"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  seatCount: text("seat_count").default("1"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -225,7 +226,7 @@ export type SelectLocation = typeof locationsTable.$inferSelect
 - `travelTimeFromStart` and `travelTimeFromEnd` are stored as `text`. Consider changing to `integer` (representing seconds or minutes) or `interval` type for easier calculations.
 
 ### 3. Enums
-- `membership`: ["free", "pro"]
+- `membership`: ["starter", "plus", "pro", "business"]
 - `poi_type`: ["restaurant", "cafe", "park", "bar", "library", "other"]
 
 ### 4. UUIDs
@@ -276,9 +277,10 @@ npm run db:migrate
 ```json
 {
   "user_id": "user_123",
-  "membership": "free",
+  "membership": "starter",
   "stripe_customer_id": null,
   "stripe_subscription_id": null,
+  "seat_count": "1",
   "created_at": "2024-01-01T00:00:00Z",
   "updated_at": "2024-01-01T00:00:00Z"
 }

@@ -14,8 +14,27 @@ Configures Next.js for the app.
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    remotePatterns: [{ hostname: "localhost" }]
-  }
+    remotePatterns: [
+      { hostname: "localhost" },
+      { hostname: "www.youtube.com" },
+      { hostname: "i.ytimg.com" },
+    ],
+    formats: ['image/webp', 'image/avif'],
+    minimumCacheTTL: 31536000, // 1 year cache for static images
+    dangerouslyAllowSVG: true,
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+  },
+  // Enable static exports for better performance (if applicable)
+  // trailingSlash: true,
+  // output: 'export', // Only if you want static export
+  
+  // Optimize chunks and reduce bundle size
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'framer-motion'],
+  },
+  
+  // Compress images and optimize assets
+  compress: true,
 }
 
 const bundleAnalyzer = withBundleAnalyzer({

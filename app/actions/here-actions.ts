@@ -1,6 +1,6 @@
 "use server";
 
-import { requirePlusPlan } from "@/lib/auth/plan";
+import { requireProPlan } from "@/lib/auth/plan";
 import {
   getTravelTimeMatrixHere,
 } from "@/lib/providers/here-platform";
@@ -24,8 +24,8 @@ interface MatrixActionParams {
 // Action name reflects matrix calculation
 export async function getTrafficMatrixHereAction(params: MatrixActionParams) {
   try {
-    // Ensure user is on a Plus plan or higher
-    await requirePlusPlan();
+    // Ensure user is on a Pro plan or higher
+    await requireProPlan();
 
     const result = await getTravelTimeMatrixHere({
       origins: params.origins,

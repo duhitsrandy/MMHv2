@@ -127,6 +127,30 @@ Global styles for the app.
   /* Optimize map rendering on mobile */
   .leaflet-container {
     touch-action: pan-x pan-y;
+    /* Prevent layout shift by reserving minimum height */
+    min-height: 400px;
+  }
+
+  /* Prevent layout shift for map containers */
+  .map-container {
+    /* Reserve height early to prevent CLS */
+    min-height: 600px;
+    aspect-ratio: 16 / 9;
+    background-color: rgb(243 244 246); /* gray-100 fallback */
+  }
+
+  .dark .map-container {
+    background-color: rgb(31 41 55); /* gray-800 fallback for dark mode */
+  }
+
+  /* Optimize image loading to prevent layout shift */
+  img[width][height] {
+    height: auto;
+  }
+
+  /* Improve loading performance */
+  img {
+    content-visibility: auto;
   }
 
   /* Custom scrollbar for mobile */
