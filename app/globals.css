@@ -172,4 +172,21 @@ Global styles for the app.
       background: rgba(0, 0, 0, 0.5);
     }
   }
+
+  /* iOS Safari viewport height fix - minimal and targeted */
+  @supports (-webkit-touch-callout: none) {
+    /* Only fix the specific calc() height that causes distortion */
+    .h-\[calc\(100vh-150px\)\] {
+      height: calc(100vh - 150px);
+      height: calc(100svh - 150px); /* Use small viewport height when available */
+    }
+    
+    /* Prevent iOS Safari address bar interference */
+    @media screen and (max-width: 768px) {
+      .h-\[calc\(100vh-150px\)\] {
+        height: calc(100vh - 120px);
+        height: calc(100svh - 120px);
+      }
+    }
+  }
 }
