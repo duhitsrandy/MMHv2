@@ -45,6 +45,17 @@ const purpleIcon = new L.Icon({
   shadowSize: [41, 41]
 })
 
+// Create a custom green icon for origin locations
+const greenIcon = new L.Icon({
+  iconUrl: "/leaflet/marker-icon-green.png",
+  iconRetinaUrl: "/leaflet/marker-icon-2x-green.png",
+  shadowUrl: "/leaflet/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+})
+
 // Create a custom green icon for origin locations (example)
 // const greenIcon = new L.Icon({
 //   iconUrl: "/leaflet/marker-icon-green.png",
@@ -67,7 +78,7 @@ const icons: Icons = {
   midpointIcon: redIcon,
   alternateMidpointIcon: purpleIcon,
   poiIcon: new L.Icon.Default(),
-  originIcon: new L.Icon.Default() as L.Icon,
+  originIcon: greenIcon,
 }
 
 interface MapComponentProps {
