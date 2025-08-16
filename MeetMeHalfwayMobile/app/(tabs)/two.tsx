@@ -6,12 +6,19 @@ import { useRouter } from 'expo-router';
 import { Text, View } from '@/components/Themed';
 import { usePoi } from '../contexts/PoiContext';
 
+type TravelInfo = {
+  duration: number | null; // seconds
+  distance: number | null; // meters
+  sourceIndex: number;
+};
+
 type PoiType = {
   lat: number;
   lng: number;
   name?: string;
   address?: string;
   type?: string;
+  travelInfo?: TravelInfo[];
 };
 
 export default function TabTwoScreen() {
@@ -60,6 +67,28 @@ export default function TabTwoScreen() {
     return '#3B82F6'; // blue default
   };
 
+  const formatDuration = (seconds: number | null): string => {
+    if (!seconds) return "N/A";
+    const minutes = Math.round(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}m`;
+    }
+    return `${mins}m`;
+  };
+
+  const formatDistance = (meters: number | null): string => {
+    if (!meters) return "N/A";
+    const miles = meters * 0.000621371;
+    if (miles >= 1) {
+      return `${miles.toFixed(1)} mi`;
+    } else {
+      const feet = Math.round(miles * 5280);
+      return `${feet} ft`;
+    }
+  };
+
   const renderPoiItem = ({ item }: { item: PoiType }) => (
     <View style={styles.poiItem}>
       <View style={styles.poiHeader}>
@@ -74,6 +103,21 @@ export default function TabTwoScreen() {
           )}
         </View>
       </View>
+
+      {/* Travel Time Information */}
+      {item.travelInfo && item.travelInfo.length > 0 && (
+        <View style={styles.travelInfoContainer}>
+          <Text style={styles.travelInfoTitle}>Travel Times:</Text>
+          {item.travelInfo.map((travel, idx) => (
+            <View key={idx} style={styles.travelInfoRow}>
+              <Text style={styles.travelInfoLabel}>From {String.fromCharCode(65 + idx)}:</Text>
+              <Text style={styles.travelInfoValue}>
+                {formatDuration(travel.duration)} • {formatDistance(travel.distance)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
       
       <View style={styles.viewMapContainer}>
         <TouchableOpacity 
@@ -205,6 +249,34 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     marginTop: 4,
     lineHeight: 16,
+  },
+  travelInfoContainer: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 12,
+  },
+  travelInfoTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  travelInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  travelInfoLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  travelInfoValue: {
+    fontSize: 11,
+    color: '#111827',
+    fontWeight: '600',
   },
   viewMapContainer: {
     marginBottom: 12,

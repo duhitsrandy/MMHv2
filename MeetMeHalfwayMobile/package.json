@@ -7,7 +7,7 @@
     "start": "expo start",
     "android": "expo start --android --port 8081",
     "preios": "bash -lc 'for p in 8081 8082 19000 19001; do lsof -ti tcp:$p | xargs kill -9 2>/dev/null || true; done; rm -rf $TMPDIR/metro-* node_modules/.cache/metro .expo 2>/dev/null || true'",
-    "ios": "expo start --ios --port 8081 --clear",
+    "ios": "expo start --ios --port 8081 --clear --reset-cache",
     "ios:reset-sim": "bash -lc 'xcrun simctl shutdown all 2>/dev/null || true; xcrun simctl erase all 2>/dev/null || true; open -a Simulator'",
     "web": "expo start --web --port 8081",
     "dev": "npm run ios",

@@ -1,11 +1,18 @@
 import React, { createContext, useContext, useState } from 'react';
 
+type TravelInfo = {
+  duration: number | null; // seconds
+  distance: number | null; // meters
+  sourceIndex: number;
+};
+
 type Poi = {
   lat: number;
   lng: number;
   name?: string;
   address?: string;
   type?: string;
+  travelInfo?: TravelInfo[];
 };
 
 type PoiContextType = {

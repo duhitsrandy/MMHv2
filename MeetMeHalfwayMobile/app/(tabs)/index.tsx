@@ -2,7 +2,7 @@ import { StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, Link
 import MapView, { Marker, Polyline, LatLng, Callout } from 'react-native-maps';
 import { useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
-import { geocodeAddress } from '../../src/services/api';
+import { geocodeAddress, getTravelTimeMatrix, calculateDistanceKm } from '../../src/services/api';
 import { getNearbyPois } from '../../src/services/poi';
 
 import EditScreenInfo from '@/components/EditScreenInfo';
@@ -129,6 +129,49 @@ export default function TabOneScreen() {
                   });
                 }
                 
+                // Calculate travel times and distances from origins to POIs
+                if (allPois.length > 0) {
+                  try {
+                    console.log('Calculating travel times for', allPois.length, 'POIs...');
+                    const origins = [a, b]; // Two origins for now
+                    const destinations = allPois.map(poi => ({ lat: poi.lat, lng: poi.lng }));
+                    
+                    const matrixResult = await getTravelTimeMatrix(origins, destinations);
+                    
+                    if (matrixResult && matrixResult.travelTimes && matrixResult.distances) {
+                      // Enrich POIs with travel information
+                      const enrichedPois = allPois.map((poi, poiIndex) => {
+                        const travelInfo = origins.map((origin, originIndex) => ({
+                          sourceIndex: originIndex,
+                          duration: matrixResult.travelTimes?.[originIndex]?.[poiIndex] || null,
+                          distance: matrixResult.distances?.[originIndex]?.[poiIndex] || null,
+                        }));
+                        
+                        return { ...poi, travelInfo };
+                      });
+                      
+                      allPois = enrichedPois;
+                      console.log('Successfully enriched POIs with travel times');
+                    } else {
+                      console.warn('Travel time matrix calculation failed, using fallback distances');
+                      // Fallback to simple distance calculations
+                      const enrichedPois = allPois.map(poi => {
+                        const travelInfo = origins.map((origin, originIndex) => ({
+                          sourceIndex: originIndex,
+                          duration: null, // No duration without routing
+                          distance: Math.round(calculateDistanceKm(origin.lat, origin.lng, poi.lat, poi.lng) * 1000), // Convert km to meters
+                        }));
+                        
+                        return { ...poi, travelInfo };
+                      });
+                      
+                      allPois = enrichedPois;
+                    }
+                  } catch (error) {
+                    console.error('Error calculating travel times:', error);
+                  }
+                }
+                
                 setPois(allPois);
               } catch (error) {
                 console.error('Route fetching error:', error);
@@ -192,6 +235,7 @@ export default function TabOneScreen() {
           )}
         </TouchableOpacity>
       </View>
+
       <Text style={{ paddingHorizontal: 16, alignSelf: 'flex-start' }}>POIs: {pois.length}</Text>
       {/* Simple Zoom Controls for Simulator */}
       <View style={styles.zoomControls} pointerEvents="box-none">
@@ -224,8 +268,23 @@ export default function TabOneScreen() {
         <MapView
           ref={mapRef}
           style={{ flex: 1, width: '100%' }}
-          initialRegion={initialRegion}
+          region={currentRegion || initialRegion}
           onRegionChangeComplete={(r) => setCurrentRegion(r)}
+          onMapReady={() => {
+            // Force map to render properly on mount
+            if (mapRef.current && initialRegion) {
+              setCurrentRegion(initialRegion);
+              setTimeout(() => {
+                mapRef.current?.animateToRegion(initialRegion, 300);
+              }, 500);
+            }
+          }}
+          showsUserLocation={true}
+          showsMyLocationButton={false}
+          showsCompass={true}
+          rotateEnabled={true}
+          pitchEnabled={true}
+          toolbarEnabled={false}
         >
           {userCoord && (
             <Marker coordinate={userCoord} title="You" pinColor="#64748B" />
@@ -271,23 +330,31 @@ export default function TabOneScreen() {
               pinColor={getPoiPinColor(p.type)}
               onPress={() => setSelectedPoi(p)}
             >
-              <Callout style={styles.callout} onPress={() => setSelectedPoi(p)}>
+              <Callout style={styles.callout}>
                 <View style={styles.calloutContent}>
-                  <View style={styles.calloutHeader}>
-                    <Text style={styles.calloutTitle}>{p.name || 'Unknown Location'}</Text>
-                    <TouchableOpacity 
-                      style={styles.closeButton}
-                      onPress={() => setSelectedPoi(null)}
-                    >
-                      <Text style={styles.closeButtonText}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <Text style={styles.calloutTitle}>{p.name || 'Unknown Location'}</Text>
                   <Text style={styles.calloutType}>{p.type || 'Location'}</Text>
                   {p.address && (
                     <Text style={styles.calloutAddress} numberOfLines={2}>
                       {p.address}
                     </Text>
                   )}
+                  
+                  {/* Travel Time Information */}
+                  {p.travelInfo && p.travelInfo.length > 0 && (
+                    <View style={styles.travelInfoContainer}>
+                      <Text style={styles.travelInfoTitle}>Travel Times:</Text>
+                      {p.travelInfo.map((travel, idx) => (
+                        <View key={idx} style={styles.travelInfoRow}>
+                          <Text style={styles.travelInfoLabel}>From {String.fromCharCode(65 + idx)}:</Text>
+                          <Text style={styles.travelInfoValue}>
+                            {formatDuration(travel.duration)} • {formatDistance(travel.distance)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  
                   <View style={styles.calloutButtons}>
                     <TouchableOpacity 
                       style={styles.calloutBtn}
@@ -317,6 +384,7 @@ export default function TabOneScreen() {
                       <Text style={styles.calloutBtnText}>Waze</Text>
                     </TouchableOpacity>
                   </View>
+                  <Text style={styles.calloutHint}>Tap outside to close</Text>
                 </View>
               </Callout>
             </Marker>
@@ -335,6 +403,28 @@ function getPoiPinColor(type?: string): string {
   if (t.includes('hotel') || t.includes('lodg')) return '#8B5CF6'; // violet
   if (t.includes('museum') || t.includes('library')) return '#10B981'; // emerald
   return '#3B82F6'; // blue default
+}
+
+function formatDuration(seconds: number | null): string {
+  if (!seconds) return "N/A";
+  const minutes = Math.round(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours > 0) {
+    return `${hours}h ${mins}m`;
+  }
+  return `${mins}m`;
+}
+
+function formatDistance(meters: number | null): string {
+  if (!meters) return "N/A";
+  const miles = meters * 0.000621371;
+  if (miles >= 1) {
+    return `${miles.toFixed(1)} mi`;
+  } else {
+    const feet = Math.round(miles * 5280);
+    return `${feet} ft`;
+  }
 }
 
 const styles = StyleSheet.create({
@@ -398,36 +488,17 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   callout: {
-    width: 250,
+    width: 280,
+    minHeight: 140,
   },
   calloutContent: {
     padding: 12,
-  },
-  calloutHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
   },
   calloutTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#111827',
-    flex: 1,
-    marginRight: 8,
-  },
-  closeButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeButtonText: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: 'bold',
+    marginBottom: 4,
   },
   calloutType: {
     fontSize: 14,
@@ -438,12 +509,41 @@ const styles = StyleSheet.create({
   calloutAddress: {
     fontSize: 12,
     color: '#9ca3af',
-    marginBottom: 12,
+    marginBottom: 8,
     lineHeight: 16,
+  },
+  travelInfoContainer: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 8,
+  },
+  travelInfoTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  travelInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  travelInfoLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  travelInfoValue: {
+    fontSize: 11,
+    color: '#111827',
+    fontWeight: '600',
   },
   calloutButtons: {
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 8,
   },
   calloutBtn: {
     flex: 1,
@@ -457,6 +557,12 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 11,
     fontWeight: '600',
+  },
+  calloutHint: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
 });
 
