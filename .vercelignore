@@ -1,0 +1,21 @@
+# Mobile app directory - not needed for web deployment
+MeetMeHalfwayMobile/
+
+# Development files
+*.log
+logs/
+test-*.js
+notepad_context
+
+# Mobile development files
+mobile-setup-guide.md
+pwa-conversion-guide.md
+
+# Documentation that's not needed for deployment
+docs/
+prompts/
+
+# Build artifacts
+.expo/
+*.expo/
+*.tgz

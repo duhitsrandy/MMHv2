@@ -35,6 +35,16 @@ const nextConfig = {
   
   // Compress images and optimize assets
   compress: true,
+  
+  // Exclude mobile app directory from compilation
+  webpack: (config, { isServer }) => {
+    // Ignore mobile app directory during build
+    config.watchOptions = {
+      ...config.watchOptions,
+      ignored: ['**/MeetMeHalfwayMobile/**', '**/node_modules/**'],
+    };
+    return config;
+  },
 }
 
 const bundleAnalyzer = withBundleAnalyzer({
