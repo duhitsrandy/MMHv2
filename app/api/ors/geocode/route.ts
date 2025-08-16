@@ -14,20 +14,13 @@ export async function POST(request: Request) {
 
     console.log('[Geocoding] Requesting geocoding for:', address);
 
-    const response = await fetch(
-      'https://api.openrouteservice.org/geocode/search',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': apiKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          text: address,
-          size: 1
-        })
-      }
-    );
+    const url = `https://api.openrouteservice.org/geocode/search?text=${encodeURIComponent(address)}&size=1`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': apiKey,
+      },
+    });
 
     if (!response.ok) {
       const errorText = await response.text();

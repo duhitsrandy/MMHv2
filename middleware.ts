@@ -59,24 +59,22 @@ export default clerkMiddleware(async (auth, req) => {
 
   // 2. Check if the request is for an API route (rate limiting)
   if (req.nextUrl.pathname.startsWith('/api/')) {
-    // Get the appropriate rate limit type based on the route
     const rateLimitType = getRateLimitType(req.nextUrl.pathname)
-    
-    // Apply rate limiting with the specific type
-    const rateLimitResult = await rateLimit({ type: rateLimitType })
-    
-    if (!rateLimitResult.success) {
-      // Get the auth object first
-      const { userId } = auth();
 
-      // Log the rate limit violation (userId will be null for anonymous/public routes)
+    // Use the auth context provided by Clerk middleware; avoid calling auth() inside the limiter
+    const { userId } = auth();
+    const identifier = rateLimitType === 'anonymous' ? undefined : (userId ?? req.ip ?? '127.0.0.1');
+
+    const rateLimitResult = await rateLimit({ type: rateLimitType, identifier })
+
+    if (!rateLimitResult.success) {
       console.warn(`Rate limit exceeded for ${rateLimitType} user`, {
         pathname: req.nextUrl.pathname,
         ip: req.ip,
-        userId: userId, // Use the userId from the auth() object (can be null)
+        userId: userId ?? null,
         limit: rateLimitResult.limit,
         remaining: rateLimitResult.remaining,
-        reset: new Date(rateLimitResult.reset * 1000).toISOString(), // Convert ms to ISO string
+        reset: new Date(rateLimitResult.reset * 1000).toISOString(),
       });
 
       return new NextResponse(JSON.stringify({

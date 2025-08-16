@@ -147,7 +147,7 @@ TO authenticated
 WITH CHECK (user_id = (SELECT auth.uid())::text);
 
 -- ============================================================================
--- 4. SECURE SEARCH_ORIGINS TABLE (MISSING FROM ORIGINAL!)
+-- 4. SECURE SEARCH_ORIGINS TABLE
 -- ============================================================================
 
 -- Drop ANY existing policies for search_origins table
@@ -208,7 +208,7 @@ USING (
 );
 
 -- ============================================================================
--- 5. SECURE PROFILES TABLE (MISSING FROM ORIGINAL!)
+-- 5. SECURE PROFILES TABLE
 -- ============================================================================
 
 -- Drop ANY existing policies for profiles table
@@ -244,7 +244,7 @@ TO authenticated
 USING (user_id = (SELECT auth.uid())::text);
 
 -- ============================================================================
--- 6. SECURE TODOS TABLE (MISSING FROM ORIGINAL!)
+-- 6. SECURE TODOS TABLE
 -- ============================================================================
 
 -- Drop ANY existing policies for todos table

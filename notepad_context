@@ -11,6 +11,37 @@ Notepad Name: Sonnet Roadmap
 
 ---
 
+## Mobile App Plan (Expo) — August 2025
+
+- ✅ Chosen stack: Expo + Expo Router + NativeWind + React Native Maps + Clerk Expo + Supabase
+- ✅ Scaffolded project: `MeetMeHalfwayMobile/` with tabs, RN maps example, Supabase connectivity check
+- ✅ Config: `app.json` updated (scheme `mmh`, iOS location permissions, Stripe plugin stub)
+- ✅ Auth shell: `ClerkProvider` wired in `app/_layout.tsx` using `expo-secure-store`
+- ✅ Data: `react-native-url-polyfill` and `AsyncStorage` added; Supabase client sample in `app/(tabs)/two.tsx`
+- ✅ API: `app/services/api.ts` uses absolute `EXPO_PUBLIC_API_BASE_URL`
+- ✅ Styling: NativeWind/Tailwind configured (`tailwind.config.js`, `postcss.config.js`, `babel.config.js`)
+
+### Env keys to add (EAS Secrets or local .env)
+- `EXPO_PUBLIC_API_BASE_URL`
+- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+
+### Next Steps
+- Implement screens: Home (origins form), Results (midpoint + POIs), Saved Searches, Profile
+- Replace web fetches with `API_BASE` endpoints; reuse existing Next.js API
+- Port map overlays (routes, midpoint, POI markers) to `react-native-maps`
+- Decide on iOS purchase compliance (RevenueCat or disable in-app purchase UI)
+- Configure deep links/universal links for Clerk sign-in
+- Set EAS projectId and run EAS build + TestFlight
+
+### Commands
+```
+cd /Users/randy/mmhv2/MeetMeHalfwayMobile
+npm run ios
+```
+
 ## **What's Currently Working (DO NOT CHANGE)**
 - ✅ Live traffic routing: Pro users automatically get HERE Matrix API
 - ✅ Plan detection and feature gating logic
