@@ -293,9 +293,10 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
                   destinationsString
                 );
 
-                if (!matrixResult.isSuccess || !matrixResult.data?.durations) {
-                  console.error('[MapData 2-origin] ORS Matrix fetch failed:', matrixResult.message)
-                  setMatrixError(matrixResult.message || 'Failed to fetch ORS travel times')
+                if (!matrixResult || !matrixResult.isSuccess || !matrixResult.data?.durations) {
+                  const errorMessage = matrixResult?.message || 'ORS Matrix API returned undefined or invalid response';
+                  console.error('[MapData 2-origin] ORS Matrix fetch failed:', errorMessage)
+                  setMatrixError(errorMessage)
                   finalCombinedPois = uniqueInitialPois.map(p => ({ ...p, travelInfo: [] }))
                 } else {
                   const poisWithTravelTimes = uniqueInitialPois.map((poi, poiIdx): EnrichedPoi => {
@@ -410,7 +411,7 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
 
               const hereMatrixResult = await getTrafficMatrixHereAction({ origins: hereOrigins, destinations: hereDestinations });
 
-              if (hereMatrixResult.success && hereMatrixResult.data?.travelTimes && hereMatrixResult.data?.distances) {
+              if (hereMatrixResult && hereMatrixResult.success && hereMatrixResult.data?.travelTimes && hereMatrixResult.data?.distances) {
                 const { travelTimes: hereTravelTimes, distances: hereDistances } = hereMatrixResult.data;
                 const poisWithTravelTimes = uniqueInitialPois.map((poi, poiIdx): EnrichedPoi => {
                   const travelInfo: TravelInfo[] = [];
@@ -426,8 +427,9 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
                 finalCombinedPois = poisWithTravelTimes;
                 console.log('[MapData >2-origin] Successfully enriched POIs with HERE Matrix data.');
               } else {
-                console.error('[MapData >2-origin] HERE Matrix fetch failed or data incomplete:', hereMatrixResult.error);
-                setMatrixError(hereMatrixResult.error || 'Failed to fetch HERE Matrix travel times for multi-origin');
+                const errorMessage = hereMatrixResult?.error || 'HERE Matrix API returned undefined or invalid response';
+                console.error('[MapData >2-origin] HERE Matrix fetch failed or data incomplete:', errorMessage);
+                setMatrixError(errorMessage);
                 // Fallback: POIs without travel times
                 finalCombinedPois = uniqueInitialPois.map(p => ({ ...p, travelInfo: [] }));
               }
