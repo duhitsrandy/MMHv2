@@ -1,0 +1,17 @@
+name: Health Check
+
+on:
+  schedule:
+    # Run every 5 days (safe margin before Supabase's 7-day pause)
+    - cron: '0 12 */5 * *'  # 12:00 UTC every 5 days
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health Check Ping
+        run: |
+          # Ping the health endpoint to keep Supabase active
+          curl -f --max-time 30 https://meetmehalfway.co/api/health || exit 1
+          echo "✅ Health check successful - Supabase stay active"
