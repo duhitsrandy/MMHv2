@@ -1,0 +1,45 @@
+name: Keep Services Active
+
+on:
+  schedule:
+    # Run every 5 days at 3:00 AM UTC (well before Supabase's 7-day pause threshold)
+    - cron: '0 3 */5 * *'
+  workflow_dispatch: # Allow manual triggering for testing
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Ping Health Check Endpoint
+        run: |
+          echo "Pinging health check endpoint to keep services active..."
+          
+          # Make request to health endpoint
+          response=$(curl -s -w "\n%{http_code}" "${{ secrets.HEALTH_CHECK_URL || 'https://meetmehalfway.live/api/health' }}")
+          
+          # Extract HTTP status code (last line)
+          http_code=$(echo "$response" | tail -n1)
+          
+          # Extract response body (everything except last line)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Response Status: $http_code"
+          echo "Response Body:"
+          echo "$body" | jq '.' || echo "$body"
+          
+          # Check if request was successful
+          if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 503 ]; then
+            echo "✅ Health check completed successfully"
+            exit 0
+          else
+            echo "❌ Health check failed with status $http_code"
+            exit 1
+          fi
+      
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "⚠️ Health check failed! Services may need attention."
+          echo "Check https://github.com/${{ github.repository }}/actions for details"
+
