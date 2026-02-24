@@ -14,7 +14,7 @@ export default () => ({
       backgroundColor: '#ffffff',
     },
     ios: {
-      bundleIdentifier: 'com.yourcompany.meetmehalfway',
+      bundleIdentifier: 'com.meetmehalfway.mobile',
       supportsTablet: true,
       infoPlist: {
         NSLocationWhenInUseUsageDescription:

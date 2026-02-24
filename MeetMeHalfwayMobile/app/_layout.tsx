@@ -27,6 +27,7 @@ const tokenCache = {
   getToken: () => SecureStore.getItemAsync('clerk_token'),
   saveToken: (token: string) => SecureStore.setItemAsync('clerk_token', token),
 };
+const AnyClerkProvider = ClerkProvider as any;
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -52,9 +53,16 @@ export default function RootLayout() {
   const pkRaw = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined;
   const pk = pkRaw?.trim();
   const looksValid = !!pk && /^pk_(test|live)_.+/.test(pk) && pk !== 'pk_test_invalid';
-  
-  // Always render without Clerk for development
-  return <RootLayoutNav />;
+
+  if (!looksValid) {
+    return <RootLayoutNav />;
+  }
+
+  return (
+    <AnyClerkProvider publishableKey={pk} tokenCache={tokenCache}>
+      <RootLayoutNav />
+    </AnyClerkProvider>
+  );
 }
 
 function RootLayoutNav() {
@@ -64,6 +72,8 @@ function RootLayoutNav() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="sign-in" options={{ title: "Sign In" }} />
+        <Stack.Screen name="sign-up" options={{ title: "Sign Up" }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>

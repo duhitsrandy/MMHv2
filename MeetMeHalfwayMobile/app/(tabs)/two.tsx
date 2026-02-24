@@ -54,7 +54,7 @@ export default function TabTwoScreen() {
 
   const viewOnMap = (poi: PoiType) => {
     setSelectedPoi(poi);
-    router.push('/(tabs)/'); // Navigate to Tab One (Map)
+    router.push('/(tabs)'); // Navigate to Tab One (Map)
   };
 
   const getPoiColor = (type?: string): string => {

@@ -1,23 +1,40 @@
 export const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL as string;
 
-export async function findMidpoint(origins: Array<{ lat: number; lng: number }>) {
-  const response = await fetch(`${API_BASE}/api/meet-me-halfway/find-midpoint`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ origins }),
+function getApiBase() {
+  if (!API_BASE) {
+    throw new Error("EXPO_PUBLIC_API_BASE_URL is missing");
+  }
+  return API_BASE;
+}
+
+export async function fetchMobileRoute(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number }
+) {
+  const response = await fetch(`${getApiBase()}/api/mobile/route`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      startLat: a.lat,
+      startLon: a.lng,
+      endLat: b.lat,
+      endLon: b.lng,
+    }),
   });
-  if (!response.ok) throw new Error('Network error');
+  if (!response.ok) {
+    throw new Error(`Route API error (${response.status})`);
+  }
   return response.json();
 }
 
 export async function searchPOIs(lat: number, lng: number, radius: number) {
-  const response = await fetch(`${API_BASE}/api/pois/search?lat=${lat}&lng=${lng}&radius=${radius}`);
+  const response = await fetch(`${getApiBase()}/api/pois/search?lat=${lat}&lng=${lng}&radius=${radius}`);
   if (!response.ok) throw new Error('Network error');
   return response.json();
 }
 
 export async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
-  const res = await fetch(`${API_BASE}/api/ors/geocode`, {
+  const res = await fetch(`${getApiBase()}/api/ors/geocode`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ address }),
@@ -46,7 +63,7 @@ export async function getTravelTimeMatrix(
     // Destinations are the last M coordinates 
     const destinations_indices = destinations.map((_, idx) => origins.length + idx).join(';');
     
-    const response = await fetch(`${API_BASE}/api/ors/matrix`, {
+    const response = await fetch(`${getApiBase()}/api/ors/matrix`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

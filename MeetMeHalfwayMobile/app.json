@@ -14,7 +14,7 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "bundleIdentifier": "com.yourcompany.meetmehalfway",
+      "bundleIdentifier": "com.meetmehalfway.mobile",
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs location access to find meeting points near you",
@@ -38,7 +38,7 @@
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.com.yourcompany.meetmehalfway",
+          "merchantIdentifier": "merchant.com.meetmehalfway.mobile",
           "enableGooglePay": false
         }
       ]

@@ -15,6 +15,10 @@ type Poi = {
   travelInfo?: TravelInfo[];
 };
 
+type PendingSearch = {
+  locations: Array<{ address: string; lat: number; lng: number }>;
+} | null;
+
 type PoiContextType = {
   pois: Poi[];
   setPois: (pois: Poi[]) => void;
@@ -24,6 +28,8 @@ type PoiContextType = {
   setAlternateMidpoint: (midpoint: { lat: number; lng: number } | null) => void;
   selectedPoi: Poi | null;
   setSelectedPoi: (poi: Poi | null) => void;
+  pendingSearch: PendingSearch;
+  setPendingSearch: (value: PendingSearch) => void;
 };
 
 const PoiContext = createContext<PoiContextType | undefined>(undefined);
@@ -33,6 +39,7 @@ export function PoiProvider({ children }: { children: React.ReactNode }) {
   const [midpoint, setMidpoint] = useState<{ lat: number; lng: number } | null>(null);
   const [alternateMidpoint, setAlternateMidpoint] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedPoi, setSelectedPoi] = useState<Poi | null>(null);
+  const [pendingSearch, setPendingSearch] = useState<PendingSearch>(null);
 
   return (
     <PoiContext.Provider value={{
@@ -44,6 +51,8 @@ export function PoiProvider({ children }: { children: React.ReactNode }) {
       setAlternateMidpoint,
       selectedPoi,
       setSelectedPoi,
+      pendingSearch,
+      setPendingSearch,
     }}>
       {children}
     </PoiContext.Provider>

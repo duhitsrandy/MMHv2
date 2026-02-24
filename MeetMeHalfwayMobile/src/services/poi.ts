@@ -13,6 +13,9 @@ export async function getNearbyPois(
   tags: string[] = ['restaurant', 'cafe', 'park']
 ): Promise<Poi[]> {
   const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL as string;
+  if (!apiBase) {
+    throw new Error("EXPO_PUBLIC_API_BASE_URL is missing");
+  }
   const url = `${apiBase}/api/pois/search?lat=${lat}&lng=${lng}&radius=${radiusMeters}&tags=${encodeURIComponent(
     tags.join(',')
   )}`;

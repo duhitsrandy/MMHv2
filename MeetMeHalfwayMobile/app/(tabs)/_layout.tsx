@@ -57,6 +57,13 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => <TabBarIcon name="list" color={color} />,
           }}
         />
+        <Tabs.Screen
+          name="saved"
+          options={{
+            title: 'Saved',
+            tabBarIcon: ({ color }) => <TabBarIcon name="bookmark" color={color} />,
+          }}
+        />
       </Tabs>
     </PoiProvider>
   );
