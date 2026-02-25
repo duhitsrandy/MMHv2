@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  ActionSheetIOS,
 } from "react-native";
 import MapView, { Marker, Polyline, LatLng, Callout } from "react-native-maps";
 import { useEffect, useRef, useState } from "react";
@@ -50,6 +51,25 @@ export default function TabOneScreen() {
   const [alternateRouteCoords, setAlternateRouteCoords] = useState<LatLng[]>([]);
   const mapRef = useRef<MapView | null>(null);
   const [currentRegion, setCurrentRegion] = useState<any | null>(null);
+  const [actionSheetPoi, setActionSheetPoi] = useState<{ lat: number; lng: number; name?: string; address?: string; type?: string } | null>(null);
+
+  useEffect(() => {
+    if (!actionSheetPoi) return;
+    const poi = actionSheetPoi;
+    setActionSheetPoi(null);
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options: ['Cancel', 'Apple Maps', 'Google Maps', 'Waze'],
+        cancelButtonIndex: 0,
+        title: poi.name || 'Navigate to location',
+      },
+      (idx) => {
+        if (idx === 1) safeOpenURL(`maps://?q=${encodeURIComponent(poi.name || 'Location')}&ll=${poi.lat},${poi.lng}`);
+        if (idx === 2) safeOpenURL(`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`);
+        if (idx === 3) safeOpenURL(`https://waze.com/ul?ll=${poi.lat},${poi.lng}&navigate=yes`);
+      }
+    );
+  }, [actionSheetPoi]);
 
   useEffect(() => {
     (async () => {
@@ -333,7 +353,7 @@ export default function TabOneScreen() {
               pinColor={getPoiPinColor(p.type)}
               onPress={() => setSelectedPoi(p)}
             >
-              <Callout style={styles.callout}>
+              <Callout style={styles.callout} onPress={() => setActionSheetPoi(p)}>
                 <View style={styles.calloutContent}>
                   <Text style={styles.calloutTitle}>{p.name || "Unknown Location"}</Text>
                   <Text style={styles.calloutType}>{p.type || "Location"}</Text>
@@ -356,24 +376,9 @@ export default function TabOneScreen() {
                     </View>
                   )}
                   <View style={styles.calloutButtons}>
-                    <TouchableOpacity
-                      style={styles.calloutBtn}
-                      onPress={() => safeOpenURL(`maps://?q=${p.name || "Location"}&ll=${p.lat},${p.lng}`)}
-                    >
-                      <Text style={styles.calloutBtnText}>Apple</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.calloutBtn}
-                      onPress={() => safeOpenURL(`https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`)}
-                    >
-                      <Text style={styles.calloutBtnText}>Google</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.calloutBtn}
-                      onPress={() => safeOpenURL(`https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`)}
-                    >
-                      <Text style={styles.calloutBtnText}>Waze</Text>
-                    </TouchableOpacity>
+                    <View style={styles.calloutBtn}>
+                      <Text style={styles.calloutBtnText}>Tap to Navigate</Text>
+                    </View>
                   </View>
                 </View>
               </Callout>
