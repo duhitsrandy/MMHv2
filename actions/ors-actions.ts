@@ -258,31 +258,34 @@ export async function getTravelTimeMatrixAction(
   const sourceIndices = vSourcesStr.split(';').map(Number);
   const destinationIndices = vDestsStr.split(';').map(Number);
 
-  // Construct the ORS Matrix API URL and request body
-  const apiUrl = `${ORS_API_BASE}/v2/matrix/driving-car`; // Using driving profile
-  const requestBody = {
-    locations: locations,
-    sources: sourceIndices,
-    destinations: destinationIndices,
-    metrics: ["duration", "distance"],
-    units: "m" // Request distance in meters
-  };
+  // Try different profile names in case the API has changed
+  const profiles = ['driving-car', 'driving-hgv', 'driving'];
+  let lastError: string | null = null;
+  
+  for (const profile of profiles) {
+    const apiUrl = `${ORS_API_BASE}/v2/matrix/${profile}`;
+    const requestBody = {
+      locations: locations,
+      sources: sourceIndices,
+      destinations: destinationIndices,
+      metrics: ["duration", "distance"],
+      units: "m" // Request distance in meters
+    };
 
-  console.log("[Matrix Calculation] Requesting travel time matrix from ORS");
-  console.log("[Matrix Calculation] ORS Matrix URL:", apiUrl);
-  // console.log("[Matrix Calculation] ORS Request Body:", JSON.stringify(requestBody)); // Avoid logging potentially large bodies unless debugging
+    console.log(`[Matrix Calculation] Trying ORS Matrix API with profile: ${profile}`);
+    console.log("[Matrix Calculation] ORS Matrix URL:", apiUrl);
 
-  console.time("[Matrix Calculation] ORS API Call Duration"); // <-- Add timer start
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': apiKey, // Use Authorization header for ORS API key
-        'User-Agent': 'Meet-Me-Halfway/1.0', // Optional: Add User-Agent
-      },
-      body: JSON.stringify(requestBody),
-    });
+    console.time(`[Matrix Calculation] ORS API Call Duration (${profile})`);
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': apiKey, // Use Authorization header for ORS API key
+          'User-Agent': 'Meet-Me-Halfway/1.0', // Optional: Add User-Agent
+        },
+        body: JSON.stringify(requestBody),
+      });
     console.timeEnd("[Matrix Calculation] ORS API Call Duration"); // <-- Add timer end (regardless of success/failure)
 
     if (!response.ok) {

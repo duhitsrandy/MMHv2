@@ -83,14 +83,18 @@ export default function TabOneScreen() {
 
   useEffect(() => {
     if (!pendingSearch?.locations?.length) return;
+    const bounded = pendingSearch.locations.slice(0, maxLocations);
+    if (pendingSearch.locations.length > maxLocations) {
+      Alert.alert("Plan limit", `Only the first ${maxLocations} locations were restored for your current plan.`);
+    }
     setOrigins(
-      pendingSearch.locations.map((loc, index) => ({
+      bounded.map((loc, index) => ({
         id: `origin-${Date.now()}-${index}`,
         address: loc.address,
       }))
     );
     setPendingSearch(null);
-  }, [pendingSearch, setPendingSearch]);
+  }, [pendingSearch, setPendingSearch, maxLocations]);
 
   const addOrigin = () => {
     if (origins.length >= maxLocations) {
@@ -116,6 +120,7 @@ export default function TabOneScreen() {
   };
 
   const runSearch = async () => {
+    if (loading) return;
     const trimmed = origins.map((item) => item.address.trim());
     if (trimmed.length < 2 || trimmed.some((item) => !item)) {
       Alert.alert("Missing input", "Please fill all location fields.");
@@ -140,7 +145,7 @@ export default function TabOneScreen() {
       await Promise.all(
         resolved.map((item, index) =>
           saveLocation({
-            label: `Location ${index + 1}`,
+            label: item.address.split(",")[0] || `Location ${index + 1}`,
             address: item.address,
             lat: item.lat,
             lng: item.lng,
@@ -353,19 +358,19 @@ export default function TabOneScreen() {
                   <View style={styles.calloutButtons}>
                     <TouchableOpacity
                       style={styles.calloutBtn}
-                      onPress={() => Linking.openURL(`maps://?q=${p.name || "Location"}&ll=${p.lat},${p.lng}`)}
+                      onPress={() => safeOpenURL(`maps://?q=${p.name || "Location"}&ll=${p.lat},${p.lng}`)}
                     >
                       <Text style={styles.calloutBtnText}>Apple</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.calloutBtn}
-                      onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`)}
+                      onPress={() => safeOpenURL(`https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`)}
                     >
                       <Text style={styles.calloutBtnText}>Google</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.calloutBtn}
-                      onPress={() => Linking.openURL(`https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`)}
+                      onPress={() => safeOpenURL(`https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`)}
                     >
                       <Text style={styles.calloutBtnText}>Waze</Text>
                     </TouchableOpacity>
@@ -656,4 +661,10 @@ function mergePois(base: any[], next: any[]) {
     if (!duplicate) merged.push(poi);
   });
   return merged;
+}
+
+function safeOpenURL(url: string) {
+  Linking.openURL(url).catch(() => {
+    Alert.alert("Navigation Error", "Could not open the selected map app.");
+  });
 }
