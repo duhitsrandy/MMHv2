@@ -334,11 +334,14 @@ export async function getTravelTimeMatrixAction(
       },
     };
   } catch (error) {
+    lastError = `Failed to calculate travel time matrix: ${error instanceof Error ? error.message : "Unknown error"}`;
     console.error("[Matrix Calculation] Fetch Error:", error);
-    return {
-      isSuccess: false,
-      message: `Failed to calculate travel time matrix: ${error instanceof Error ? error.message : "Unknown error"}`,
-    };
+    continue;
   }
   }
+
+  return {
+    isSuccess: false,
+    message: lastError ?? "All ORS routing profiles failed",
+  };
 }
