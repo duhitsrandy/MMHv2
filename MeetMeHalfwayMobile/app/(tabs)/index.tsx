@@ -19,8 +19,10 @@ import {
 } from "../../src/services/api";
 import { getNearbyPois } from "../../src/services/poi";
 import { saveLocation, saveSearch } from "../../src/services/storage";
+import { createCloudLocation, createCloudSearch } from "../../src/services/cloudSync";
 import { usePlan } from "../../src/hooks/usePlan";
 import { usePoi } from "../contexts/PoiContext";
+import { useSafeAuth as useAuth } from "../_layout";
 
 type OriginInput = { id: string; address: string };
 type OriginCoord = { address: string; lat: number; lng: number };
@@ -39,6 +41,7 @@ export default function TabOneScreen() {
     setPendingSearch,
   } = usePoi();
   const { tier, maxLocations } = usePlan();
+  const { isSignedIn, getToken } = useAuth();
   const [initialRegion, setInitialRegion] = useState<any | null>(null);
   const [userCoord, setUserCoord] = useState<{ latitude: number; longitude: number } | null>(null);
   const [origins, setOrigins] = useState<OriginInput[]>([
@@ -173,6 +176,28 @@ export default function TabOneScreen() {
         )
       );
       await saveSearch(resolved);
+
+      // Parallel cloud writes — non-blocking, local save is always the primary
+      if (isSignedIn) {
+        getToken().then((token) => {
+          if (!token) return;
+          resolved.forEach((item, index) => {
+            createCloudLocation(token, {
+              label: item.address.split(",")[0] || `Location ${index + 1}`,
+              address: item.address,
+              lat: item.lat,
+              lng: item.lng,
+            }).catch((err) => {
+              if (__DEV__) console.warn("[CloudSync] createCloudLocation failed:", err);
+            });
+          });
+          createCloudSearch(token, resolved).catch((err) => {
+            if (__DEV__) console.warn("[CloudSync] createCloudSearch failed:", err);
+          });
+        }).catch((err) => {
+          if (__DEV__) console.warn("[CloudSync] getToken failed:", err);
+        });
+      }
 
       let mainMid: { lat: number; lng: number } | null = null;
       let altMid: { lat: number; lng: number } | null = null;

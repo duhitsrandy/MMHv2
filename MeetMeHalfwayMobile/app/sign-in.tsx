@@ -1,33 +1,82 @@
-import { Link } from "expo-router";
-import { StyleSheet, TouchableOpacity } from "react-native";
+import { useSignIn } from "@clerk/clerk-expo";
+import { Link, useRouter } from "expo-router";
+import { useState } from "react";
+import { StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Text, View } from "@/components/Themed";
-import * as WebBrowser from "expo-web-browser";
-
-async function openWebAuth(path: "/login" | "/signup") {
-  const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
-  if (!apiBase) return;
-  const authUrl = `${apiBase}${path}`;
-  await WebBrowser.openBrowserAsync(authUrl);
-}
 
 export default function SignInScreen() {
+  const { signIn, setActive, isLoaded } = useSignIn();
+  const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSignIn = async () => {
+    if (!isLoaded) return;
+    setError("");
+    setLoading(true);
+    try {
+      const result = await signIn.create({ identifier: email.trim(), password });
+      await setActive({ session: result.createdSessionId });
+      router.replace("/(tabs)");
+    } catch (err: any) {
+      const msg =
+        err?.errors?.[0]?.longMessage ||
+        err?.errors?.[0]?.message ||
+        "Sign in failed. Please check your credentials.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Sign In</Text>
-      <Text style={styles.copy}>
-        Mobile auth routes are enabled. If you require strict auth, set
-        `EXPO_PUBLIC_REQUIRE_AUTH=true` and wire your Clerk sign-in UI.
-      </Text>
-      <TouchableOpacity style={styles.secondaryButton} onPress={() => openWebAuth("/login")}>
-        <Text style={styles.secondaryText}>Sign In on Web</Text>
+      <Text style={styles.subtitle}>Sign in to sync your saves and unlock your plan tier.</Text>
+
+      <TextInput
+        style={styles.input}
+        placeholder="Email"
+        placeholderTextColor="#9ca3af"
+        autoCapitalize="none"
+        keyboardType="email-address"
+        value={email}
+        onChangeText={setEmail}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Password"
+        placeholderTextColor="#9ca3af"
+        secureTextEntry
+        value={password}
+        onChangeText={setPassword}
+      />
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <TouchableOpacity
+        style={[styles.button, loading && styles.buttonDisabled]}
+        onPress={handleSignIn}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="white" />
+        ) : (
+          <Text style={styles.buttonText}>Sign In</Text>
+        )}
       </TouchableOpacity>
+
       <Link href={"/(tabs)" as any} asChild>
-        <TouchableOpacity style={styles.button}>
-          <Text style={styles.buttonText}>Continue to App</Text>
+        <TouchableOpacity style={styles.skipButton}>
+          <Text style={styles.skipText}>Continue without signing in</Text>
         </TouchableOpacity>
       </Link>
+
       <Link href={"/sign-up" as any} style={styles.link}>
-        Need an account? Go to sign up
+        Don't have an account? Sign up
       </Link>
     </View>
   );
@@ -35,18 +84,30 @@ export default function SignInScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 12 },
-  title: { fontSize: 24, fontWeight: "700" },
-  copy: { textAlign: "center", color: "#6b7280" },
-  button: { backgroundColor: "#111827", borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16 },
-  buttonText: { color: "white", fontWeight: "600" },
-  secondaryButton: {
-    borderColor: "#111827",
+  title: { fontSize: 26, fontWeight: "700" },
+  subtitle: { textAlign: "center", color: "#6b7280", marginBottom: 4 },
+  input: {
+    width: "100%",
     borderWidth: 1,
+    borderColor: "#d1d5db",
     borderRadius: 8,
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    color: "#111827",
+    backgroundColor: "white",
   },
-  secondaryText: { color: "#111827", fontWeight: "600" },
-  link: { color: "#2563eb", marginTop: 8 },
+  error: { color: "#ef4444", textAlign: "center", fontSize: 13 },
+  button: {
+    width: "100%",
+    backgroundColor: "#111827",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: "white", fontWeight: "600", fontSize: 16 },
+  skipButton: { marginTop: 4 },
+  skipText: { color: "#6b7280", fontSize: 14, textDecorationLine: "underline" },
+  link: { color: "#2563eb", marginTop: 4, fontSize: 14 },
 });
-
