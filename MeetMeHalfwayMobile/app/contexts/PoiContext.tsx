@@ -66,3 +66,5 @@ export function usePoi() {
   }
   return context;
 }
+
+export default function PoiContextScreen() { return null; }
