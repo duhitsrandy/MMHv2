@@ -340,4 +340,5 @@ export async function getTravelTimeMatrixAction(
       message: `Failed to calculate travel time matrix: ${error instanceof Error ? error.message : "Unknown error"}`,
     };
   }
-} 
+  }
+}
