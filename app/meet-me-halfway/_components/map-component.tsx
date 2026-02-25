@@ -286,6 +286,16 @@ function PoiMarkersLayer({
 
 // Helper function (moved here or ensure it's accessible globally/imported)
 function createPopupContent(poi: EnrichedPoi, originLocations: GeocodedOrigin[], plan: UserPlan | null): string {
+  const poiName = poi.name || "Location";
+  const hasAddress = Boolean(poi.address?.street && poi.address?.city);
+  const address = hasAddress && poi.address ? `${poi.address.street}, ${poi.address.city}` : "";
+  const searchQuery = address ? `${poiName}, ${address}` : poiName;
+  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`;
+  const appleMapsUrl = hasAddress
+    ? `http://maps.apple.com/?q=${encodeURIComponent(poiName)}&address=${encodeURIComponent(address)}`
+    : `http://maps.apple.com/?q=${encodeURIComponent(poiName)}&sll=${poi.lat},${poi.lon}&z=15`;
+  const wazeUrl = `https://www.waze.com/ul?q=${encodeURIComponent(searchQuery)}&ll=${poi.lat},${poi.lon}&navigate=yes`;
+
   let content = `<div style="min-width: 220px; max-width: 280px;">`; // Add min/max width for popup consistency
   content += `<div class="font-bold text-base mb-1">${poi.name}</div>`;
   content += `<div class="text-sm text-gray-600 mb-2">${poi.type}</div>`;
@@ -330,6 +340,13 @@ function createPopupContent(poi: EnrichedPoi, originLocations: GeocodedOrigin[],
     });
     content += "</tbody></table></div>";
   }
+
+  content += '<div class="mt-3 flex flex-wrap gap-1.5">';
+  content += `<a href="${googleMapsUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100">Google</a>`;
+  content += `<a href="${appleMapsUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100">Apple</a>`;
+  content += `<a href="${wazeUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100">Waze</a>`;
+  content += "</div>";
+
   content += `</div>`; // Close main wrapper
   return content;
 }

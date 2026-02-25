@@ -78,6 +78,7 @@ export default function PointsOfInterest({
   const [favorites, setFavorites] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<SortOption>("durationFromFirst")
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false)
+  const selectedPoiCardId = selectedPoiId ? `poi-card-${encodeURIComponent(selectedPoiId)}` : null
 
   // Load favorites from localStorage on component mount
   useEffect(() => {
@@ -101,6 +102,19 @@ export default function PointsOfInterest({
       localStorage.setItem("mmh-favorites", JSON.stringify(favorites))
     }
   }, [favorites])
+
+  useEffect(() => {
+    if (!selectedPoiCardId) return
+
+    const selectedCard = document.getElementById(selectedPoiCardId)
+    if (selectedCard) {
+      selectedCard.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "nearest",
+      })
+    }
+  }, [selectedPoiCardId])
 
   const sortedAndFilteredPois = useMemo(() => {
     // Start with the enriched POIs passed as props
@@ -319,8 +333,10 @@ export default function PointsOfInterest({
               ) : (
                 sortedAndFilteredPois.map(poi => {
                   const poiKey = poi.osm_id || `${poi.lat}-${poi.lon}`
+                  const poiCardId = `poi-card-${encodeURIComponent(poiKey)}`
                   return (
                     <Card
+                      id={poiCardId}
                       key={poiKey}
                       className={`mx-4 transition-all hover:shadow-md ${
                         selectedPoiId === poiKey ? "ring-primary ring-2" : ""
