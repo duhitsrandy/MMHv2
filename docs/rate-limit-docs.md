@@ -32,6 +32,12 @@ The Meet Me Halfway application implements a comprehensive rate limiting system 
 - **Issue:** Upstash errors or downtime
   - **Solution:** Check Upstash status, retry requests, and consider fallback logic if needed.
 
+## Production tuning (Phase 5)
+
+Defaults in `.env.example` (10 / 50 / 100 per window) are **intentional for current low traffic**—they protect geo APIs without blocking normal use. `PRODUCTION.md` lists higher optional values (100 / 500 / 1000) for when usage grows; change only after checking [Upstash](https://console.upstash.com/) command volume and 429 rates in PostHog (`api_error` with status 429).
+
+No code change required unless Upstash dashboard shows sustained limit hits or false-positive 429s.
+
 ## Environment Variables
 ```env
 # Upstash Redis for Rate Limiting

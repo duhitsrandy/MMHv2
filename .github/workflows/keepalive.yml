@@ -16,7 +16,7 @@ jobs:
           echo "Pinging health check endpoint to keep services active..."
           
           # Make request to health endpoint
-          response=$(curl -s -w "\n%{http_code}" "${{ secrets.HEALTH_CHECK_URL || 'https://meetmehalfway.live/api/health' }}")
+          response=$(curl -s -w "\n%{http_code}" "${{ secrets.HEALTH_CHECK_URL || 'https://meetmehalfway.co/api/health' }}")
           
           # Extract HTTP status code (last line)
           http_code=$(echo "$response" | tail -n1)
