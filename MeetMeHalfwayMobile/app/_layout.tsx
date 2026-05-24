@@ -51,7 +51,7 @@ function StripeWrapper({ children }: { children: React.ReactNode }) {
       merchantIdentifier="merchant.com.meetmehalfway.mobile"
       urlScheme="mmh"
     >
-      {children}
+      <React.Fragment>{children}</React.Fragment>
     </StripeProvider>
   );
 }

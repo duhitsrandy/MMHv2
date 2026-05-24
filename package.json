@@ -20,6 +20,7 @@
     "prepare": "husky install",
     "docs:index": "node scripts/generate-docs-index.cjs",
     "mobile:check-env": "node ./scripts/verify-mobile-env.cjs",
+    "mobile:sync-env": "node ./scripts/sync-mobile-env.cjs",
     "mobile:start": "npm run mobile:check-env && npm run --prefix ./MeetMeHalfwayMobile start",
     "mobile:ios": "npm run --prefix ./MeetMeHalfwayMobile ios",
     "mobile:ios:reset": "npm run --prefix ./MeetMeHalfwayMobile ios:reset-sim",

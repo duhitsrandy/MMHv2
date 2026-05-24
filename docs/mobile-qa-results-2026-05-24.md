@@ -13,7 +13,19 @@
 | `POST /api/mobile/route` (anon) | **PASS** | 200 with valid `startLat`/`startLon` body |
 | `GET /api/pois/search` | **PASS** | 200 |
 | `npm run test` (shared) | **PASS** | 15/15 tests |
-| Mobile `tsc --noEmit` | **WARN** | Pre-existing error in `app/_layout.tsx` (StripeProvider children); not introduced Session 3 |
+| Mobile `tsc --noEmit` | **PASS** | Fixed `StripeProvider` children wrap (`React.Fragment`) in prep session |
+| `npm run mobile:sync-env` | **PASS** | Generates `MeetMeHalfwayMobile/.env` from `.env.local` (see `scripts/sync-mobile-env.cjs`) |
+
+## Prep follow-up (post-merge on `main`)
+
+| Item | Result | Notes |
+|------|--------|-------|
+| Pull merged mobile work on `main` | **PASS** | `ab1bd76` |
+| Recreate `MeetMeHalfwayMobile/.env` | **PASS** | `npm run mobile:sync-env` |
+| `npm run mobile:check-env` | **PASS** | After sync |
+| API smoke (`profile`, `route`, `pois`) | **PASS** | Dev server on `:3000` |
+| `eas login` / `eas init` | **TODO** | `eas-cli` not global; run `npx eas-cli login` then `cd MeetMeHalfwayMobile && npx eas-cli init` |
+| Simulator MANUAL QA rows | **TODO** | See checklist sections below |
 
 ## Results by checklist section
 
