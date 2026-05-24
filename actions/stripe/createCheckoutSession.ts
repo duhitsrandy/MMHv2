@@ -8,7 +8,7 @@ import Stripe from 'stripe'; // ADDED Stripe import
 import { getUserPlanInfo } from '@/lib/auth/plan'; // CORRECTED import for getUserPlanInfo
 
 export async function createCheckoutSession(params: { priceId: string }): Promise<{ url: string | null; error?: string }> {
-  const { userId } = auth();
+  const { userId } = await auth();
   const user = await currentUser();
 
   if (!userId || !user) {
@@ -97,7 +97,7 @@ export async function createCheckoutSession(params: { priceId: string }): Promis
 }
 
 export async function createBillingPortalSessionAction(): Promise<{ url: string | null; error?: string }> {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     console.error('[Billing Portal] User not authenticated');
     return { url: null, error: 'User not authenticated.' };

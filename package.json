@@ -29,9 +29,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@clerk/backend": "^1.25.8",
+    "@clerk/backend": "^2.0.0",
     "@clerk/clerk-sdk-node": "^4.13.23",
-    "@clerk/nextjs": "^5.7.5",
+    "@clerk/nextjs": "^6.12.0",
     "@clerk/themes": "^2.2.23",
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-accordion": "^1.2.2",
@@ -81,15 +81,15 @@
     "lodash.debounce": "^4.0.8",
     "lru-cache": "^11.1.0",
     "lucide-react": "^0.436.0",
-    "next": "^14.2.28",
+    "next": "^15.2.4",
     "next-themes": "^0.3.0",
     "pg": "^8.14.0",
     "postgres": "^3.4.4",
     "posthog-js": "^1.234.6",
     "posthog-node": "^4.11.1",
-    "react": "18.2.0",
+    "react": "^19.0.0",
     "react-day-picker": "^8.10.1",
-    "react-dom": "18.2.0",
+    "react-dom": "^19.0.0",
     "react-hook-form": "^7.54.1",
     "react-leaflet": "4.2.1",
     "react-resizable-panels": "^2.1.7",
@@ -107,13 +107,13 @@
     "@tailwindcss/typography": "^0.5.15",
     "@types/leaflet": "^1.9.16",
     "@types/node": "^20",
-    "@types/react": "18.2.0",
-    "@types/react-dom": "18.2.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "@vitest/ui": "^3.1.1",
     "dotenv": "^16.5.0",
     "drizzle-kit": "^0.31.0",
     "eslint": "^8",
-    "eslint-config-next": "14.2.7",
+    "eslint-config-next": "15.2.4",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-tailwindcss": "^3.17.5",
     "husky": "^9.1.6",
@@ -126,9 +126,5 @@
     "typescript": "^5",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.1.1"
-  },
-  "overrides": {
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
   }
 }

@@ -15,7 +15,7 @@ export async function createLocationAction(
   locationData: Omit<InsertLocation, 'userId' | 'id' | 'createdAt'>
 ): Promise<ActionState<SelectLocation>> {
   console.log("[DB Action] createLocationAction called with:", locationData);
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -42,7 +42,7 @@ export async function createLocationAction(
 export async function getLocationsAction(
   targetUserId: string
 ): Promise<ActionState<SelectLocation[]>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -68,7 +68,7 @@ export async function getLocationsAction(
 export async function getLocationAction(
   id: string
 ): Promise<ActionState<SelectLocation>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -101,7 +101,7 @@ export async function updateLocationAction(
   id: string,
   data: Partial<Omit<InsertLocation, 'userId' | 'id' | 'createdAt'>>
 ): Promise<ActionState<SelectLocation>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -145,7 +145,7 @@ export async function deleteLocationAction(
   id: string
 ): Promise<ActionState<void>> {
   console.log(`[DB Action] deleteLocationAction called for ID: ${id}`);
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }

@@ -15,7 +15,7 @@ import { auth } from "@clerk/nextjs/server";
 export async function createTodoAction(
   todoData: Omit<InsertTodo, 'userId' | 'id' | 'createdAt' | 'updatedAt'> // Assuming timestamps exist
 ): Promise<ActionState<SelectTodo>> {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -40,7 +40,7 @@ export async function createTodoAction(
 export async function getTodosAction(
   targetUserId: string
 ): Promise<ActionState<SelectTodo[]>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -67,7 +67,7 @@ export async function updateTodoAction(
   id: string,
   data: Partial<Omit<InsertTodo, 'userId' | 'id' | 'createdAt' | 'updatedAt'>>
 ): Promise<ActionState<SelectTodo>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -112,7 +112,7 @@ export async function updateTodoAction(
 }
 
 export async function deleteTodoAction(id: string): Promise<ActionState<void>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }

@@ -13,7 +13,7 @@ export type UserPlan = {
 export async function getUserSubscriptionPlan(userId?: string): Promise<UserPlan> {
   let currentUserId: string | null | undefined = userId;
   if (currentUserId === undefined) {
-    const authResult = auth();
+    const authResult = await auth();
     currentUserId = authResult.userId;
   }
 

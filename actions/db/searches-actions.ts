@@ -18,7 +18,7 @@ export async function createSearchAction(
   searchData: Omit<InsertSearch, 'userId' | 'id' | 'createdAt'>
 ): Promise<ActionState<SelectSearch>> {
   console.log("[DB Action] createSearchAction called with:", searchData);
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -52,7 +52,7 @@ export async function createMultiOriginSearchAction(
   searchMetadata?: any
 ): Promise<ActionState<SelectSearch>> {
   console.log("[DB Action] createMultiOriginSearchAction called with:", { origins, searchMetadata });
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -89,7 +89,7 @@ export async function createMultiOriginSearchAction(
 export async function getSearchesAction(
   targetUserId: string
 ): Promise<ActionState<SelectSearch[]>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -115,7 +115,7 @@ export async function getSearchesAction(
 export async function getSearchAction(
   id: string
 ): Promise<ActionState<SelectSearch>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -148,7 +148,7 @@ export async function updateSearchAction(
   id: string,
   data: Partial<Omit<InsertSearch, 'userId' | 'id' | 'createdAt'>>
 ): Promise<ActionState<SelectSearch>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -190,7 +190,7 @@ export async function updateSearchAction(
 
 export async function deleteSearchAction(id: string): Promise<ActionState<void>> {
   console.log(`[DB Action] deleteSearchAction called for ID: ${id}`);
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -216,7 +216,7 @@ export async function deleteSearchAction(id: string): Promise<ActionState<void>>
 export async function getSearchesWithOriginsAction(
   targetUserId: string
 ): Promise<ActionState<Array<SelectSearch & { origins?: Array<{ address: string; latitude: string; longitude: string; displayName?: string | null; orderIndex: number }> }>>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }

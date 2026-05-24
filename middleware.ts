@@ -34,6 +34,10 @@ const RATE_LIMIT_TYPES: Record<string, 'anonymous' | 'authenticated' | 'special'
   DEFAULT: 'anonymous' // Lower limits for other API routes
 }
 
+function getClientIp(req: NextRequest): string {
+  return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? '127.0.0.1'
+}
+
 // Get rate limit type based on the API route
 function getRateLimitType(pathname: string): 'anonymous' | 'authenticated' | 'special' {
   if (pathname.includes('/api/geocode')) {
@@ -53,7 +57,7 @@ export default clerkMiddleware(async (auth, req) => {
   // 1. Check if it's an admin route first
   if (adminRoutes(req)) {
     // Protect admin routes, requiring the 'admin' role
-    auth().protect((has) => has({ role: 'admin' }));
+    await auth.protect((has) => has({ role: 'admin' }));
     // If protect() doesn't throw/redirect, proceed to rate limiting for API routes
   }
 
@@ -62,15 +66,15 @@ export default clerkMiddleware(async (auth, req) => {
     const rateLimitType = getRateLimitType(req.nextUrl.pathname)
 
     // Use the auth context provided by Clerk middleware; avoid calling auth() inside the limiter
-    const { userId } = auth();
-    const identifier = rateLimitType === 'anonymous' ? undefined : (userId ?? req.ip ?? '127.0.0.1');
+    const { userId } = await auth();
+    const identifier = rateLimitType === 'anonymous' ? undefined : (userId ?? getClientIp(req));
 
     const rateLimitResult = await rateLimit({ type: rateLimitType, identifier })
 
     if (!rateLimitResult.success) {
       console.warn(`Rate limit exceeded for ${rateLimitType} user`, {
         pathname: req.nextUrl.pathname,
-        ip: req.ip,
+        ip: getClientIp(req),
         userId: userId ?? null,
         limit: rateLimitResult.limit,
         remaining: rateLimitResult.remaining,
@@ -97,7 +101,7 @@ export default clerkMiddleware(async (auth, req) => {
 
   // 3. Protect non-public routes if they aren't admin routes (already handled)
   if (!publicRoutes(req) && !adminRoutes(req)) {
-    auth().protect()
+    await auth.protect()
   }
 
   // 4. Allow the request to proceed if no protection rules applied or passed

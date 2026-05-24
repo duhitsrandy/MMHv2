@@ -70,16 +70,16 @@ export async function rateLimit(options?: {
   } else {
     // Try to get user ID from auth *only* if not anonymous
     if (type !== 'anonymous') {
-      const authResult = auth()
+      const authResult = await auth()
       if (authResult?.userId) {
         id = authResult.userId
       } else {
         // Fall back to IP if auth user but no ID (shouldn't happen often)
-        id = headers().get('x-forwarded-for') ?? '127.0.0.1'
+        id = (await headers()).get('x-forwarded-for') ?? '127.0.0.1'
       }
     } else {
       // For anonymous type, directly use IP address
-      id = headers().get('x-forwarded-for') ?? '127.0.0.1'
+      id = (await headers()).get('x-forwarded-for') ?? '127.0.0.1'
     }
   }
 

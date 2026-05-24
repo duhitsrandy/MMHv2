@@ -19,7 +19,7 @@ import { auth } from "@clerk/nextjs/server"
 export async function createProfileAction(
   data: Omit<InsertProfile, 'userId' | 'createdAt' | 'updatedAt' | 'id' | 'stripeCustomerId' | 'stripeSubscriptionId' | 'stripePriceId' | 'stripeCurrentPeriodEnd'>
 ): Promise<ActionState<SelectProfile>> {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -44,7 +44,7 @@ export async function createProfileAction(
 export async function getProfileByUserIdAction(
   targetUserId: string
 ): Promise<ActionState<SelectProfile>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -76,7 +76,7 @@ export async function updateProfileAction(
   targetUserId: string,
   data: Partial<Omit<InsertProfile, 'userId' | 'createdAt' | 'updatedAt' | 'id'>>
 ): Promise<ActionState<SelectProfile>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }
@@ -142,7 +142,7 @@ export async function updateProfileByStripeCustomerIdAction(
 export async function deleteProfileAction(
   targetUserId: string
 ): Promise<ActionState<void>> {
-  const { userId: authenticatedUserId } = auth();
+  const { userId: authenticatedUserId } = await auth();
   if (!authenticatedUserId) {
     return { isSuccess: false, message: "Error: User is not authenticated." };
   }

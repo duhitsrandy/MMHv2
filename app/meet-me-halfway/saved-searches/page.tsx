@@ -70,7 +70,6 @@ export default async function SavedSearchesPage() {
         </CardHeader>
         <CardContent>
           <Suspense fallback={<SavedSearchesSkeleton />}>
-            {/* @ts-expect-error Async Server Component */}
             <SavedSearchesContent />
           </Suspense>
         </CardContent>
