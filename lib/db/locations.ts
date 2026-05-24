@@ -1,6 +1,6 @@
 import { db } from "@/db/db";
 import { locationsTable, SelectLocation } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { coerceCoordinate, parseCoordinate } from "./coordinates";
 
 export type MobileLocationDto = {
@@ -49,7 +49,7 @@ export async function listLocationsForUser(userId: string): Promise<SelectLocati
     .select()
     .from(locationsTable)
     .where(eq(locationsTable.userId, userId))
-    .orderBy(locationsTable.createdAt);
+    .orderBy(asc(locationsTable.createdAt));
 }
 
 export async function createLocationForUser(

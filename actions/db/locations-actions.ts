@@ -59,6 +59,8 @@ export async function getLocationsAction(
     }
   } catch (error) {
     console.error("Error getting locations:", error)
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error("Error getting locations detail:", detail)
     return { isSuccess: false, message: "An internal error occurred while retrieving locations." }
   }
 }

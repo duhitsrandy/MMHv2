@@ -139,6 +139,17 @@ export function originsToMobileLocations(
   }));
 }
 
+/** Simple search rows for web saved-searches (no origin hydration). */
+export async function listSearchRecordsForUser(
+  userId: string
+): Promise<SelectSearch[]> {
+  return db
+    .select()
+    .from(searchesTable)
+    .where(eq(searchesTable.userId, userId))
+    .orderBy(desc(searchesTable.createdAt));
+}
+
 export async function listSearchesForUser(
   userId: string,
   options: { limit?: number } = {}
@@ -157,17 +168,34 @@ export async function listSearchesForUser(
   }
 
   const searchIds = searches.map((s) => s.id);
-  const allOrigins = await db
-    .select({
-      searchId: searchOriginsTable.searchId,
-      address: searchOriginsTable.address,
-      latitude: searchOriginsTable.latitude,
-      longitude: searchOriginsTable.longitude,
-      displayName: searchOriginsTable.displayName,
-      orderIndex: searchOriginsTable.orderIndex,
-    })
-    .from(searchOriginsTable)
-    .where(inArray(searchOriginsTable.searchId, searchIds));
+  let allOrigins: Array<{
+    searchId: string;
+    address: string;
+    latitude: string;
+    longitude: string;
+    displayName: string | null;
+    orderIndex: number;
+  }> = [];
+
+  try {
+    allOrigins = await db
+      .select({
+        searchId: searchOriginsTable.searchId,
+        address: searchOriginsTable.address,
+        latitude: searchOriginsTable.latitude,
+        longitude: searchOriginsTable.longitude,
+        displayName: searchOriginsTable.displayName,
+        orderIndex: searchOriginsTable.orderIndex,
+      })
+      .from(searchOriginsTable)
+      .where(inArray(searchOriginsTable.searchId, searchIds));
+  } catch (error) {
+    // Production may be missing search_origins migration; fall back to legacy/metadata hydration.
+    console.warn(
+      "[listSearchesForUser] search_origins query failed, using fallback hydration:",
+      error instanceof Error ? error.message : error
+    );
+  }
 
   const originsBySearchId = new Map<string, SearchOriginRow[]>();
   for (const row of allOrigins) {

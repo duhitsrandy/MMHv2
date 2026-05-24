@@ -10,6 +10,7 @@ import {
   poisTable,
   profilesTable,
   searchesTable,
+  searchOriginsTable,
   todosTable
 } from "@/db/schema"
 import { config } from "dotenv"
@@ -23,6 +24,7 @@ const schema = {
   todos: todosTable,
   locations: locationsTable,
   searches: searchesTable,
+  searchOrigins: searchOriginsTable,
   pois: poisTable
 }
 

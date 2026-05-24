@@ -8,6 +8,7 @@ import { auth } from "@clerk/nextjs/server";
 import {
   createSearchForUser,
   deleteSearchForUser,
+  listSearchRecordsForUser,
   listSearchesForUser,
 } from "@/lib/db/searches";
 import { coerceCoordinate } from "@/lib/db/coordinates";
@@ -97,10 +98,7 @@ export async function getSearchesAction(
   }
 
   try {
-    const searches = await db.query.searches.findMany({
-      where: eq(searchesTable.userId, targetUserId),
-      orderBy: (searches) => [desc(searches.createdAt)]
-    })
+    const searches = await listSearchRecordsForUser(targetUserId);
     return {
       isSuccess: true,
       message: "Searches retrieved successfully",
@@ -108,6 +106,8 @@ export async function getSearchesAction(
     }
   } catch (error) {
     console.error("Error getting searches:", error)
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error("Error getting searches detail:", detail)
     return { isSuccess: false, message: "An internal error occurred while retrieving searches." }
   }
 }
