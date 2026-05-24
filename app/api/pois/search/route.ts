@@ -21,11 +21,11 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'LocationIQ key missing' }, { status: 500 });
     }
 
-    const url = `https://us1.locationiq.com/v1/nearby.php?key=${encodeURIComponent(
+    const url = `https://us1.locationiq.com/v1/nearby?key=${encodeURIComponent(
       key
     )}&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&radius=${encodeURIComponent(
       radius
-    )}&tag=${encodeURIComponent(tags)}&format=json`;
+    )}&tag=${encodeURIComponent(tags)}&format=json&limit=20`;
 
     const res = await fetch(url, { next: { revalidate: 0 } });
     if (!res.ok) {

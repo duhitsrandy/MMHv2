@@ -235,21 +235,30 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
             let aggregatedPois: PoiResponse[] = []
             const poiSearchErrors: string[] = []
 
-            const poiResults = await Promise.all(
-              poiSearchCoords.map((coord) =>
-                searchPoisAction({
-                  lat: String(coord.lat),
-                  lon: String(coord.lng),
-                })
-              )
-            )
-
-            poiResults.forEach((raw, index) => {
-              const coord = poiSearchCoords[index]
-              const poiRes = asActionState(
+            const fetchPoisAtCoord = async (coord: { lat: number; lng: number }) => {
+              const base = {
+                lat: String(coord.lat),
+                lon: String(coord.lng),
+              };
+              let raw = await searchPoisAction(base);
+              let res = asActionState(
                 raw,
                 "POI search timed out. The server may be busy — try again."
-              )
+              );
+              if (!res.isSuccess || !res.data?.length) {
+                raw = await searchPoisAction({ ...base, radius: 3000 });
+                res = asActionState(
+                  raw,
+                  "POI search timed out. The server may be busy — try again."
+                );
+              }
+              return res;
+            };
+
+            const poiResults = await Promise.all(poiSearchCoords.map(fetchPoisAtCoord));
+
+            poiResults.forEach((poiRes, index) => {
+              const coord = poiSearchCoords[index];
 
               if (poiRes.isSuccess && poiRes.data) {
                 aggregatedPois = aggregatedPois.concat(poiRes.data)

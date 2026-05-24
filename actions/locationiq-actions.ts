@@ -292,6 +292,57 @@ function getLocationIqApiKey(): string | null {
   );
 }
 
+/** Snap route midpoints (often on highways) to a geocodable point. */
+async function snapCoordinatesForPoiSearch(
+  lat: string,
+  lon: string
+): Promise<{ lat: string; lon: string }> {
+  const latNum = parseFloat(lat);
+  const lonNum = parseFloat(lon);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
+    return { lat, lon };
+  }
+
+  const rounded = {
+    lat: latNum.toFixed(6),
+    lon: lonNum.toFixed(6),
+  };
+
+  const key = getLocationIqApiKey();
+  if (!key) return rounded;
+
+  const reverseUrl = `${LOCATIONIQ_API_BASE}/reverse.php?key=${encodeURIComponent(key)}&lat=${encodeURIComponent(rounded.lat)}&lon=${encodeURIComponent(rounded.lon)}&format=json`;
+
+  try {
+    const response = await fetch(reverseUrl, {
+      headers: {
+        "User-Agent": DEFAULT_USER_AGENT,
+        Accept: "application/json",
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.lat != null && data?.lon != null) {
+        const snapped = {
+          lat: String(data.lat),
+          lon: String(data.lon),
+        };
+        if (snapped.lat !== rounded.lat || snapped.lon !== rounded.lon) {
+          console.log(
+            `[POI Search] Snapped (${rounded.lat},${rounded.lon}) → (${snapped.lat},${snapped.lon})`
+          );
+        }
+        return snapped;
+      }
+    }
+  } catch (err) {
+    console.warn("[POI Search] Reverse geocode snap failed:", err);
+  }
+
+  return rounded;
+}
+
 function parseOverpassElements(elements: unknown[], lat: string, lon: string): PoiResponse[] {
   if (!Array.isArray(elements)) return [];
 
@@ -428,7 +479,8 @@ async function fetchPoisViaOverpass(
 async function fetchPoisViaLocationIq(
   lat: string,
   lon: string,
-  radius: number
+  radius: number,
+  searchRadius = radius
 ): Promise<PoiResponse[]> {
   const key = getLocationIqApiKey();
   if (!key) {
@@ -436,8 +488,8 @@ async function fetchPoisViaLocationIq(
   }
 
   const tags =
-    "restaurant,cafe,bar,library,cinema,theatre,park,museum,hotel,fast_food,pub,marketplace,garden";
-  const url = `${LOCATIONIQ_API_BASE}/nearby.php?key=${encodeURIComponent(key)}&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&radius=${encodeURIComponent(String(radius))}&tag=${encodeURIComponent(tags)}&format=json`;
+    "restaurant,cafe,bar,park,museum,hotel,fast_food,pub,library,cinema,theatre";
+  const url = `${LOCATIONIQ_API_BASE}/nearby?key=${encodeURIComponent(key)}&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&radius=${encodeURIComponent(String(searchRadius))}&tag=${encodeURIComponent(tags)}&format=json&limit=20`;
 
   const response = await fetch(url, {
     headers: {
@@ -448,6 +500,19 @@ async function fetchPoisViaLocationIq(
 
   if (!response.ok) {
     const text = await response.text();
+    const unableToGeocode = text.includes("Unable to geocode");
+
+    if (unableToGeocode && searchRadius === radius) {
+      const snapped = await snapCoordinatesForPoiSearch(lat, lon);
+      if (snapped.lat !== lat || snapped.lon !== lon) {
+        return fetchPoisViaLocationIq(snapped.lat, snapped.lon, radius, searchRadius);
+      }
+      const expandedRadius = Math.min(Math.max(radius, 1500) + 1000, 3000);
+      if (expandedRadius > radius) {
+        return fetchPoisViaLocationIq(lat, lon, radius, expandedRadius);
+      }
+    }
+
     throw new Error(`LocationIQ nearby error: ${response.status} — ${text.slice(0, 200)}`);
   }
 
@@ -575,7 +640,12 @@ export async function searchPoisAction(
     const { lat, lon, radius, types } = validationResult.data;
     // --- Validation End ---
 
-    console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
+    const { lat: searchLat, lon: searchLon } = await snapCoordinatesForPoiSearch(lat, lon);
+
+    console.log(
+      `[POI Search] Starting search at ${searchLat},${searchLon} with radius ${radius}m` +
+        (searchLat !== lat || searchLon !== lon ? ` (input ${lat},${lon})` : "")
+    );
 
     // --- Build Overpass Query ---
     const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "marketplace", "fast_food", "pub", "community_centre", "police", "post_office", "townhall", "ice_cream"];
@@ -586,21 +656,21 @@ export async function searchPoisAction(
     const query = `
         [out:json][timeout:60];
         (
-          node["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
-          way["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
-          relation["amenity"~"${amenityTypes.join("|")}"](around:${radius},${lat},${lon});
+          node["amenity"~"${amenityTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
+          way["amenity"~"${amenityTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
+          relation["amenity"~"${amenityTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
 
-          node["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
-          way["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
-          relation["leisure"~"${leisureTypes.join("|")}"](around:${radius},${lat},${lon});
+          node["leisure"~"${leisureTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
+          way["leisure"~"${leisureTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
+          relation["leisure"~"${leisureTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
 
-          node["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
-          way["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
-          relation["tourism"~"${tourismTypes.join("|")}"](around:${radius},${lat},${lon});
+          node["tourism"~"${tourismTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
+          way["tourism"~"${tourismTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
+          relation["tourism"~"${tourismTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
 
-          node["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
-          way["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
-          relation["shop"~"${shopTypes.join("|")}"](around:${radius},${lat},${lon});
+          node["shop"~"${shopTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
+          way["shop"~"${shopTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
+          relation["shop"~"${shopTypes.join("|")}"](around:${radius},${searchLat},${searchLon});
         );
         out center;
       `;
@@ -610,9 +680,11 @@ export async function searchPoisAction(
     try {
       console.log(`[POI Search] Overpass Query Body: ${query.substring(0, 100)}...`);
 
-      const sortedPois = await searchPoisWithFallback(lat, lon, radius, query);
+      const sortedPois = await searchPoisWithFallback(searchLat, searchLon, radius, query);
 
-      console.log(`[POI Search] Returning ${sortedPois.length} sorted POIs near ${lat},${lon}`);
+      console.log(
+        `[POI Search] Returning ${sortedPois.length} sorted POIs near ${searchLat},${searchLon}`
+      );
 
       capturedPoiCount = sortedPois.length;
       result = {
