@@ -4,8 +4,17 @@ import { ActionState } from "@/types"
 import { PoiResponse } from "@/types/poi-types"
 import { OsrmRoute as OrsRoute } from "@/types/meet-me-halfway-types"
 import { rateLimit } from "@/lib/rate-limit"
-import { Redis } from '@upstash/redis'
 import { z } from 'zod';
+import {
+  buildGeocodeCacheKey,
+  buildPoiCacheKey,
+  buildSnapCacheKey,
+  getCachedJson,
+  getGeocodeCacheTtlSeconds,
+  getPoiCacheTtlSeconds,
+  getSnapCacheTtlSeconds,
+  setCachedJson,
+} from "@/lib/cache/api-cache";
 import {
   AddressSchema,
   PoiSearchSchema,
@@ -19,7 +28,6 @@ import {
   OVERPASS_API_MIRROR_URL,
   LOCATIONIQ_API_BASE,
   NOMINATIM_API_BASE,
-  CACHE_TTL_SECONDS,
   DEFAULT_POI_RADIUS,
   DEFAULT_USER_AGENT,
 } from '@/lib/constants'; // Import constants
@@ -27,14 +35,7 @@ import { trackApiEvent } from '../app/lib/monitoring'; // <-- Import monitoring 
 import { auth } from "@clerk/nextjs/server"; // <-- Add Clerk auth import
 import { osrmRoute } from "@/actions/osrm-actions"                    // new
 
-// Initialize Redis client for caching
-const redisCache = Redis.fromEnv();
-
-// Remove the old in-memory cache object
-// const apiCache: Record<string, { data: any, timestamp: number }> = {};
-// const CACHE_TTL_SECONDS = 24 * 60 * 60; // Moved to constants.ts
-
-// Helper function to enforce rate limiting with retry logic (Redis caching removed for performance)
+// Helper function to enforce rate limiting with retry logic
 export async function rateLimitedFetch(
   url: string,
   options?: RequestInit,
@@ -177,6 +178,17 @@ export async function geocodeLocationAction(
     const validatedAddress = validationResult.data;
     // --- Validation End ---
 
+    const geocodeCacheKey = buildGeocodeCacheKey(validatedAddress);
+    const cachedGeocode = await getCachedJson<GeocodingResult>(geocodeCacheKey);
+    if (cachedGeocode?.lat && cachedGeocode?.lon) {
+      console.log(`[Geocode] cache hit ${geocodeCacheKey}`);
+      return {
+        isSuccess: true,
+        message: "Location geocoded successfully (cached)",
+        data: cachedGeocode,
+      };
+    }
+
     // --- Main Logic Start (Moved inside the main try block) ---
     console.log('Geocoding address:', validatedAddress);
     const apiKey = process.env.LOCATIONIQ_KEY;
@@ -222,14 +234,16 @@ export async function geocodeLocationAction(
           }
         } else {
           // Success with LocationIQ
+          const geocodeData: GeocodingResult = {
+            lat: data[0].lat,
+            lon: data[0].lon,
+            display_name: data[0].display_name,
+          };
+          await setCachedJson(geocodeCacheKey, geocodeData, getGeocodeCacheTtlSeconds());
           result = {
             isSuccess: true,
             message: "Location geocoded successfully",
-            data: {
-              lat: data[0].lat,
-              lon: data[0].lon,
-              display_name: data[0].display_name
-            }
+            data: geocodeData,
           };
           status = 200; // Explicitly set success status
         }
@@ -252,6 +266,9 @@ export async function geocodeLocationAction(
     // If result is still null here, something went wrong before returning
     if (!result) { 
       throw new Error("Geocoding result was unexpectedly null.");
+    }
+    if (result.isSuccess && result.data) {
+      await setCachedJson(geocodeCacheKey, result.data, getGeocodeCacheTtlSeconds());
     }
     return result;
 
@@ -303,13 +320,23 @@ async function snapCoordinatesForPoiSearch(
     return { lat, lon };
   }
 
+  const snapCacheKey = buildSnapCacheKey(lat, lon);
+  const cachedSnap = await getCachedJson<{ lat: string; lon: string }>(snapCacheKey);
+  if (cachedSnap?.lat && cachedSnap?.lon) {
+    console.log(`[POI Search] snap cache hit ${snapCacheKey}`);
+    return cachedSnap;
+  }
+
   const rounded = {
     lat: latNum.toFixed(6),
     lon: lonNum.toFixed(6),
   };
 
   const key = getLocationIqApiKey();
-  if (!key) return rounded;
+  if (!key) {
+    await setCachedJson(snapCacheKey, rounded, getSnapCacheTtlSeconds());
+    return rounded;
+  }
 
   const reverseUrl = `${LOCATIONIQ_API_BASE}/reverse.php?key=${encodeURIComponent(key)}&lat=${encodeURIComponent(rounded.lat)}&lon=${encodeURIComponent(rounded.lon)}&format=json`;
 
@@ -333,6 +360,7 @@ async function snapCoordinatesForPoiSearch(
             `[POI Search] Snapped (${rounded.lat},${rounded.lon}) → (${snapped.lat},${snapped.lon})`
           );
         }
+        await setCachedJson(snapCacheKey, snapped, getSnapCacheTtlSeconds());
         return snapped;
       }
     }
@@ -340,6 +368,7 @@ async function snapCoordinatesForPoiSearch(
     console.warn("[POI Search] Reverse geocode snap failed:", err);
   }
 
+  await setCachedJson(snapCacheKey, rounded, getSnapCacheTtlSeconds());
   return rounded;
 }
 
@@ -642,6 +671,19 @@ export async function searchPoisAction(
 
     const { lat: searchLat, lon: searchLon } = await snapCoordinatesForPoiSearch(lat, lon);
 
+    const poiCacheKey = buildPoiCacheKey(searchLat, searchLon, radius);
+    const cachedPois = await getCachedJson<PoiResponse[]>(poiCacheKey);
+    if (cachedPois && cachedPois.length > 0) {
+      console.log(`[POI Search] cache hit ${poiCacheKey} (${cachedPois.length} POIs)`);
+      capturedPoiCount = cachedPois.length;
+      result = {
+        isSuccess: true,
+        message: "Successfully found points of interest (cached)",
+        data: cachedPois,
+      };
+      return result;
+    }
+
     console.log(
       `[POI Search] Starting search at ${searchLat},${searchLon} with radius ${radius}m` +
         (searchLat !== lat || searchLon !== lon ? ` (input ${lat},${lon})` : "")
@@ -687,6 +729,9 @@ export async function searchPoisAction(
       );
 
       capturedPoiCount = sortedPois.length;
+      if (sortedPois.length > 0) {
+        await setCachedJson(poiCacheKey, sortedPois, getPoiCacheTtlSeconds());
+      }
       result = {
         isSuccess: true,
         message: "Successfully found points of interest",

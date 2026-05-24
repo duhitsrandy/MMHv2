@@ -2,6 +2,12 @@
 
 import { ActionState } from "@/types"
 import { LOCATIONIQ_API_BASE, NOMINATIM_API_BASE, DEFAULT_USER_AGENT } from "@/lib/constants";
+import {
+  buildGeocodeCacheKey,
+  getCachedJson,
+  getGeocodeCacheTtlSeconds,
+  setCachedJson,
+} from "@/lib/cache/api-cache";
 
 interface GeocodingResult {
   lat: string
@@ -14,12 +20,28 @@ export async function geocodeLocationAction(
   address: string
 ): Promise<ActionState<GeocodingResult>> {
   console.log('[GEOCODING] Starting geocoding for address:', address);
+
+  const trimmed = address.trim();
+  if (!trimmed) {
+    return { isSuccess: false, message: "Address is required" };
+  }
+
+  const geocodeCacheKey = buildGeocodeCacheKey(trimmed);
+  const cached = await getCachedJson<GeocodingResult>(geocodeCacheKey);
+  if (cached?.lat && cached?.lon) {
+    console.log(`[GEOCODING] cache hit ${geocodeCacheKey}`);
+    return {
+      isSuccess: true,
+      message: "Location geocoded successfully (cached)",
+      data: cached,
+    };
+  }
   
   try {
     // Try LocationIQ first
     const apiKey = process.env.LOCATIONIQ_KEY;
     if (apiKey) {
-      const url = `${LOCATIONIQ_API_BASE}/search.php?key=${apiKey}&q=${encodeURIComponent(address)}&format=json&limit=1`;
+      const url = `${LOCATIONIQ_API_BASE}/search.php?key=${apiKey}&q=${encodeURIComponent(trimmed)}&format=json&limit=1`;
       
       try {
         const response = await fetch(url);
@@ -27,14 +49,16 @@ export async function geocodeLocationAction(
           const data = await response.json();
           if (data && data.length > 0) {
             console.log('[GEOCODING] LocationIQ success');
+            const geocodeData: GeocodingResult = {
+              lat: data[0].lat,
+              lon: data[0].lon,
+              display_name: data[0].display_name,
+            };
+            await setCachedJson(geocodeCacheKey, geocodeData, getGeocodeCacheTtlSeconds());
             return {
               isSuccess: true,
               message: "Location geocoded successfully",
-              data: {
-                lat: data[0].lat,
-                lon: data[0].lon,
-                display_name: data[0].display_name
-              }
+              data: geocodeData,
             };
           }
         }
@@ -45,7 +69,7 @@ export async function geocodeLocationAction(
 
     // Fallback to Nominatim
     console.log('[GEOCODING] Using Nominatim fallback');
-    const fallbackUrl = `${NOMINATIM_API_BASE}/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+    const fallbackUrl = `${NOMINATIM_API_BASE}/search?q=${encodeURIComponent(trimmed)}&format=json&limit=1`;
     
     const response = await fetch(fallbackUrl, {
       headers: {
@@ -67,14 +91,16 @@ export async function geocodeLocationAction(
     }
 
     console.log('[GEOCODING] Nominatim success');
+    const geocodeData: GeocodingResult = {
+      lat: data[0].lat,
+      lon: data[0].lon,
+      display_name: data[0].display_name,
+    };
+    await setCachedJson(geocodeCacheKey, geocodeData, getGeocodeCacheTtlSeconds());
     return {
       isSuccess: true,
       message: "Location geocoded successfully (fallback)",
-      data: {
-        lat: data[0].lat,
-        lon: data[0].lon,
-        display_name: data[0].display_name
-      }
+      data: geocodeData,
     };
   } catch (error) {
     console.error("[GEOCODING] Error:", error);
@@ -83,4 +109,4 @@ export async function geocodeLocationAction(
     }
     return { isSuccess: false, message: "Failed to geocode location" };
   }
-} 
+}
