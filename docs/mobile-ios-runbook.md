@@ -30,7 +30,7 @@ npm run mobile:check-env
 Required files:
 
 - `/.env.local` (web/server-side keys)
-- `/MeetMeHalfwayMobile/.env` (Expo public keys)
+- `/MeetMeHalfwayMobile/.env` (Expo public keys; **not committed** — copy from `.env.example`)
 
 ## Local Startup
 
@@ -63,14 +63,20 @@ npm run --prefix ./MeetMeHalfwayMobile ios
 
 ## API Contract Baseline
 
-Mobile should call stable server endpoints under `/api/` and avoid hard-coding experimental/test paths directly in UI components.
+Mobile calls tier-aware endpoints under `/api/mobile/*`. Send `Authorization: Bearer <clerk_jwt>` when signed in for authenticated rate limits and Pro-tier features.
 
-Current baseline endpoints:
+| Endpoint | Auth | Notes |
+|----------|------|-------|
+| `POST /api/mobile/route` | Optional Bearer | 2-origin routing; anon allowed (stricter rate limit) |
+| `POST /api/mobile/geocode` | Optional Bearer | LocationIQ → Nominatim (web parity) |
+| `POST /api/mobile/matrix` | Optional Bearer | Pro/Business → HERE traffic matrix; else ORS |
+| `GET /api/mobile/profile` | Optional Bearer | Returns `tier`; starter if unsigned |
+| `/api/mobile/saved/*` | Bearer required | Cloud saved locations & searches |
+| `GET /api/pois/search` | Public | POI list (unchanged this session) |
 
-- `/api/mobile/route`
-- `/api/ors/geocode`
-- `/api/ors/matrix`
-- `/api/pois/search`
+**Tier rules:** Searching with **more than 2 origins** requires signed-in **Pro or Business**. HERE matrix requires Pro/Business.
+
+Legacy public proxies (`/api/ors/geocode`, `/api/ors/matrix`) remain for backward compatibility; the mobile app uses `/api/mobile/*` instead.
 
 ## Release Readiness Notes
 

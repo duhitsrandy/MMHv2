@@ -40,10 +40,19 @@ function getClientIp(req: NextRequest): string {
 
 // Get rate limit type based on the API route
 function getRateLimitType(pathname: string): 'anonymous' | 'authenticated' | 'special' {
-  if (pathname.includes('/api/geocode')) {
+  if (
+    pathname.includes('/api/geocode') ||
+    pathname.includes('/api/ors/geocode') ||
+    pathname.includes('/api/mobile/geocode')
+  ) {
     return RATE_LIMIT_TYPES.GEOCODING
   }
-  if (pathname.includes('/api/route')) {
+  if (
+    pathname.includes('/api/route') ||
+    pathname.includes('/api/ors/matrix') ||
+    pathname.includes('/api/mobile/route') ||
+    pathname.includes('/api/mobile/matrix')
+  ) {
     return RATE_LIMIT_TYPES.ROUTE_CALCULATION
   }
   if (pathname.includes('/api/poi')) {

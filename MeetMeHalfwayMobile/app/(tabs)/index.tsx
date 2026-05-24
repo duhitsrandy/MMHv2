@@ -24,6 +24,7 @@ import { usePlan } from "../../src/hooks/usePlan";
 import { usePoi } from "../contexts/PoiContext";
 import { useSafeAuth as useAuth } from "@/src/auth";
 import { buildPoiNavigationLinks } from "@shared/poi-navigation-links";
+import { requiresProForOriginCount } from "@shared/tier-limits";
 
 type OriginInput = { id: string; address: string };
 type OriginCoord = { address: string; lat: number; lng: number };
@@ -162,7 +163,10 @@ export default function TabOneScreen() {
 
     try {
       setLoading(true);
-      const geocoded = await Promise.all(trimmed.map((address) => geocodeAddress(address)));
+      const token = isSignedIn ? await getToken() : null;
+      const geocoded = await Promise.all(
+        trimmed.map((address) => geocodeAddress(address, token))
+      );
       if (geocoded.some((item) => !item)) {
         Alert.alert("Geocoding failed", "Please check your locations and try again.");
         return;
@@ -175,37 +179,46 @@ export default function TabOneScreen() {
       }));
       setOriginCoords(resolved);
 
-      await Promise.all(
-        resolved.map((item, index) =>
-          saveLocation({
-            label: item.address.split(",")[0] || `Location ${index + 1}`,
-            address: item.address,
-            lat: item.lat,
-            lng: item.lng,
-          })
-        )
-      );
-      await saveSearch(resolved);
+      if (requiresProForOriginCount(resolved.length, tier)) {
+        Alert.alert(
+          "Upgrade required",
+          "Searching with more than 2 locations requires a Pro or Business plan.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "View Plans",
+              onPress: () => Linking.openURL("https://meetmehalfway.co/pricing"),
+            },
+          ]
+        );
+        return;
+      }
 
-      // Parallel cloud writes — non-blocking, local save is always the primary
-      if (isSignedIn) {
-        getToken().then((token) => {
-          if (!token) return;
-          resolved.forEach((item, index) => {
-            createCloudLocation(token, {
+      if (!isSignedIn) {
+        await Promise.all(
+          resolved.map((item, index) =>
+            saveLocation({
               label: item.address.split(",")[0] || `Location ${index + 1}`,
               address: item.address,
               lat: item.lat,
               lng: item.lng,
-            }).catch((err) => {
-              if (__DEV__) console.warn("[CloudSync] createCloudLocation failed:", err);
-            });
+            })
+          )
+        );
+        await saveSearch(resolved);
+      } else if (token) {
+        resolved.forEach((item, index) => {
+          createCloudLocation(token, {
+            label: item.address.split(",")[0] || `Location ${index + 1}`,
+            address: item.address,
+            lat: item.lat,
+            lng: item.lng,
+          }).catch((err) => {
+            if (__DEV__) console.warn("[CloudSync] createCloudLocation failed:", err);
           });
-          createCloudSearch(token, resolved).catch((err) => {
-            if (__DEV__) console.warn("[CloudSync] createCloudSearch failed:", err);
-          });
-        }).catch((err) => {
-          if (__DEV__) console.warn("[CloudSync] getToken failed:", err);
+        });
+        createCloudSearch(token, resolved).catch((err) => {
+          if (__DEV__) console.warn("[CloudSync] createCloudSearch failed:", err);
         });
       }
 
@@ -215,7 +228,7 @@ export default function TabOneScreen() {
       let altRoute: LatLng[] = [];
 
       if (resolved.length === 2) {
-        const routeData = await fetchRouteData(resolved[0], resolved[1]);
+        const routeData = await fetchRouteData(resolved[0], resolved[1], token);
         mainRoute = routeData.mainRoute;
         altRoute = routeData.alternateRoute;
         mainMid = routeData.mainMidpoint || getSimpleMidpoint(resolved[0], resolved[1]);
@@ -238,7 +251,8 @@ export default function TabOneScreen() {
       if (allPois.length > 0) {
         const matrixResult = await getTravelTimeMatrix(
           resolved.map(({ lat, lng }) => ({ lat, lng })),
-          allPois.map((poi) => ({ lat: poi.lat, lng: poi.lng }))
+          allPois.map((poi) => ({ lat: poi.lat, lng: poi.lng })),
+          token
         );
         allPois = allPois.map((poi, poiIndex) => ({
           ...poi,
@@ -638,7 +652,8 @@ const styles = StyleSheet.create({
 
 async function fetchRouteData(
   a: { lat: number; lng: number },
-  b: { lat: number; lng: number }
+  b: { lat: number; lng: number },
+  token?: string | null
 ): Promise<{
   mainRoute: LatLng[];
   alternateRoute: LatLng[];
@@ -646,7 +661,7 @@ async function fetchRouteData(
   alternateMidpoint: { lat: number; lng: number } | null;
 }> {
   try {
-    const json = await fetchMobileRoute(a, b);
+    const json = await fetchMobileRoute(a, b, token);
     
     // Convert coordinate arrays to LatLng format
     const mainRoute = json?.mainRoute && Array.isArray(json.mainRoute) && json.mainRoute.length > 1

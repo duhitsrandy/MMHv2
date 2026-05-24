@@ -4,7 +4,6 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useContext, useEffect } from 'react';
-import { TouchableOpacity } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
@@ -75,40 +74,6 @@ export default function RootLayout() {
   );
 }
 
-// Only rendered when ClerkProvider is in the tree
-function AccountButtonInner() {
-  const { isSignedIn, signOut } = useAuth();
-  const router = useRouter();
-
-  if (isSignedIn) {
-    return (
-      <TouchableOpacity
-        onPress={() => signOut()}
-        style={{ marginRight: 12 }}
-        accessibilityLabel="Sign out"
-      >
-        <FontAwesome name="user-circle" size={22} color="#111827" />
-      </TouchableOpacity>
-    );
-  }
-
-  return (
-    <TouchableOpacity
-      onPress={() => router.push('/sign-in' as any)}
-      style={{ marginRight: 12 }}
-      accessibilityLabel="Sign in"
-    >
-      <FontAwesome name="user" size={22} color="#6b7280" />
-    </TouchableOpacity>
-  );
-}
-
-function AccountButton() {
-  const clerkActive = useContext(ClerkActiveContext);
-  if (!clerkActive) return null;
-  return <AccountButtonInner />;
-}
-
 // Only enforces auth redirect when ClerkProvider is in the tree
 function AuthGateInner({ children }: { children: React.ReactNode }) {
   const { isSignedIn, isLoaded } = useAuth();
@@ -154,7 +119,7 @@ function RootLayoutNav() {
             name="sign-up"
             options={{ title: "Sign Up", headerRight: () => null }}
           />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'About' }} />
         </Stack>
       </AuthGate>
     </ThemeProvider>

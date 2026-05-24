@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAlternateRouteAction, getRouteAction } from "@/actions/locationiq-actions";
+import { getMobileAuthContext } from "@/lib/auth/mobile-auth";
 import { rateLimit } from "@/lib/rate-limit";
 
 type RouteBody = {
@@ -54,7 +55,12 @@ function distanceMidpoint(
 
 export async function POST(request: Request) {
   try {
-    const limiter = await rateLimit();
+    const { userId } = await getMobileAuthContext();
+    const rateLimitType = userId ? "authenticated" : "anonymous";
+    const limiter = await rateLimit({
+      type: rateLimitType,
+      identifier: userId ?? undefined,
+    });
     if (!limiter.success) {
       return NextResponse.json(
         {

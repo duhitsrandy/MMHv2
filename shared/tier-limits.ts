@@ -11,3 +11,8 @@ export function getMaxLocationsForTier(tier: Tier | null | undefined): number {
   if (!tier) return TIER_MAX_LOCATIONS.starter;
   return TIER_MAX_LOCATIONS[tier] ?? TIER_MAX_LOCATIONS.starter;
 }
+
+/** Centroid / multi-origin search for more than 2 locations requires Pro or Business. */
+export function requiresProForOriginCount(count: number, tier: Tier): boolean {
+  return count > 2 && tier !== "pro" && tier !== "business";
+}
