@@ -2,6 +2,18 @@
 
 This runbook is the stable baseline for local iOS development in this repo.
 
+## Prerequisites
+
+- macOS with Xcode 15+ (iOS Simulator)
+- Node.js 18+
+- Apple Developer account (for device builds and App Store; see release checklist)
+- Expo managed workflow in `MeetMeHalfwayMobile/` (not a greenfield React Native CLI scaffold)
+
+## Related docs
+
+- [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) — TestFlight / App Store prep
+- [mobile-qa-checklist.md](mobile-qa-checklist.md) — manual QA before release
+
 ## Project Layout
 
 - Web app root: `mmhv2/`

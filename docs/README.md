@@ -1,31 +1,53 @@
 # Documentation Index
 
-Welcome to the documentation for **Meet Me Halfway v2**! All project documentation is now organized in this `docs/` directory for easy access.
+Meet Me Halfway v2 is **Expo mobile** (`MeetMeHalfwayMobile/`) plus a **Next.js API and web app**, with **tiered geo providers**: LocationIQ and RapidAPI OSRM for geocoding, routing, and POIs; OpenRouteService for matrix travel times (Starter/Plus and fallback); HERE for Pro/Business traffic-aware matrices.
 
-## Table of Contents
+For project setup and quick start, see the main [README.md](../README.md) in the repo root.
 
-- [Api Docs](api-docs.md)
-- [App Structure](app-structure.md) - **Definitive comprehensive guide**
-- [Auth Docs](auth-docs.md)
-- [Db Schema Docs](db-schema-docs.md)
-- [HERE API Integration](HERE_API_INTEGRATION.md)
-- [MONITORING](MONITORING.md)
-- [Mobile iOS Runbook](mobile-ios-runbook.md)
-- [Mobile iOS Release Checklist](mobile-ios-release-checklist.md)
-- [Mobile QA Checklist](mobile-qa-checklist.md)
-- [Multi-Origin Feature](MULTI_ORIGIN_FEATURE.md)
-- [POTENTIAL FUTURE FEATURES](POTENTIAL_FUTURE_FEATURES.md)
-- [PRODUCTION](PRODUCTION.md)
-- [Rate Limit Docs](rate-limit-docs.md)
-- [Subscription & Billing](SUBSCRIPTION_BILLING.md)
-- [Theme Docs](theme-docs.md)
-- [Upgrade Modal Implementation](UPGRADE_MODAL_IMPLEMENTATION.md)
+## Canonical documentation
 
-## How to Use
-- Each document covers a specific area of the app or its infrastructure.
-- Start with **App Structure** for an overview, then dive into specific topics as needed.
-- If you add new documentation, please update this index (or re-run this script)!
+These documents describe what is deployed and how to operate it today.
+
+| Document | Description |
+|----------|-------------|
+| [app-structure.md](app-structure.md) | Architecture: web, mobile, API, tiered geo |
+| [api-docs.md](api-docs.md) | API endpoints, clients, geo provider matrix |
+| [mobile-ios-runbook.md](mobile-ios-runbook.md) | Local Expo iOS development (start here for mobile) |
+| [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) | TestFlight / App Store prep |
+| [mobile-qa-checklist.md](mobile-qa-checklist.md) | Manual QA before release |
+| [SENTRY_VERCEL.md](SENTRY_VERCEL.md) | Sentry + Vercel for the Next.js web app |
+| [MONITORING.md](MONITORING.md) | PostHog, Sentry, uptime, alerting |
+| [SUBSCRIPTION_BILLING.md](SUBSCRIPTION_BILLING.md) | Stripe tiers and billing |
+| [PRODUCTION.md](PRODUCTION.md) | Production deployment checklist |
+
+## Reference documentation
+
+| Document | Description |
+|----------|-------------|
+| [auth-docs.md](auth-docs.md) | Clerk authentication |
+| [db-schema-docs.md](db-schema-docs.md) | Database schema |
+| [rate-limit-docs.md](rate-limit-docs.md) | Upstash rate limiting |
+| [theme-docs.md](theme-docs.md) | Theme system |
+| [HERE_API_INTEGRATION.md](HERE_API_INTEGRATION.md) | HERE traffic matrix (Pro/Business) |
+| [MULTI_ORIGIN_FEATURE.md](MULTI_ORIGIN_FEATURE.md) | Multi-origin algorithms |
+| [UPGRADE_MODAL_IMPLEMENTATION.md](UPGRADE_MODAL_IMPLEMENTATION.md) | Upgrade modal and tier enforcement |
+| [KEEPALIVE.md](KEEPALIVE.md) | Keepalive / uptime notes |
+
+## Backlog only (not architecture)
+
+| Document | Description |
+|----------|-------------|
+| [POTENTIAL_FUTURE_FEATURES.md](POTENTIAL_FUTURE_FEATURES.md) | Ideas backlog — **not** current architecture |
+
+## Archived (historical)
+
+Do not use these for onboarding.
+
+| Document | Description |
+|----------|-------------|
+| [archive/pwa-conversion-guide.md](archive/pwa-conversion-guide.md) | Superseded by Expo |
+| [archive/mobile-setup-guide.md](archive/mobile-setup-guide.md) | Superseded by [mobile-ios-runbook.md](mobile-ios-runbook.md) |
 
 ---
 
-For general project setup, see the main [README.md](../README.md) in the project root.
+When you add new documentation, update this index.

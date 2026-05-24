@@ -32,7 +32,7 @@ This document describes the monitoring, analytics, and observability setup for t
 
 The Next.js web app reports unhandled client, server, and edge errors via `@sentry/nextjs`. Configuration lives in `lib/sentry/options.ts`, `instrumentation.ts`, and `sentry.*.config.ts`. Clerk user id is attached in `components/utilities/sentry/sentry-user.tsx` (id only, no email). PostHog remains the source for API usage analytics.
 
-Expo mobile (`MeetMeHalfwayMobile/`) is not wired to Sentry yet.
+Expo mobile (`MeetMeHalfwayMobile/`) is not wired to Sentry yet. Local mobile testing: [mobile-ios-runbook.md](mobile-ios-runbook.md).
 
 ### Setup Checklist
 - [x] Integrate Sentry with the Next.js web app (client, server, edge)

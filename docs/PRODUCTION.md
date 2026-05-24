@@ -257,6 +257,7 @@ This document outlines the comprehensive steps and considerations for deploying 
 
 ### Related Documentation
 - [App Structure](app-structure.md) - Comprehensive application architecture
+- [Sentry + Vercel](SENTRY_VERCEL.md) - Web error monitoring and source maps
 - [Subscription & Billing](SUBSCRIPTION_BILLING.md) - Complete billing system documentation
 - [HERE API Integration](HERE_API_INTEGRATION.md) - Pro tier traffic data implementation
 - [Multi-Origin Feature](MULTI_ORIGIN_FEATURE.md) - Advanced location handling

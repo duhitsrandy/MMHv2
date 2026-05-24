@@ -1,7 +1,26 @@
 # API Documentation
 
 ## Overview
-The Meet Me Halfway application integrates with several external APIs for geocoding, routing, and points of interest services. This documentation covers the API endpoints, request/response formats, authentication, error handling, and integration details.
+Meet Me Halfway is **Expo mobile** plus a **Next.js web app and API**, using a **tiered geo stack**: LocationIQ (geocode + POI), RapidAPI OSRM (route geometry), OpenRouteService (matrix for Starter/Plus and fallback), and HERE (Pro/Business traffic-aware matrix).
+
+This document covers HTTP/API routes, server actions, request/response formats, authentication, error handling, and external provider integration.
+
+## Clients
+
+| Client | How it calls the backend |
+|--------|---------------------------|
+| **Web** | Next.js server actions (e.g. `geocodeLocationAction`) and authenticated `/api/*` routes |
+| **Expo mobile** | Stable `/api/*` routes documented in [mobile-ios-runbook.md](mobile-ios-runbook.md) (e.g. `/api/mobile/route`, `/api/ors/geocode`, `/api/ors/matrix`, `/api/pois/search`) |
+
+Both clients share the same tiered geo providers and subscription enforcement on the server.
+
+## Tiered geo providers
+
+| Capability | Starter / Plus | Pro / Business |
+|------------|----------------|----------------|
+| Geocoding & POI | LocationIQ | LocationIQ |
+| Route geometry | RapidAPI OSRM | RapidAPI OSRM |
+| Travel time matrix | OpenRouteService | HERE (traffic); ORS fallback |
 
 **Key Features:**
 - Multi-origin support (2-10 locations based on subscription tier)
