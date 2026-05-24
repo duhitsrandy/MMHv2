@@ -1,34 +1,40 @@
 # Meet Me Halfway — Mobile Gap Audit & Finish Plan
 
-**Repo:** `/Users/randy/mmhv2` · **Branch:** `main`  
-**Audit date:** 2026-05-24  
-**Scope:** Expo mobile (`MeetMeHalfwayMobile/`) vs Next.js 15 web · Phase A read-only · Phase B skipped (document-only)
+**Repo:** `/Users/randy/mmhv2` · **Branch:** `cursor/mobile-gap-audit-docs` (Sessions 1–2)  
+**Audit date:** 2026-05-24 · **Doc updated:** 2026-05-24 (post Sessions 1–2)  
+**Scope:** Expo mobile (`MeetMeHalfwayMobile/`) vs Next.js 15 web
 
 Canonical references: [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-qa-checklist.md](mobile-qa-checklist.md), [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md), [app-structure.md](app-structure.md)
+
+### Session status (this branch)
+
+| Session | Status | Notes |
+|---------|--------|-------|
+| **1** — P0/P1 parity & TestFlight unblockers | **Done** | Auth mobile APIs, tier rules, EAS scaffold, `.env` untracked, docs |
+| **2** — Stripe PaymentSheet + billing portal | **Done** | `UpgradeModal`, `/api/mobile/stripe/*`, Vercel webhook build fix |
+| **3** — TestFlight + QA sign-off | **Next** | `eas init`, ASC registration, full QA checklist |
 
 ---
 
 ## Executive summary
 
-1. **Mobile is a working v1** — 3 tabs (Map / POIs / Saved), optional Clerk auth, tier-aware UI from `/api/mobile/profile`, 2-origin routing + midpoint, 3+-origin centroid search, ORS-only travel-time matrix, POI list with Apple/Google/Waze deep links, cloud sync for saved locations and searches when signed in.
+1. **Mobile is a working v1** — 3 tabs (Map / POIs / Saved), optional Clerk auth, tier-aware UI from `/api/mobile/profile`, 2-origin routing + midpoint, 3+-origin centroid search (Pro+ enforced client-side), travel-time matrix via `/api/mobile/matrix` (HERE for Pro/Business when signed in), POI list with Apple/Google/Waze deep links, cloud sync for saved locations and searches when signed in.
 
-2. **Authenticated mobile APIs are in good shape** — `/api/mobile/profile`, `/api/mobile/saved/locations`, `/api/mobile/saved/searches` use Clerk bearer JWT and return 401 when required. This matches the stable web handoff work on `main`.
+2. **Authenticated mobile APIs are in good shape** — `/api/mobile/profile`, `/api/mobile/saved/*`, `/api/mobile/geocode`, `/api/mobile/matrix`, and optional Bearer on `/api/mobile/route` use Clerk JWT where applicable. Saved data writes go to cloud when signed in (no local-only search writes on map tab).
 
-3. **Unauthenticated proxies are the main architectural gap** — Mobile calls `/api/mobile/route`, `/api/ors/geocode`, `/api/ors/matrix`, and `/api/pois/search` without auth. Middleware treats all `/api/(.*)` as public; rate-limit path matching misses `/api/mobile/route` and `/api/ors/geocode` (strict anonymous bucket only).
+3. **Remaining architectural gap** — `GET /api/pois/search` is still a public proxy (no Bearer). Rate limits apply; tier is not enforced server-side on POI. Acceptable for TestFlight; tighten in a follow-up if abuse appears.
 
-4. **Tier parity diverges on multi-origin and matrix** — Web blocks >2 origins in `results-map.tsx` unless Pro/Business; mobile allows Plus (3 locations). Web uses HERE traffic matrix for Pro/Business; mobile always uses public ORS matrix. Neither path enforces tier server-side on geo calls.
+4. **Tier parity (multi-origin + matrix)** — **Aligned in Sessions 1–2:** `requiresProForOriginCount` on mobile map tab; `/api/mobile/matrix` uses HERE for Pro/Business when authenticated. Web `results-map` should stay in sync with `shared/tier-limits.ts`.
 
-5. **Stripe is not wired on mobile** — `@stripe/stripe-react-native` is in `package.json` and `app.json` lists the plugin, but `app.config.ts` (active dynamic config) omits the Stripe plugin and no mobile code imports Stripe. Upgrade CTA opens `meetmehalfway.co/pricing` via `Linking`. **Decision:** wire in-app PaymentSheet (Session 2).
+5. **Stripe on mobile** — **Done (Session 2):** `@stripe/stripe-react-native` PaymentSheet via `POST /api/mobile/stripe/checkout-session`; billing portal via `POST /api/mobile/stripe/billing-portal` + `mmh://billing-return`. Existing Stripe webhook unchanged. **App Store 3.1.1** still a public-launch consideration (see below).
 
-6. **Saved-tab UX bug** — When signed in, `useSavedData` shows cloud-only, but search still writes to AsyncStorage; local entries disappear until sign-out.
+6. **Config / release blockers (Session 3)** — EAS `projectId` still `CHANGE_ME_IN_EAS` until `eas init`; bundle ID must be registered in App Store Connect before first TestFlight submit.
 
-7. **Config / release blockers (P0)** — EAS `projectId` is `CHANGE_ME_IN_EAS`; bundle ID not registered in App Store Connect; `app.config.ts` vs `app.json` drift; `MeetMeHalfwayMobile/.env` is **tracked in git** (not gitignored).
+7. **Docs** — QA/release/runbook updated in Session 1; this file updated after Session 2. Session 3 adds pass/fail QA results.
 
-8. **Docs are partially stale** — QA checklist references web sign-in handoff and `EXPO_PUBLIC_MOBILE_PLAN_TIER` (never read in code). Release checklist points at `app.json` for Stripe plugin while Expo prefers `app.config.ts`.
+8. **Positive patterns to keep** — `@shared/tier-limits`, `@shared/poi-navigation-links`, `/api/mobile/profile` + cloud sync, existing QA/release checklists, Vitest on shared modules.
 
-9. **Positive patterns to keep** — `@shared/tier-limits`, `@shared/poi-navigation-links`, `/api/mobile/profile` + cloud sync, existing QA/release checklists, Vitest on shared modules.
-
-10. **Recommended sequence** — Session 1: P0/P1 parity + TestFlight unblockers → Session 2: Stripe PaymentSheet → Session 3: TestFlight build + QA sign-off. See [mobile-followup-sessions.md](mobile-followup-sessions.md).
+9. **Next step** — Session 3: run [mobile-qa-checklist.md](mobile-qa-checklist.md), `eas build`, internal TestFlight. See [mobile-followup-sessions.md](mobile-followup-sessions.md).
 
 ---
 
@@ -38,12 +44,12 @@ Canonical references: [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-qa
 |---------|--------------|-----------------|--------|-------|
 | Auth (Clerk sign-in/up, session) | Clerk hosted / middleware | `MeetMeHalfwayMobile/app/sign-in.tsx`, `sign-up.tsx`, `src/auth/safe-auth.tsx` | Yes (different UI) | Native email/password; optional `EXPO_PUBLIC_REQUIRE_AUTH` |
 | Tier / plan limits | `shared/tier-limits.ts`, `hooks/usePlan.ts`, form + results-map | `usePlan.ts` → `/api/mobile/profile` + `getMaxLocationsForTier` | Partial | Client-only enforcement on geo APIs |
-| Geocode | `actions/geocoding-test.ts` (LocationIQ → Nominatim) | `POST /api/ors/geocode` via `src/services/api.ts` | Partial | Different provider; public endpoint |
-| Routing (2 points) | `getRouteAction` in `actions/locationiq-actions.ts` | `POST /api/mobile/route` | Yes (logic) | Mobile route is unauthenticated |
-| Multi-origin / centroid (3+) | `results-map.tsx` — Pro+ required for >2 | `(tabs)/index.tsx` client centroid | **No** | Plus allowed on mobile; web throws |
-| POI search + travel times | LocationIQ/Overpass + HERE (Pro) or ORS matrix | `/api/pois/search` + `/api/ors/matrix` | Partial | No HERE on mobile; `tags` param ignored |
-| Saved locations & searches | `actions/db/*`, sidebar + saved-searches page | `/api/mobile/saved/*`, `useSavedData`, `cloudSync.ts` | Yes | Cloud-only display bug when signed in |
-| Stripe checkout / portal | `actions/stripe/createCheckoutSession.ts`, `UpgradeModal` | `Linking.openURL` to pricing only | **No** | PaymentSheet planned Session 2 |
+| Geocode | `actions/geocoding-test.ts` (LocationIQ → Nominatim) | `POST /api/mobile/geocode` via `api.ts` (optional Bearer) | Partial | Web parity path; provider may still differ |
+| Routing (2 points) | `getRouteAction` in `actions/locationiq-actions.ts` | `POST /api/mobile/route` (optional Bearer) | Yes | Rate-limited; auth optional |
+| Multi-origin / centroid (3+) | `results-map.tsx` — Pro+ required for >2 | `(tabs)/index.tsx` + `requiresProForOriginCount` | **Yes** | Session 1 |
+| POI search + travel times | LocationIQ/Overpass + HERE (Pro) or ORS matrix | `/api/pois/search` + `/api/mobile/matrix` | Partial | HERE on mobile when Pro+ signed in; `tags` still ignored |
+| Saved locations & searches | `actions/db/*`, sidebar + saved-searches page | `/api/mobile/saved/*`, `useSavedData`, `cloudSync.ts` | Yes | Cloud writes on map search when signed in |
+| Stripe checkout / portal | `actions/stripe/createCheckoutSession.ts`, `UpgradeModal` | `UpgradeModal` + PaymentSheet + billing portal | **Yes** | Session 2 |
 | PostHog / Sentry | Web wired per `docs/MONITORING.md` | None | **No** | Deferred P2 |
 | Rate limits / error UX | Middleware + toasts | Generic `Alert.alert` | Partial | No 429-specific handling |
 
@@ -59,23 +65,23 @@ Canonical references: [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-qa
 | 2 | Current plan / tier | `lib/auth/plan.ts` → `getUserPlanInfoAction` | `GET /api/mobile/profile` + bearer | Yes | OK | Unauthenticated → `tier: "starter"` (200) |
 | 3 | Saved locations CRUD | `actions/db/locations-actions.ts` | `/api/mobile/saved/locations` | Yes | OK | No server count limit |
 | 4 | Saved searches CRUD | `actions/db/searches-actions.ts` | `/api/mobile/saved/searches` | Yes | OK | Zod min 2 locations |
-| 5 | Geocoding | `actions/geocoding-test.ts` | `/api/ors/geocode` | Partial | P1 | Public, no auth; provider split |
-| 6 | Routing (2 points) | `getRouteAction` | `/api/mobile/route` | Yes (logic) | P1 | **Unauthenticated** — auth-gate or fix rate limits |
-| 7 | Travel-time matrix | ORS or HERE (`getTrafficMatrixHereAction`) | `/api/ors/matrix` always | **No** | P1 | Add `/api/mobile/matrix` with HERE for pro+ |
-| 8 | 3+-origin centroid | `results-map.tsx` requires Pro for >2 | `(tabs)/index.tsx` allows Plus | **No** | P1 | Align rule; enforce server-side |
+| 5 | Geocoding | `actions/geocoding-test.ts` | `/api/mobile/geocode` | Partial | P2 | Done Session 1; optional Bearer |
+| 6 | Routing (2 points) | `getRouteAction` | `/api/mobile/route` | Yes | OK | Optional Bearer + rate limits |
+| 7 | Travel-time matrix | ORS or HERE (`getTrafficMatrixHereAction`) | `/api/mobile/matrix` | Yes | OK | HERE when Pro+ signed in |
+| 8 | 3+-origin centroid | `results-map.tsx` requires Pro for >2 | `requiresProForOriginCount` on map | Yes | OK | Session 1 |
 | 9 | POI search | `searchPoisAction` | `/api/pois/search` | Partial | P2 | `tags` query ignored; dead filter UI |
 | 10 | POI external nav | N/A | `@shared/poi-navigation-links` | Yes | OK | Verify in Session 3 QA |
-| 11 | Stripe checkout | `createCheckoutSession` | External pricing URL only | **No** | **P0** | PaymentSheet — Session 2 |
-| 12 | Stripe billing portal | `createBillingPortalSessionAction` | None | **No** | P1 | `/api/mobile/stripe/billing-portal` + in-app browser |
+| 11 | Stripe checkout | `createCheckoutSession` | PaymentSheet + `checkout-session` API | Yes | OK | Session 2 |
+| 12 | Stripe billing portal | `createBillingPortalSessionAction` | `billing-portal` + `useManageSubscription` | Yes | OK | Session 2 |
 | 13 | PostHog | `posthog-provider.tsx`, `app/lib/monitoring.ts` | None | **No** | P2 | Per `docs/MONITORING.md` |
 | 14 | Sentry | `sentry.*.config.ts` | None | **No** | P2 / Defer | ~0.5 day with EAS source maps |
 | 15 | Rate-limit 429 UX | Toasts | `Alert.alert` only | Partial | P2 | Read `X-RateLimit-*` headers |
 | 16 | Toast / non-blocking UX | `sonner` | `Alert.alert` only | **No** | P2 | e.g. `expo-burnt` |
-| 17 | EAS `projectId` | N/A | `CHANGE_ME_IN_EAS` in `app.config.ts` | **No** | **P0** | `eas init` |
-| 18 | Stripe plugin config | N/A | Plugin in `app.json` only | **No** | **P0** | Move to `app.config.ts` |
-| 19 | Bundle ID in ASC | N/A | `com.meetmehalfway.mobile` | **No** | **P0** | Register before submit |
-| 20 | Committed `.env` | N/A | `MeetMeHalfwayMobile/.env` tracked in git | **Risk** | **P0** | Gitignore + rotate keys |
-| 21 | Saved tab when signed in | N/A | Cloud-only display; local writes continue | Bug | P1 | Stop local writes when signed in |
+| 17 | EAS `projectId` | N/A | `CHANGE_ME_IN_EAS` in `app.config.ts` | **No** | **P0** | Session 3 — `eas init` |
+| 18 | Stripe plugin config | N/A | `app.config.ts` + `@stripe/stripe-react-native` | Yes | OK | Session 1–2; `app.json` removed |
+| 19 | Bundle ID in ASC | N/A | `com.meetmehalfway.mobile` | **No** | **P0** | Session 3 — manual ASC step |
+| 20 | Committed `.env` | N/A | Untracked + `.gitignore` | Yes | OK | Session 1 |
+| 21 | Saved tab when signed in | N/A | Cloud sync on map search when signed in | Yes | OK | Session 1 |
 | 22 | Dead code | N/A | `searchPOIs`, `AccountButton`, `setFilter`, unused env | N/A | P2 | Session 1 cleanup |
 | 23 | Modal screen | N/A | Expo starter `modal.tsx` | N/A | P2 | Replace or remove |
 | 24 | Docs accuracy | N/A | QA / release / runbook stale lines | N/A | P1 | Listed below |
@@ -90,9 +96,9 @@ Canonical references: [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-qa
 
 | Client | Endpoint | Auth | Tier-gated |
 |--------|----------|------|------------|
-| `api.ts` → `fetchMobileRoute` | `POST /api/mobile/route` | No | No |
-| `api.ts` → `geocodeAddress` | `POST /api/ors/geocode` | No | No |
-| `api.ts` → `getTravelTimeMatrix` | `POST /api/ors/matrix` | No | No |
+| `api.ts` → `fetchMobileRoute` | `POST /api/mobile/route` | Optional Bearer | Rate limit by user |
+| `api.ts` → `geocodeAddress` | `POST /api/mobile/geocode` | Optional Bearer | No |
+| `api.ts` → `getTravelTimeMatrix` | `POST /api/mobile/matrix` | Optional Bearer | HERE if Pro+ |
 | `poi.ts` → `getNearbyPois` | `GET /api/pois/search` | No | No |
 | `usePlan` | `GET /api/mobile/profile` | Bearer | No (returns starter if anon) |
 | `cloudSync.ts` | `/api/mobile/saved/*` | Bearer | No |
@@ -101,9 +107,9 @@ Canonical references: [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-qa
 
 | Risk | Severity | Detail |
 |------|----------|--------|
-| Public geocode/route/matrix/POI | High | Unauthenticated quota consumption; web server actions not directly callable cross-origin, but mobile API routes replicate behavior |
-| 3+ locations without Pro | High | Plus tier on mobile; web blocks in `results-map`; no API validation |
-| HERE matrix unavailable | Medium | Pro/Business subscribers get ORS-only ETAs on mobile |
+| Public POI search | Medium | `/api/pois/search` still unauthenticated; geocode/route/matrix improved |
+| 3+ locations without Pro | Low | Client + shared tier rule on mobile; confirm web stays aligned |
+| HERE matrix unavailable | Low | Available on mobile when signed in Pro+ via `/api/mobile/matrix` |
 | Geocoder provider split | Medium | ORS vs LocationIQ may resolve addresses differently |
 | POI `tags` ignored | Low | Mobile sends categories; server uses fixed set |
 | Profile returns starter for anon | Low | Masks auth failures; intentional for guest UX |
@@ -164,19 +170,19 @@ Mapped to [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md):
 
 - [ ] Register `com.meetmehalfway.mobile` in Apple Developer + App Store Connect
 - [ ] Run `eas init` from `MeetMeHalfwayMobile/`; replace `CHANGE_ME_IN_EAS` in `app.config.ts`
-- [ ] Create `MeetMeHalfwayMobile/eas.json` (`development`, `preview`, `production`; `submit.production.ios`)
-- [ ] Consolidate Expo config: Stripe plugin + `merchantIdentifier` + `newArchEnabled` in `app.config.ts`
+- [x] Create `MeetMeHalfwayMobile/eas.json` (`development`, `preview`, `production`)
+- [x] Consolidate Expo config: Stripe plugin + `merchantIdentifier` + `newArchEnabled` in `app.config.ts`
 - [ ] Verify `expo prebuild --no-install --platform ios` succeeds (optional sanity check)
-- [ ] **Gitignore `MeetMeHalfwayMobile/.env`** — currently **tracked** (`git ls-files` confirms); rotate any exposed keys
-- [ ] Set real Stripe publishable key in EAS secrets (not committed)
+- [x] **Gitignore `MeetMeHalfwayMobile/.env`** (no longer tracked)
+- [ ] Set real Stripe publishable key + price IDs in EAS secrets (not committed)
 
 ### P1 (before public launch)
 
-- [ ] Wire native Stripe PaymentSheet (Session 2)
-- [ ] Saved tab: stop local writes when signed in (Session 1)
-- [ ] Auth-gate `/api/mobile/route` + add `/api/mobile/geocode` + `/api/mobile/matrix` (Session 1)
-- [ ] Align 3+-origin tier rule web + mobile (Session 1)
-- [ ] Update QA, release, and runbook docs (Session 1)
+- [x] Wire native Stripe PaymentSheet (Session 2)
+- [x] Saved tab / map search: cloud writes when signed in (Session 1)
+- [x] `/api/mobile/geocode` + `/api/mobile/matrix`; optional Bearer on `/api/mobile/route` (Session 1)
+- [x] Align 3+-origin tier rule via `requiresProForOriginCount` (Session 1)
+- [x] Update QA, release, and runbook docs (Session 1)
 
 ### P2 (polish)
 
@@ -199,8 +205,10 @@ Mapped to [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md):
 | Area | Paths |
 |------|-------|
 | Mobile tabs | `MeetMeHalfwayMobile/app/(tabs)/index.tsx`, `two.tsx`, `saved.tsx` |
-| Mobile services | `MeetMeHalfwayMobile/src/services/api.ts`, `poi.ts`, `cloudSync.ts`, `storage.ts` |
-| Mobile hooks | `MeetMeHalfwayMobile/src/hooks/usePlan.ts`, `useSavedData.ts` |
+| Mobile services | `MeetMeHalfwayMobile/src/services/api.ts`, `stripe.ts`, `poi.ts`, `cloudSync.ts`, `storage.ts` |
+| Mobile hooks | `MeetMeHalfwayMobile/src/hooks/usePlan.ts`, `useManageSubscription.ts`, `useSavedData.ts` |
+| Mobile Stripe UI | `MeetMeHalfwayMobile/src/components/UpgradeModal.tsx` |
+| Mobile Stripe API | `app/api/mobile/stripe/checkout-session/route.ts`, `billing-portal/route.ts`, `lib/stripe/mobile-stripe.ts` |
 | Mobile auth | `MeetMeHalfwayMobile/src/auth/safe-auth.tsx`, `app/_layout.tsx` |
 | Mobile API | `app/api/mobile/profile/route.ts`, `route/route.ts`, `saved/**` |
 | Public proxies | `app/api/ors/geocode/route.ts`, `ors/matrix/route.ts`, `pois/search/route.ts` |
@@ -237,4 +245,4 @@ Reader exemption (3.1.3) does not apply. EU DMA alternative payments apply only 
 
 ---
 
-*Generated from Phase A read-only inventory. Phase B (simulator QA) was skipped; run Session 3 for pass/fail per checklist item.*
+*Phase A inventory (2026-05-24). Sessions 1–2 implemented on `cursor/mobile-gap-audit-docs`. Phase B (simulator QA) and TestFlight: Session 3.*
