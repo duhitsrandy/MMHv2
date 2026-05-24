@@ -1,3 +1,6 @@
+> **Historical — superseded by Expo.** Do not use for onboarding.
+> Current path: [mobile-ios-runbook.md](../mobile-ios-runbook.md).
+
 # Progressive Web App (PWA) Conversion Guide
 
 ## Why PWA Instead of Native iOS?

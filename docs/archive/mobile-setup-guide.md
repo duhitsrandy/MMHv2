@@ -1,3 +1,6 @@
+> **Historical — superseded by Expo.** Do not use for onboarding.
+> Current path: [mobile-ios-runbook.md](../mobile-ios-runbook.md).
+
 # iOS App Store Development Guide for Meet Me Halfway
 
 ## Overview

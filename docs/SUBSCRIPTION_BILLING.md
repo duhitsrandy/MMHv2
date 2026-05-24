@@ -1,7 +1,9 @@
 # Subscription & Billing Documentation
 
 ## Overview
-Meet Me Halfway uses Stripe for subscription management and billing. This document covers the complete implementation including pricing tiers, subscription lifecycle, webhooks, and billing portal integration.
+Meet Me Halfway uses Stripe for subscription management and billing. Tier limits (locations, traffic-aware matrix, etc.) are enforced on the **shared Next.js backend** for both the web app and the **Expo mobile** client (`MeetMeHalfwayMobile/`).
+
+This document covers pricing tiers, subscription lifecycle, webhooks, and billing portal integration.
 
 ## Pricing Tiers
 

@@ -132,8 +132,8 @@ This document outlines the comprehensive steps and considerations for deploying 
 
 ### Error Handling
 - [ ] Implement production error logging strategy
-- [ ] Set up error monitoring service (e.g., Sentry)
-- [ ] Configure error notifications for critical issues
+- [x] Set up error monitoring service — **Sentry** for the Next.js web app ([SENTRY_VERCEL.md](SENTRY_VERCEL.md), [MONITORING.md](MONITORING.md) §2). Vercel integration + source map upload verified 2026-05-24.
+- [ ] Configure error notifications for critical issues — Sentry “new issue” alert ([wizard](https://meetmehalfway.sentry.io/alerts/wizard/))
 
 ### Security Measures
 - [ ] Enable CORS with specific origins
@@ -252,10 +252,12 @@ This document outlines the comprehensive steps and considerations for deploying 
 - Current development monitoring uses file-based logging in `logs/` directory
 - Production should use proper monitoring services instead of file logs
 - PostHog analytics integrated for user behavior tracking
+- **Sentry** captures unhandled web errors in production (`@sentry/nextjs`); setup and verification: [SENTRY_VERCEL.md](SENTRY_VERCEL.md)
 - Consider implementing different monitoring strategies for different environments (staging vs production)
 
 ### Related Documentation
 - [App Structure](app-structure.md) - Comprehensive application architecture
+- [Sentry + Vercel](SENTRY_VERCEL.md) - Web error monitoring and source maps
 - [Subscription & Billing](SUBSCRIPTION_BILLING.md) - Complete billing system documentation
 - [HERE API Integration](HERE_API_INTEGRATION.md) - Pro tier traffic data implementation
 - [Multi-Origin Feature](MULTI_ORIGIN_FEATURE.md) - Advanced location handling

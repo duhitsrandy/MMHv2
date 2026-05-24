@@ -3,6 +3,13 @@
 ## Overview
 Meet Me Halfway is a production-ready Next.js SaaS application that helps users find optimal meeting points between multiple locations (2-10 based on subscription tier). The app features a comprehensive subscription billing system with Stripe, tier-based feature access, multi-origin support, traffic-aware routing for Pro subscribers, and advanced POI search capabilities.
 
+## Platform architecture
+
+- **Web:** Next.js App Router (`app/meet-me-halfway/`) — primary web UI
+- **Mobile:** Expo managed app at `MeetMeHalfwayMobile/` — **in progress**; see [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md), [mobile-qa-checklist.md](mobile-qa-checklist.md)
+- **API:** Next.js server routes and server actions shared by web and mobile clients
+- **Geo (tiered):** LocationIQ (geocode + POI) → RapidAPI OSRM (route geometry) → OpenRouteService matrix (Starter/Plus and fallback) → HERE matrix (Pro/Business traffic-aware travel times)
+
 **Key Features:**
 - **Multi-Origin Support**: 2-10 locations based on subscription tier
 - **Live Subscription Billing**: Stripe integration with multiple pricing tiers
@@ -396,24 +403,15 @@ switch (event.type) {
 - **Monitoring**: Full analytics and error tracking
 - **Documentation**: Comprehensive technical documentation
 
-## Future Enhancements
+## Backlog (not current architecture)
 
-### Planned Features
-1. **Team Management**: Multi-user Business accounts
-2. **Advanced Analytics**: ML-powered meeting point optimization
-3. **Mobile App**: Native iOS/Android applications
-4. **Enterprise Features**: Custom integrations and white-labeling
-5. **International Expansion**: Multi-language and currency support
+Ideas and future work live in [POTENTIAL_FUTURE_FEATURES.md](POTENTIAL_FUTURE_FEATURES.md) only. That document is a backlog, not a description of what is deployed today.
 
-### Technical Improvements
-1. **Microservices**: Service decomposition for scalability
-2. **Real-time Collaboration**: Live location sharing
-3. **Offline Support**: Progressive Web App capabilities
-4. **Advanced Caching**: Redis-based caching layer
-5. **A/B Testing**: Conversion optimization framework
+Mobile is **in progress** via Expo (`MeetMeHalfwayMobile/`); operational setup is documented in [mobile-ios-runbook.md](mobile-ios-runbook.md), not as a separate “planned native app” initiative.
 
 ## Tech Stack Summary
 
+- **Mobile**: Expo (iOS), React Native — `MeetMeHalfwayMobile/`
 - **Frontend**: Next.js 14, React 18, TypeScript, Tailwind CSS, shadcn/ui
 - **Backend**: Next.js Server Actions, Supabase PostgreSQL, Drizzle ORM
 - **Authentication**: Clerk with webhook integration

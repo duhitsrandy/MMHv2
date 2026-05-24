@@ -61,11 +61,11 @@ curl http://localhost:3000/api/health | jq '.'
 
 ### Test in production:
 ```bash
-curl https://meetmehalfway.live/api/health | jq '.'
+curl https://meetmehalfway.co/api/health | jq '.'
 ```
 
 ### Manually trigger the GitHub Action:
-1. Go to: https://github.com/YOUR_USERNAME/YOUR_REPO/actions
+1. Go to: https://github.com/duhitsrandy/MMHv2/actions
 2. Click "Keep Services Active" workflow
 3. Click "Run workflow" button
 4. Click the green "Run workflow" button
@@ -93,7 +93,7 @@ curl https://meetmehalfway.live/api/health | jq '.'
 
 Check the workflow status at:
 ```
-https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/keepalive.yml
+https://github.com/duhitsrandy/MMHv2/actions/workflows/keepalive.yml
 ```
 
 You'll see:
@@ -109,7 +109,7 @@ You'll see:
 1. Check the workflow logs in GitHub Actions
 2. Manually test the health endpoint:
    ```bash
-   curl https://meetmehalfway.live/api/health
+   curl https://meetmehalfway.co/api/health
    ```
 3. Verify environment variables are set in Vercel:
    - `DATABASE_URL` (Supabase connection string)
