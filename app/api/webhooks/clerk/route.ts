@@ -7,7 +7,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 // This secret comes from your Clerk Dashboard -> Webhooks -> Endpoint signing secret
 const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
 
-const supabaseAdmin = createSupabaseAdminClient()
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   console.log('[Webhook Clerk] Received webhook event');
@@ -68,6 +68,8 @@ export async function POST(req: Request) {
     console.log(`[Webhook Clerk] User created event for userId: ${userId}`);
 
     try {
+      const supabaseAdmin = createSupabaseAdminClient()
+
       // Check if profile already exists using Supabase admin client
       const { data: existingProfile } = await supabaseAdmin
         .from('profiles')
