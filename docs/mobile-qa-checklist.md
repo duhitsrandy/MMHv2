@@ -2,6 +2,8 @@
 
 Use this checklist after mobile changes to reduce regressions.
 
+**App Store prep:** [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) (hub) → [P0](mobile-ios-p0-blockers.md) · [TestFlight](mobile-ios-testflight-readiness.md) · [Submission](mobile-ios-app-store-submission.md)
+
 **Latest results:** [mobile-qa-results-2026-05-24.md](mobile-qa-results-2026-05-24.md) (Session 3)
 
 ## Startup
@@ -14,6 +16,7 @@ Use this checklist after mobile changes to reduce regressions.
 
 ## Auth Screens
 
+- **Prerequisite:** Clerk Dashboard → Native applications → Native API **enabled** (see [mobile-ios-runbook.md](mobile-ios-runbook.md)). Without this, sign-in fails with *Native API is disabled*.
 - Open `/sign-in` and `/sign-up` routes (native Clerk email/password).
 - Sign in with a test account; confirm session persists after app reload.
 - Sign out from the Saved tab (or account UI) and confirm guest behavior returns.

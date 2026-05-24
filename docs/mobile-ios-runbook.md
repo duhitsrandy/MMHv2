@@ -8,10 +8,22 @@ This runbook is the stable baseline for local iOS development in this repo.
 - Node.js 18+
 - Apple Developer account (for device builds and App Store; see release checklist)
 - Expo managed workflow in `MeetMeHalfwayMobile/` (not a greenfield React Native CLI scaffold)
+- **Clerk Native API enabled** for your Clerk application (required for `@clerk/clerk-expo` sign-in)
+
+### Clerk: enable Native applications (one-time)
+
+If Sign In does nothing or LogBox shows *"The Native API is disabled for this instance"*:
+
+1. Open [Clerk Dashboard → Native applications](https://dashboard.clerk.com/last-active?path=native-applications) (or **Configure → Native applications**).
+2. **Enable** the Native API for this Clerk application (same app as `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`).
+3. Add the iOS bundle ID: `com.meetmehalfway.mobile` (matches `MeetMeHalfwayMobile/app.config.ts`).
+4. Save, then reload the app (`npm run mobile:ios`).
+
+Email/password sign-in on mobile uses Clerk’s Native API; the web app does not require this setting.
 
 ## Related docs
 
-- [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) — TestFlight / App Store prep
+- [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) — release hub → [P0](mobile-ios-p0-blockers.md) · [TestFlight](mobile-ios-testflight-readiness.md) · [Submission](mobile-ios-app-store-submission.md)
 - [mobile-qa-checklist.md](mobile-qa-checklist.md) — manual QA before release
 
 ## Project Layout

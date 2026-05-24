@@ -4,7 +4,7 @@
 **Audit date:** 2026-05-24 · **Doc updated:** 2026-05-24 (post Sessions 1–2)  
 **Scope:** Expo mobile (`MeetMeHalfwayMobile/`) vs Next.js 15 web
 
-Canonical references: [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-qa-checklist.md](mobile-qa-checklist.md), [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md), [app-structure.md](app-structure.md)
+Canonical references: [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-qa-checklist.md](mobile-qa-checklist.md), [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) ([P0](mobile-ios-p0-blockers.md) · [TestFlight](mobile-ios-testflight-readiness.md) · [Submission](mobile-ios-app-store-submission.md)), [app-structure.md](app-structure.md)
 
 ### Session status (this branch)
 
@@ -28,7 +28,7 @@ Canonical references: [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-qa
 
 5. **Stripe on mobile** — **Done (Sessions 2–3):** PaymentSheet on **Android** (and web); **iOS uses multiplatform pattern** — no in-app upgrade UI (`MeetMeHalfwayMobile/src/lib/billingPolicy.ts`). Billing portal for existing subs remains on iOS. App Store 3.1.1 addressed for public iOS submit.
 
-6. **Config / release blockers (TestFlight)** — EAS `projectId` still `CHANGE_ME_IN_EAS` until you run `eas init`; bundle ID must be registered in App Store Connect; see [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) § TestFlight first-time setup.
+6. **Config / release blockers (TestFlight)** — Run `eas init` if needed; bundle ID in App Store Connect; see [mobile-ios-testflight-readiness.md](mobile-ios-testflight-readiness.md).
 
 7. **Docs** — [mobile-qa-results-2026-05-24.md](mobile-qa-results-2026-05-24.md); QA checklist + release checklist updated Session 3.
 

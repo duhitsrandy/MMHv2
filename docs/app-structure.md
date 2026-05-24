@@ -6,7 +6,7 @@ Meet Me Halfway is a production-ready Next.js SaaS application that helps users 
 ## Platform architecture
 
 - **Web:** Next.js App Router (`app/meet-me-halfway/`) — primary web UI
-- **Mobile:** Expo managed app at `MeetMeHalfwayMobile/` — **in progress**; see [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md), [mobile-qa-checklist.md](mobile-qa-checklist.md)
+- **Mobile:** Expo managed app at `MeetMeHalfwayMobile/` — **in progress**; see [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) ([P0](mobile-ios-p0-blockers.md) · [TestFlight](mobile-ios-testflight-readiness.md) · [Submission](mobile-ios-app-store-submission.md)), [mobile-qa-checklist.md](mobile-qa-checklist.md)
 - **API:** Next.js server routes and server actions shared by web and mobile clients
 - **Geo (tiered):** LocationIQ (geocode + POI) → RapidAPI OSRM (route geometry) → OpenRouteService matrix (Starter/Plus and fallback) → HERE matrix (Pro/Business traffic-aware travel times)
 

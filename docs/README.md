@@ -13,7 +13,7 @@ These documents describe what is deployed and how to operate it today.
 | [app-structure.md](app-structure.md) | Architecture: web, mobile, API, tiered geo |
 | [api-docs.md](api-docs.md) | API endpoints, clients, geo provider matrix |
 | [mobile-ios-runbook.md](mobile-ios-runbook.md) | Local Expo iOS development (start here for mobile) |
-| [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) | TestFlight / App Store prep |
+| [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) | iOS release hub → [P0](mobile-ios-p0-blockers.md) · [TestFlight](mobile-ios-testflight-readiness.md) · [Submission](mobile-ios-app-store-submission.md) |
 | [mobile-qa-checklist.md](mobile-qa-checklist.md) | Manual QA before release |
 | [SENTRY_VERCEL.md](SENTRY_VERCEL.md) | Sentry + Vercel for the Next.js web app |
 | [MONITORING.md](MONITORING.md) | PostHog, Sentry, uptime, alerting |

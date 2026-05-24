@@ -123,4 +123,4 @@
 
 **Overall:** Ready for continued Simulator QA and TestFlight prep runbook execution. Not ready for `eas build` until manual Apple/EAS steps complete.
 
-See [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) § TestFlight first-time setup.
+See [mobile-ios-testflight-readiness.md](mobile-ios-testflight-readiness.md).
