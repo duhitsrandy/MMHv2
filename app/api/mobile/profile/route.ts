@@ -23,6 +23,6 @@ export async function GET() {
     return NextResponse.json({ userId, tier });
   } catch (error) {
     console.error("[/api/mobile/profile] Error:", error);
-    return NextResponse.json({ userId: null, tier: "starter" });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -9,7 +9,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { PoiProvider } from '../contexts/PoiContext';
 import { useAuth } from '@clerk/clerk-expo';
-import { ClerkActiveContext } from '../_layout';
+import { ClerkActiveContext } from '@/src/auth';
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {

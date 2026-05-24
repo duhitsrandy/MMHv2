@@ -20,9 +20,13 @@
     "prepare": "husky install",
     "docs:index": "node scripts/generate-docs-index.cjs",
     "mobile:check-env": "node ./scripts/verify-mobile-env.cjs",
+    "mobile:start": "npm run mobile:check-env && npm run --prefix ./MeetMeHalfwayMobile start",
     "mobile:ios": "npm run --prefix ./MeetMeHalfwayMobile ios",
     "mobile:ios:reset": "npm run --prefix ./MeetMeHalfwayMobile ios:reset-sim",
-    "mobile:dev": "npm run mobile:check-env && npm run mobile:ios"
+    "mobile:dev": "npm run mobile:check-env && npm run mobile:ios",
+    "xcode:check": "xcode-select -p && xcrun simctl help >/dev/null 2>&1 && echo 'Xcode CLI OK' || echo 'Xcode CLI issue — run: sudo xcode-select --reset'",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@clerk/backend": "^1.25.8",

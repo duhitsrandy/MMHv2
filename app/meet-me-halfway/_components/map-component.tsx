@@ -11,9 +11,10 @@ import {
   useMap,
   Popup
 } from "react-leaflet"
-import { EnrichedPoi, TravelInfo } from "@/types/poi-types"
+import { EnrichedPoi } from "@/types/poi-types"
 import { OsrmRoute, GeocodedOrigin, UserPlan } from "@/types"
 import { Loader2 } from "lucide-react"
+import { createPopupContent } from "./poi-popup-content"
 
 // Use default Leaflet markers for now
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -282,73 +283,6 @@ function PoiMarkersLayer({
   }, [map, pois, showPois, selectedPoiId, icons, origins, handleMarkerInteraction, plan]);
 
   return null;
-}
-
-// Helper function (moved here or ensure it's accessible globally/imported)
-function createPopupContent(poi: EnrichedPoi, originLocations: GeocodedOrigin[], plan: UserPlan | null): string {
-  const poiName = poi.name || "Location";
-  const hasAddress = Boolean(poi.address?.street && poi.address?.city);
-  const address = hasAddress && poi.address ? `${poi.address.street}, ${poi.address.city}` : "";
-  const searchQuery = address ? `${poiName}, ${address}` : poiName;
-  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`;
-  const appleMapsUrl = hasAddress
-    ? `http://maps.apple.com/?q=${encodeURIComponent(poiName)}&address=${encodeURIComponent(address)}`
-    : `http://maps.apple.com/?q=${encodeURIComponent(poiName)}&sll=${poi.lat},${poi.lon}&z=15`;
-  const wazeUrl = `https://www.waze.com/ul?q=${encodeURIComponent(searchQuery)}&ll=${poi.lat},${poi.lon}&navigate=yes`;
-
-  let content = `<div style="min-width: 220px; max-width: 280px;">`; // Add min/max width for popup consistency
-  content += `<div class="font-bold text-base mb-1">${poi.name}</div>`;
-  content += `<div class="text-sm text-gray-600 mb-2">${poi.type}</div>`;
-
-  if (poi.address) {
-    const street = poi.address.street || "";
-    const city = poi.address.city || "";
-    const shortAddress = street ? `${street}, ${city}` : city;
-    if (shortAddress) {
-       content += `<div class="text-xs text-gray-500 mb-2 truncate" title="${street && city ? street + ', ' + city : street || city}">${shortAddress}</div>`;
-    }
-  }
-
-  if (poi.travelInfo && poi.travelInfo.length > 0) {
-    content += '<div class="mt-1 text-xs">';
-    content += '<table class="w-full text-left">';
-    content += '<thead><tr>';
-    content += '<th class="pb-0.5 font-medium text-gray-500">Origin</th>';
-    content += '<th class="pb-0.5 font-medium text-gray-500 text-right">Time</th>';
-    content += '<th class="pb-0.5 font-medium text-gray-500 text-right">Distance</th>';
-    content += '</tr></thead><tbody>';
-
-    poi.travelInfo.forEach((info) => {
-      const originName = originLocations[info.sourceIndex]?.display_name;
-      // Reduce origin label length to make room for Live tag
-      const originLabel = originName 
-        ? (originName.length > 18 ? originName.substring(0, 18) + '...' : originName)
-        : `Loc ${info.sourceIndex + 1}`;
-      const durationText = info.duration != null ? `${Math.round(info.duration / 60)} min` : "N/A";
-      const distanceText = info.distance != null ? `${Math.round((info.distance / 1000) * 0.621371)} mi` : "N/A";
-      
-      content += '<tr>';
-      content += `<td class="py-0.5 truncate" title="${originName || `Location ${info.sourceIndex + 1}`}">${originLabel}</td>`;
-      content += '<td class="py-0.5 text-right whitespace-nowrap">';
-      if (plan && plan === 'pro' && info.duration !== null) {
-        content += '<span class="text-green-500 text-xs font-semibold mr-1" title="Includes real-time traffic">(Live)</span>';
-      }
-      content += durationText;
-      content += '</td>';
-      content += `<td class="py-0.5 text-right whitespace-nowrap">${distanceText}</td>`;
-      content += '</tr>';
-    });
-    content += "</tbody></table></div>";
-  }
-
-  content += '<div class="mt-3 flex flex-wrap gap-1.5">';
-  content += `<a href="${googleMapsUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100">Google</a>`;
-  content += `<a href="${appleMapsUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100">Apple</a>`;
-  content += `<a href="${wazeUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100">Waze</a>`;
-  content += "</div>";
-
-  content += `</div>`; // Close main wrapper
-  return content;
 }
 
 export default function MapComponent({

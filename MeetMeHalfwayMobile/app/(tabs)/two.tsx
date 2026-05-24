@@ -2,6 +2,7 @@ import { StyleSheet, FlatList, TouchableOpacity, Linking, Alert } from 'react-na
 import { useEffect, useState } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
+import { buildPoiNavigationLinks } from '@shared/poi-navigation-links';
 
 import { Text, View } from '@/components/Themed';
 import { usePoi } from '../contexts/PoiContext';
@@ -31,26 +32,19 @@ export default function TabTwoScreen() {
     return (poi.type || '').toLowerCase().includes(filter.toLowerCase());
   });
 
-  const openInAppleMaps = (poi: PoiType) => {
-    const url = `maps://?q=${poi.name || 'Location'}&ll=${poi.lat},${poi.lng}`;
-    Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open Apple Maps');
+  const openNavigationLink = (poi: PoiType, linkKey: "apple" | "google" | "waze", appName: string) => {
+    const links = buildPoiNavigationLinks(
+      { name: poi.name, lat: poi.lat, lng: poi.lng, address: poi.address },
+      { platform: "native-ios" }
+    );
+    Linking.openURL(links[linkKey]).catch(() => {
+      Alert.alert("Error", `Could not open ${appName}`);
     });
   };
 
-  const openInGoogleMaps = (poi: PoiType) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`;
-    Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open Google Maps');
-    });
-  };
-
-  const openInWaze = (poi: PoiType) => {
-    const url = `https://waze.com/ul?ll=${poi.lat},${poi.lng}&navigate=yes`;
-    Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open Waze');
-    });
-  };
+  const openInAppleMaps = (poi: PoiType) => openNavigationLink(poi, "apple", "Apple Maps");
+  const openInGoogleMaps = (poi: PoiType) => openNavigationLink(poi, "google", "Google Maps");
+  const openInWaze = (poi: PoiType) => openNavigationLink(poi, "waze", "Waze");
 
   const viewOnMap = (poi: PoiType) => {
     setSelectedPoi(poi);

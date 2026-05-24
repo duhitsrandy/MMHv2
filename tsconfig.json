@@ -24,7 +24,8 @@ Configures the TypeScript compiler options for the app.
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@shared/*": ["./shared/*"]
     },
     "target": "ES2017"
   },

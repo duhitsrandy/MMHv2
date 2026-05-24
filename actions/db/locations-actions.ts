@@ -5,6 +5,11 @@ import { InsertLocation, SelectLocation, locationsTable } from "@/db/schema"
 import { ActionState } from "@/types"
 import { and, eq } from "drizzle-orm"
 import { auth } from "@clerk/nextjs/server";
+import {
+  createLocationForUser,
+  deleteLocationForUser,
+  listLocationsForUser,
+} from "@/lib/db/locations";
 
 export async function createLocationAction(
   locationData: Omit<InsertLocation, 'userId' | 'id' | 'createdAt'>
@@ -16,14 +21,12 @@ export async function createLocationAction(
   }
 
   try {
-    const locationToInsert: InsertLocation = {
-      ...locationData,
-      userId: userId,
-    };
-    const [newLocation] = await db
-      .insert(locationsTable)
-      .values(locationToInsert)
-      .returning()
+    const newLocation = await createLocationForUser(userId, {
+      name: locationData.name,
+      address: locationData.address,
+      latitude: locationData.latitude,
+      longitude: locationData.longitude,
+    });
     console.log("[DB Action] createLocationAction successful:", newLocation);
     return {
       isSuccess: true,
@@ -48,10 +51,7 @@ export async function getLocationsAction(
   }
 
   try {
-    const locations = await db.query.locations.findMany({
-      where: eq(locationsTable.userId, targetUserId),
-      orderBy: (locations) => [locations.createdAt]
-    })
+    const locations = await listLocationsForUser(targetUserId);
     return {
       isSuccess: true,
       message: "Locations retrieved successfully",
@@ -149,19 +149,10 @@ export async function deleteLocationAction(
   }
 
   try {
-    const existingLocation = await db.query.locations.findFirst({
-      where: eq(locationsTable.id, id)
-    });
-
-    if (!existingLocation) {
-       return { isSuccess: false, message: "Location not found to delete." };
+    const deleted = await deleteLocationForUser(authenticatedUserId, id);
+    if (!deleted) {
+      return { isSuccess: false, message: "Location not found to delete." };
     }
-
-    if (existingLocation.userId !== authenticatedUserId) {
-      return { isSuccess: false, message: "Error: Unauthorized to delete this location." };
-    }
-
-    await db.delete(locationsTable).where(and(eq(locationsTable.id, id), eq(locationsTable.userId, authenticatedUserId)));
     console.log(`[DB Action] deleteLocationAction successful for ID: ${id}`);
     return {
       isSuccess: true,

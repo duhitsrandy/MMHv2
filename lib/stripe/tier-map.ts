@@ -17,7 +17,9 @@ export const PRICE_TO_TIER_MAP = {
   [process.env.STRIPE_PRICE_BUSINESS_YEARLY!]:  'business',
 } as const;
 
-export type Tier = 'starter' | 'plus' | 'pro' | 'business';
+export type { Tier } from "@shared/tier-limits";
+export { getMaxLocationsForTier, TIER_MAX_LOCATIONS } from "@shared/tier-limits";
+import type { Tier } from "@shared/tier-limits";
 
 // Helper to get all defined price IDs
 export const ALL_STRIPE_PRICE_IDS = Object.keys(PRICE_TO_TIER_MAP);

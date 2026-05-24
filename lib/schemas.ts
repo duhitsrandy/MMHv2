@@ -53,4 +53,14 @@ export const OsrmMatrixSchema = z.object({
   coordinates: z.string().min(1, { message: "Coordinates string cannot be empty" }),
   sources: z.string().min(1, { message: "Sources string cannot be empty" }),
   destinations: z.string().min(1, { message: "Destinations string cannot be empty" }),
+});
+
+export const MobileSearchLocationSchema = z.object({
+  address: z.string().min(1),
+  lat: z.union([z.number(), z.string()]),
+  lng: z.union([z.number(), z.string()]),
+});
+
+export const MobileSavedSearchPostSchema = z.object({
+  locations: z.array(MobileSearchLocationSchema).min(2),
 }); 

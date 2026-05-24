@@ -1,10 +1,16 @@
 "use server"
 
 import { db } from "@/db/db"
-import { InsertSearch, SelectSearch, searchesTable, InsertSearchOrigin, searchOriginsTable } from "@/db/schema"
+import { InsertSearch, SelectSearch, searchesTable } from "@/db/schema"
 import { ActionState } from "@/types"
-import { and, eq, desc, asc } from "drizzle-orm"
+import { and, eq, desc } from "drizzle-orm"
 import { auth } from "@clerk/nextjs/server";
+import {
+  createSearchForUser,
+  deleteSearchForUser,
+  listSearchesForUser,
+} from "@/lib/db/searches";
+import { coerceCoordinate } from "@/lib/db/coordinates";
 
 // Legacy format for backward compatibility
 export async function createSearchAction(
@@ -55,48 +61,23 @@ export async function createMultiOriginSearchAction(
   }
 
   try {
-    // Use database transaction to ensure consistency
-    const result = await db.transaction(async (tx) => {
-      // Create the search record
-      const searchData: InsertSearch = {
-        userId: userId,
-        originCount: origins.length,
-        searchMetadata: searchMetadata,
-        // For backward compatibility, populate legacy fields if exactly 2 origins
-        ...(origins.length === 2 ? {
-          startLocationAddress: origins[0].address,
-          startLocationLat: origins[0].latitude,
-          startLocationLng: origins[0].longitude,
-          endLocationAddress: origins[1].address,
-          endLocationLat: origins[1].latitude,
-          endLocationLng: origins[1].longitude,
-          midpointLat: "0", // Placeholder - would be calculated in the frontend
-          midpointLng: "0"
-        } : {})
-      };
+    const locations = origins.map((origin) => ({
+      address: origin.address,
+      lat: origin.latitude,
+      lng: origin.longitude,
+    }));
 
-      const [newSearch] = await tx.insert(searchesTable).values(searchData).returning();
+    const { search } = await createSearchForUser(
+      userId,
+      locations,
+      searchMetadata as Record<string, unknown> | undefined
+    );
 
-      // Create search origin records
-      const originData: InsertSearchOrigin[] = origins.map((origin, index) => ({
-        searchId: newSearch.id,
-        orderIndex: index,
-        address: origin.address,
-        latitude: origin.latitude,
-        longitude: origin.longitude,
-        displayName: origin.displayName || origin.address
-      }));
-
-      await tx.insert(searchOriginsTable).values(originData);
-
-      return newSearch;
-    });
-
-    console.log("[DB Action] createMultiOriginSearchAction successful:", result);
+    console.log("[DB Action] createMultiOriginSearchAction successful:", search);
     return {
       isSuccess: true,
       message: "Search created successfully",
-      data: result
+      data: search
     }
   } catch (error) {
     console.error("Error creating multi-origin search:", error)
@@ -215,19 +196,10 @@ export async function deleteSearchAction(id: string): Promise<ActionState<void>>
   }
 
   try {
-    const existingSearch = await db.query.searches.findFirst({
-      where: eq(searchesTable.id, id)
-    });
-
-    if (!existingSearch) {
+    const deleted = await deleteSearchForUser(authenticatedUserId, id);
+    if (!deleted) {
       return { isSuccess: false, message: "Search not found to delete." };
     }
-
-    if (existingSearch.userId !== authenticatedUserId) {
-      return { isSuccess: false, message: "Error: Unauthorized to delete this search." };
-    }
-
-    await db.delete(searchesTable).where(and(eq(searchesTable.id, id), eq(searchesTable.userId, authenticatedUserId)));
     console.log(`[DB Action] deleteSearchAction successful for ID: ${id}`);
     return {
       isSuccess: true,
@@ -253,54 +225,21 @@ export async function getSearchesWithOriginsAction(
   }
 
   try {
-    const searches = await db.query.searches.findMany({
-      where: eq(searchesTable.userId, targetUserId),
-      orderBy: (searches) => [desc(searches.createdAt)]
-    });
+    const rows = await listSearchesForUser(targetUserId);
 
-    // Get origins for each search
-    const searchesWithOrigins = await Promise.all(
-      searches.map(async (search) => {
-        if (search.originCount && search.originCount > 2) {
-          // Get origins from search_origins table
-          const origins = await db
-            .select({
-              address: searchOriginsTable.address,
-              latitude: searchOriginsTable.latitude,
-              longitude: searchOriginsTable.longitude,
-              displayName: searchOriginsTable.displayName,
-              orderIndex: searchOriginsTable.orderIndex
-            })
-            .from(searchOriginsTable)
-            .where(eq(searchOriginsTable.searchId, search.id))
-            .orderBy(searchOriginsTable.orderIndex);
-
-          return { ...search, origins };
-        } else {
-          // For legacy 2-location searches, construct origins from legacy fields
-          const origins = [];
-          if (search.startLocationAddress && search.startLocationLat && search.startLocationLng) {
-            origins.push({
-              address: search.startLocationAddress,
-              latitude: search.startLocationLat,
-              longitude: search.startLocationLng,
-              displayName: search.startLocationAddress,
-              orderIndex: 0
-            });
-          }
-          if (search.endLocationAddress && search.endLocationLat && search.endLocationLng) {
-            origins.push({
-              address: search.endLocationAddress,
-              latitude: search.endLocationLat,
-              longitude: search.endLocationLng,
-              displayName: search.endLocationAddress,
-              orderIndex: 1
-            });
-          }
-          return { ...search, origins: origins.length > 0 ? origins : undefined };
-        }
-      })
-    );
+    const searchesWithOrigins = rows.map(({ search, locations }) => ({
+      ...search,
+      origins:
+        locations.length > 0
+          ? locations.map((loc, orderIndex) => ({
+              address: loc.address,
+              latitude: coerceCoordinate(loc.lat),
+              longitude: coerceCoordinate(loc.lng),
+              displayName: loc.address,
+              orderIndex,
+            }))
+          : undefined,
+    }));
 
     return {
       isSuccess: true,

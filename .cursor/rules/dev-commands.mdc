@@ -1,0 +1,21 @@
+---
+description: Runnable dev commands via slash commands and npm scripts
+alwaysApply: false
+---
+
+# Dev commands (chat / slash)
+
+Prefer these npm scripts when the user asks to start servers or run checks:
+
+| Task | Slash command | npm script |
+|------|---------------|------------|
+| Mobile + iOS sim | `/mobile-dev` | `npm run mobile:dev` |
+| Mobile Metro only | `/mobile-metro` | `npm run mobile:start` |
+| Web Next.js | `/web-dev` | `npm run dev` |
+| Xcode diagnose | `/xcode-check` | `npm run xcode:check` |
+| Unit tests | `/test` | `npm run test` |
+| Type-check | `/type-check` | see `/type-check` command |
+
+Slash commands live in `.cursor/commands/*.md`. Type `/` in chat to pick one.
+
+Long-running servers: run in background with network permissions. Never run `sudo` unless the user explicitly requests it in chat.

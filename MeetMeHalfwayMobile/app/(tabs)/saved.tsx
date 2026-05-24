@@ -1,96 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
 import { FlatList, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAuth as useAuth } from "../_layout";
 import { Text, View } from "@/components/Themed";
 import { usePoi } from "../contexts/PoiContext";
-import {
-  SavedLocation,
-  SavedSearch,
-  getSavedLocations,
-  getSavedSearches,
-  removeSavedLocation,
-  removeSavedSearch,
-} from "../../src/services/storage";
-import {
-  fetchCloudLocations,
-  fetchCloudSearches,
-  deleteCloudLocation,
-  deleteCloudSearch,
-} from "../../src/services/cloudSync";
+import { useSavedData } from "../../src/hooks/useSavedData";
+import type { SavedSearch } from "../../src/services/storage";
 
 export default function SavedScreen() {
   const router = useRouter();
   const { setPendingSearch } = usePoi();
-  const { isSignedIn, isLoaded, getToken } = useAuth();
-
-  const [locations, setLocations] = useState<SavedLocation[]>([]);
-  const [searches, setSearches] = useState<SavedSearch[]>([]);
-  const [loadError, setLoadError] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoadError(false);
-    setLoading(true);
-    try {
-      if (isSignedIn) {
-        const token = await getToken();
-        if (!token) throw new Error("No token");
-        const [cloudLocs, cloudSearches] = await Promise.all([
-          fetchCloudLocations(token),
-          fetchCloudSearches(token),
-        ]);
-        setLocations(cloudLocs);
-        setSearches(cloudSearches);
-      } else {
-        const [savedLocations, savedSearches] = await Promise.all([
-          getSavedLocations(),
-          getSavedSearches(),
-        ]);
-        setLocations(savedLocations);
-        setSearches(savedSearches);
-      }
-    } catch {
-      setLoadError(true);
-      setLocations([]);
-      setSearches([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [isSignedIn, getToken]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    load();
-  }, [isLoaded, load]);
-
-  const handleRemoveLocation = async (id: string) => {
-    try {
-      if (isSignedIn) {
-        const token = await getToken();
-        if (token) await deleteCloudLocation(token, id);
-      } else {
-        await removeSavedLocation(id);
-      }
-      load();
-    } catch {
-      load();
-    }
-  };
-
-  const handleRemoveSearch = async (id: string) => {
-    try {
-      if (isSignedIn) {
-        const token = await getToken();
-        if (token) await deleteCloudSearch(token, id);
-      } else {
-        await removeSavedSearch(id);
-      }
-      load();
-    } catch {
-      load();
-    }
-  };
+  const {
+    locations,
+    searches,
+    loading,
+    loadError,
+    isSignedIn,
+    reload,
+    removeLocation,
+    removeSearch,
+  } = useSavedData();
 
   const applySearch = (item: SavedSearch) => {
     setPendingSearch({ locations: item.locations });
@@ -109,7 +36,7 @@ export default function SavedScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.empty}>Could not load saved data.</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={load}>
+        <TouchableOpacity style={styles.retryButton} onPress={reload}>
           <Text style={styles.retryText}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -133,7 +60,7 @@ export default function SavedScreen() {
             <Text style={styles.meta} numberOfLines={2}>{item.address}</Text>
             <TouchableOpacity
               style={styles.deleteButton}
-              onPress={() => handleRemoveLocation(item.id)}
+              onPress={() => removeLocation(item.id)}
             >
               <Text style={styles.deleteButtonText}>Remove</Text>
             </TouchableOpacity>
@@ -161,7 +88,7 @@ export default function SavedScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.deleteButton}
-                onPress={() => handleRemoveSearch(item.id)}
+                onPress={() => removeSearch(item.id)}
               >
                 <Text style={styles.deleteButtonText}>Delete</Text>
               </TouchableOpacity>

@@ -44,6 +44,10 @@ import {
 import { GeocodedOrigin, UserPlan } from "@/types"
 import { useAnalytics } from "@/hooks/useAnalytics"
 import { ANALYTICS_EVENTS } from "@/lib/analytics-events"
+import {
+  buildPoiNavigationLinks,
+  getPoiCardId,
+} from "@shared/poi-navigation-links"
 
 interface PointsOfInterestProps {
   pois: EnrichedPoi[]
@@ -78,7 +82,7 @@ export default function PointsOfInterest({
   const [favorites, setFavorites] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<SortOption>("durationFromFirst")
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false)
-  const selectedPoiCardId = selectedPoiId ? `poi-card-${encodeURIComponent(selectedPoiId)}` : null
+  const selectedPoiCardId = selectedPoiId ? getPoiCardId(selectedPoiId) : null
 
   // Load favorites from localStorage on component mount
   useEffect(() => {
@@ -102,19 +106,6 @@ export default function PointsOfInterest({
       localStorage.setItem("mmh-favorites", JSON.stringify(favorites))
     }
   }, [favorites])
-
-  useEffect(() => {
-    if (!selectedPoiCardId) return
-
-    const selectedCard = document.getElementById(selectedPoiCardId)
-    if (selectedCard) {
-      selectedCard.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-        inline: "nearest",
-      })
-    }
-  }, [selectedPoiCardId])
 
   const sortedAndFilteredPois = useMemo(() => {
     // Start with the enriched POIs passed as props
@@ -169,6 +160,47 @@ export default function PointsOfInterest({
 
     return processedPois
   }, [pois, activeTab, showOnlyFavorites, sortBy, favorites])
+
+  useEffect(() => {
+    if (!selectedPoiCardId) return
+
+    const scrollToCard = () => {
+      const selectedCard = document.getElementById(selectedPoiCardId)
+      if (selectedCard) {
+        selectedCard.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "nearest",
+        })
+        return true
+      }
+      return false
+    }
+
+    if (!scrollToCard()) {
+      const raf = requestAnimationFrame(() => {
+        scrollToCard()
+      })
+      return () => cancelAnimationFrame(raf)
+    }
+  }, [selectedPoiCardId, sortedAndFilteredPois.length, isLoading])
+
+  const openPoiNavigation = (
+    poi: EnrichedPoi,
+    mapService: "google_maps" | "apple_maps" | "waze",
+    linkKey: "google" | "apple" | "waze"
+  ) => {
+    track(ANALYTICS_EVENTS.POI_EXTERNAL_LINK_CLICKED, {
+      poi_id: poi.osm_id || `${poi.lat}-${poi.lon}`,
+      poi_name: poi.name,
+      map_service: mapService,
+    })
+    const links = buildPoiNavigationLinks(
+      { name: poi.name, lat: poi.lat, lon: poi.lon, address: poi.address },
+      { platform: "web" }
+    )
+    window.open(links[linkKey], "_blank")
+  }
 
   const formatDuration = (seconds?: number | null): string => {
     if (seconds === undefined || seconds === null) {
@@ -333,7 +365,7 @@ export default function PointsOfInterest({
               ) : (
                 sortedAndFilteredPois.map(poi => {
                   const poiKey = poi.osm_id || `${poi.lat}-${poi.lon}`
-                  const poiCardId = `poi-card-${encodeURIComponent(poiKey)}`
+                  const poiCardId = getPoiCardId(poiKey)
                   return (
                     <Card
                       id={poiCardId}
@@ -437,27 +469,7 @@ export default function PointsOfInterest({
                                 <DropdownMenuItem
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    track(ANALYTICS_EVENTS.POI_EXTERNAL_LINK_CLICKED, {
-                                      poi_id: poi.osm_id || `${poi.lat}-${poi.lon}`,
-                                      poi_name: poi.name,
-                                      map_service: 'google_maps'
-                                    });
-                                    
-                                    // Google Maps: Use coordinates for precision
-                                    
-                                    // Debug logging in development
-                                    if (process.env.NODE_ENV === 'development') {
-                                      console.log('[GPS Link] Google Maps:', {
-                                        poi_name: poi.name,
-                                        coordinates: `${poi.lat}, ${poi.lon}`,
-                                        address: poi.address
-                                      });
-                                    }
-                                    
-                                    window.open(
-                                      `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`,
-                                      "_blank"
-                                    );
+                                    openPoiNavigation(poi, "google_maps", "google");
                                   }}
                                 >
                                   Open in Google Maps
@@ -465,37 +477,7 @@ export default function PointsOfInterest({
                                 <DropdownMenuItem
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    track(ANALYTICS_EVENTS.POI_EXTERNAL_LINK_CLICKED, {
-                                      poi_id: poi.osm_id || `${poi.lat}-${poi.lon}`,
-                                      poi_name: poi.name,
-                                      map_service: 'apple_maps'
-                                    });
-                                    
-                                    // Apple Maps: Use name with location context for better recognition
-                                    const poiName = poi.name || 'Location';
-                                    const hasAddress = poi.address?.street && poi.address?.city;
-                                    
-                                    let appleMapsUrl;
-                                    if (hasAddress && poi.address) {
-                                      // Use name + address for better POI recognition
-                                      const address = `${poi.address.street}, ${poi.address.city}`;
-                                      appleMapsUrl = `http://maps.apple.com/?q=${encodeURIComponent(poiName)}&address=${encodeURIComponent(address)}`;
-                                    } else {
-                                      // Use name with coordinates for context
-                                      appleMapsUrl = `http://maps.apple.com/?q=${encodeURIComponent(poiName)}&sll=${poi.lat},${poi.lon}&z=15`;
-                                    }
-                                    
-                                    // Debug logging in development
-                                    if (process.env.NODE_ENV === 'development') {
-                                      console.log('[GPS Link] Apple Maps:', {
-                                        poi_name: poi.name,
-                                        url: appleMapsUrl,
-                                        address: poi.address,
-                                        coordinates: `${poi.lat}, ${poi.lon}`
-                                      });
-                                    }
-                                    
-                                    window.open(appleMapsUrl, "_blank");
+                                    openPoiNavigation(poi, "apple_maps", "apple");
                                   }}
                                 >
                                   Open in Apple Maps
@@ -503,36 +485,7 @@ export default function PointsOfInterest({
                                 <DropdownMenuItem
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    track(ANALYTICS_EVENTS.POI_EXTERNAL_LINK_CLICKED, {
-                                      poi_id: poi.osm_id || `${poi.lat}-${poi.lon}`,
-                                      poi_name: poi.name,
-                                      map_service: 'waze'
-                                    });
-                                    
-                                    // Waze: Use name + coordinates for best POI recognition
-                                    const poiName = poi.name || 'Location';
-                                    const address = poi.address?.street && poi.address?.city 
-                                      ? `${poi.address.street}, ${poi.address.city}`
-                                      : poi.address?.city || '';
-                                    
-                                    const searchQuery = address 
-                                      ? `${poiName}, ${address}`
-                                      : poiName;
-                                    
-                                    // Debug logging in development
-                                    if (process.env.NODE_ENV === 'development') {
-                                      console.log('[GPS Link] Waze:', {
-                                        poi_name: poi.name,
-                                        search_query: searchQuery,
-                                        address: poi.address,
-                                        coordinates: `${poi.lat}, ${poi.lon}`
-                                      });
-                                    }
-                                    
-                                    window.open(
-                                      `https://www.waze.com/ul?q=${encodeURIComponent(searchQuery)}&ll=${poi.lat},${poi.lon}&navigate=yes`,
-                                      "_blank"
-                                    );
+                                    openPoiNavigation(poi, "waze", "waze");
                                   }}
                                 >
                                   Open in Waze

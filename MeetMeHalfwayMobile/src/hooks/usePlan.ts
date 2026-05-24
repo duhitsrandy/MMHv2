@@ -1,10 +1,9 @@
-import { useSafeAuth as useAuth } from "../../app/_layout";
 import { useEffect, useState } from "react";
+import { getMaxLocationsForTier, type Tier } from "@shared/tier-limits";
+import { useSafeAuth } from "@/src/auth";
 import { API_BASE } from "../services/api";
 
-export type MobileTier = "starter" | "plus" | "pro" | "business";
-
-function parseTier(value?: string): MobileTier {
+function parseTier(value?: string): Tier {
   const normalized = (value || "").trim().toLowerCase();
   if (normalized === "plus") return "plus";
   if (normalized === "pro") return "pro";
@@ -12,18 +11,9 @@ function parseTier(value?: string): MobileTier {
   return "starter";
 }
 
-function getMaxLocations(tier: MobileTier): number {
-  switch (tier) {
-    case "plus": return 3;
-    case "pro": return 5;
-    case "business": return 10;
-    default: return 2;
-  }
-}
-
 export function usePlan() {
-  const { getToken, isSignedIn, isLoaded } = useAuth();
-  const [tier, setTier] = useState<MobileTier>("starter");
+  const { getToken, isSignedIn, isLoaded } = useSafeAuth();
+  const [tier, setTier] = useState<Tier>("starter");
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -62,11 +52,11 @@ export function usePlan() {
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn, isLoaded]);
+  }, [isSignedIn, isLoaded, getToken]);
 
   return {
     tier,
-    maxLocations: getMaxLocations(tier),
+    maxLocations: getMaxLocationsForTier(tier),
     isProOrHigher: tier === "pro" || tier === "business",
   };
 }

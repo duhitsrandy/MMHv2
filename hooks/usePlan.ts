@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useUser } from "@clerk/nextjs"; // Import useUser
 import { getUserPlanInfoAction } from "@/app/actions/user-actions"
 import { UserPlanInfo } from "@/lib/auth/plan"
-import { Tier } from "@/lib/stripe/tier-map"
+import { Tier, getMaxLocationsForTier } from "@/lib/stripe/tier-map"
 
 export function usePlan() {
   const { user, isLoaded: isUserLoaded } = useUser(); // Get user and loading state
@@ -70,9 +70,11 @@ export function usePlan() {
   // Return combined loading state (user loading OR plan loading)
   const combinedIsLoading = !isUserLoaded || isLoading;
 
-  // Return the tier directly for convenience, and the full planInfo object
+  const tier = planInfo?.tier || (combinedIsLoading ? undefined : "starter");
+
   return {
-    tier: planInfo?.tier || (combinedIsLoading ? undefined : 'starter'), // Provide direct tier access, default to starter
+    tier,
+    maxLocations: getMaxLocationsForTier(tier),
     planInfo,
     isLoading: combinedIsLoading,
     error,

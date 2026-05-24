@@ -22,6 +22,7 @@ import { geocodeLocationAction } from "@/actions/geocoding-test"
 import { createSearchAction } from "@/actions/db/searches-actions"
 import { createLocationAction } from "@/actions/db/locations-actions"
 import { usePlan } from "@/hooks/usePlan"
+import { getMaxLocationsForTier } from "@/lib/stripe/tier-map"
 import { useAnalytics } from "@/hooks/useAnalytics"
 import { ANALYTICS_EVENTS } from "@/lib/analytics-events"
 
@@ -51,17 +52,7 @@ export default function MeetMeHalfwayForm({
   const [isLoading, setIsLoading] = useState(false)
   const [locations, setLocations] = useState<Location[]>(initialLocations)
 
-  const getMaxLocations = (tier: string | null | undefined): number => {
-    switch (tier) {
-      case 'starter': return 2;
-      case 'plus': return 3;
-      case 'pro': return 5;
-      case 'business': return 10;
-      default: return 2; // Default to starter limits
-    }
-  };
-
-  const maxLocations = getMaxLocations(plan);
+  const maxLocations = getMaxLocationsForTier(plan);
   const canAddLocation = origins.length < maxLocations;
 
 

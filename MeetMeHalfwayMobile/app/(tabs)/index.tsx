@@ -22,7 +22,8 @@ import { saveLocation, saveSearch } from "../../src/services/storage";
 import { createCloudLocation, createCloudSearch } from "../../src/services/cloudSync";
 import { usePlan } from "../../src/hooks/usePlan";
 import { usePoi } from "../contexts/PoiContext";
-import { useSafeAuth as useAuth } from "../_layout";
+import { useSafeAuth as useAuth } from "@/src/auth";
+import { buildPoiNavigationLinks } from "@shared/poi-navigation-links";
 
 type OriginInput = { id: string; address: string };
 type OriginCoord = { address: string; lat: number; lng: number };
@@ -60,16 +61,25 @@ export default function TabOneScreen() {
     if (!actionSheetPoi) return;
     const poi = actionSheetPoi;
     setActionSheetPoi(null);
+    const links = buildPoiNavigationLinks(
+      { name: poi.name, lat: poi.lat, lng: poi.lng, address: poi.address },
+      { platform: "native-ios" }
+    );
+    const navOptions = [
+      { label: "Cancel", url: null },
+      { label: "Apple Maps", url: links.apple },
+      { label: "Google Maps", url: links.google },
+      { label: "Waze", url: links.waze },
+    ];
     ActionSheetIOS.showActionSheetWithOptions(
       {
-        options: ['Cancel', 'Apple Maps', 'Google Maps', 'Waze'],
+        options: navOptions.map((o) => o.label),
         cancelButtonIndex: 0,
-        title: poi.name || 'Navigate to location',
+        title: poi.name || "Navigate to location",
       },
       (idx) => {
-        if (idx === 1) safeOpenURL(`maps://?q=${encodeURIComponent(poi.name || 'Location')}&ll=${poi.lat},${poi.lng}`);
-        if (idx === 2) safeOpenURL(`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`);
-        if (idx === 3) safeOpenURL(`https://waze.com/ul?ll=${poi.lat},${poi.lng}&navigate=yes`);
+        const selected = navOptions[idx];
+        if (selected?.url) safeOpenURL(selected.url);
       }
     );
   }, [actionSheetPoi]);

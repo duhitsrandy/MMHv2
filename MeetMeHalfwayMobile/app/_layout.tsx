@@ -3,47 +3,14 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import React, { createContext, useContext, useEffect } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { TouchableOpacity } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import * as SecureStore from 'expo-secure-store';
-
-// Propagates whether a valid ClerkProvider is in the tree so that
-// Clerk hooks are only called when the provider is present.
-export const ClerkActiveContext = createContext(false);
-
-// Safe auth context — provides Clerk auth state when available, or no-op defaults otherwise.
-type SafeAuthValue = {
-  isSignedIn: boolean;
-  isLoaded: boolean;
-  getToken: () => Promise<string | null>;
-  signOut: () => void;
-};
-const SafeAuthContext = createContext<SafeAuthValue>({
-  isSignedIn: false,
-  isLoaded: true,
-  getToken: async () => null,
-  signOut: () => {},
-});
-
-export function useSafeAuth() {
-  return useContext(SafeAuthContext);
-}
-
-// Only rendered inside ClerkProvider — bridges real Clerk state into SafeAuthContext
-function ClerkAuthBridge({ children }: { children: React.ReactNode }) {
-  const { isSignedIn, isLoaded, getToken, signOut } = useAuth();
-  const value: SafeAuthValue = {
-    isSignedIn: !!isSignedIn,
-    isLoaded: !!isLoaded,
-    getToken: getToken ?? (async () => null),
-    signOut: signOut ?? (() => {}),
-  };
-  return <SafeAuthContext.Provider value={value}>{children}</SafeAuthContext.Provider>;
-}
+import { ClerkActiveContext, ClerkAuthBridge } from '@/src/auth';
 
 export {
   // Catch any errors thrown by the Layout component.
