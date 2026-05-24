@@ -28,10 +28,18 @@ This document describes the monitoring, analytics, and observability setup for t
 - [Sentry](https://sentry.io/) (or similar: LogRocket, Bugsnag)
 - Server logs (see below)
 
+### Current Tool: [Sentry](https://sentry.io/) (web)
+
+The Next.js web app reports unhandled client, server, and edge errors via `@sentry/nextjs`. Configuration lives in `lib/sentry/options.ts`, `instrumentation.ts`, and `sentry.*.config.ts`. Clerk user id is attached in `components/utilities/sentry/sentry-user.tsx` (id only, no email). PostHog remains the source for API usage analytics.
+
+Expo mobile (`MeetMeHalfwayMobile/`) is not wired to Sentry yet.
+
 ### Setup Checklist
-- [ ] Integrate Sentry (or chosen tool) with both frontend and backend
-- [ ] Set up environment-specific DSNs (dev, staging, prod)
-- [ ] Configure alerting for critical errors
+- [x] Integrate Sentry with the Next.js web app (client, server, edge)
+- [ ] Set `NEXT_PUBLIC_SENTRY_DSN` in Vercel production (and preview if desired)
+- [ ] Install [Sentry Vercel integration](https://vercel.com/integrations/sentry) or set `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` for source maps
+- [ ] Enable issue alerts in the Sentry project (email/Slack on new issues)
+- [ ] (Future) Integrate `@sentry/react-native` for mobile
 - [ ] Regularly review error dashboards and resolve issues
 
 ---

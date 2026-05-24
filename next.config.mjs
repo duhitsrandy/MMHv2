@@ -3,6 +3,7 @@ import dotenv from 'dotenv'
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config({ path: '.env.local' })
 }
+import { withSentryConfig } from '@sentry/nextjs'
 import withBundleAnalyzer from '@next/bundle-analyzer'
 
 /*
@@ -51,4 +52,12 @@ const bundleAnalyzer = withBundleAnalyzer({
   enabled: process.env.ANALYZE === 'true',
 })
 
-export default bundleAnalyzer(nextConfig)
+const analyzedConfig = bundleAnalyzer(nextConfig)
+
+export default withSentryConfig(analyzedConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+})

@@ -13,6 +13,7 @@ import { ThemeProvider } from "@/components/providers/theme-provider"
 import { CSPostHogProvider } from "@/components/utilities/posthog/posthog-provider"
 import { PostHogPageview } from "@/components/utilities/posthog/posthog-pageview"
 import { PostHogUserIdentify } from "@/components/utilities/posthog/posthog-user-identity"
+import { SentryUser } from "@/components/utilities/sentry/sentry-user"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -168,6 +169,7 @@ export default function RootLayout({
               {children}
               <PostHogPageview />
               <PostHogUserIdentify />
+              <SentryUser />
             </AuthProvider>
           </ThemeProvider>
         </CSPostHogProvider>
