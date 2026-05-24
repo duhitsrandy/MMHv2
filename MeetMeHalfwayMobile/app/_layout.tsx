@@ -4,13 +4,13 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useContext, useEffect } from 'react';
-import { TouchableOpacity } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import * as SecureStore from 'expo-secure-store';
 import { ClerkActiveContext, ClerkAuthBridge } from '@/src/auth';
+import { StripeProvider } from '@stripe/stripe-react-native';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -30,6 +30,31 @@ const tokenCache = {
   saveToken: (token: string) => SecureStore.setItemAsync('clerk_token', token),
 };
 const AnyClerkProvider = ClerkProvider as any;
+
+function StripeWrapper({ children }: { children: React.ReactNode }) {
+  const stripePk = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim();
+  const looksValid =
+    !!stripePk && /^pk_(test|live)_.+/.test(stripePk);
+
+  if (!looksValid) {
+    if (__DEV__) {
+      console.warn(
+        "[Stripe] EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY missing or invalid; PaymentSheet disabled."
+      );
+    }
+    return <>{children}</>;
+  }
+
+  return (
+    <StripeProvider
+      publishableKey={stripePk}
+      merchantIdentifier="merchant.com.meetmehalfway.mobile"
+      urlScheme="mmh"
+    >
+      {children}
+    </StripeProvider>
+  );
+}
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -58,55 +83,25 @@ export default function RootLayout() {
 
   if (!looksValid) {
     return (
-      <ClerkActiveContext.Provider value={false}>
-        <RootLayoutNav />
-      </ClerkActiveContext.Provider>
-    );
-  }
-
-  return (
-    <ClerkActiveContext.Provider value={true}>
-      <AnyClerkProvider publishableKey={pk} tokenCache={tokenCache}>
-        <ClerkAuthBridge>
+      <StripeWrapper>
+        <ClerkActiveContext.Provider value={false}>
           <RootLayoutNav />
-        </ClerkAuthBridge>
-      </AnyClerkProvider>
-    </ClerkActiveContext.Provider>
-  );
-}
-
-// Only rendered when ClerkProvider is in the tree
-function AccountButtonInner() {
-  const { isSignedIn, signOut } = useAuth();
-  const router = useRouter();
-
-  if (isSignedIn) {
-    return (
-      <TouchableOpacity
-        onPress={() => signOut()}
-        style={{ marginRight: 12 }}
-        accessibilityLabel="Sign out"
-      >
-        <FontAwesome name="user-circle" size={22} color="#111827" />
-      </TouchableOpacity>
+        </ClerkActiveContext.Provider>
+      </StripeWrapper>
     );
   }
 
   return (
-    <TouchableOpacity
-      onPress={() => router.push('/sign-in' as any)}
-      style={{ marginRight: 12 }}
-      accessibilityLabel="Sign in"
-    >
-      <FontAwesome name="user" size={22} color="#6b7280" />
-    </TouchableOpacity>
+    <StripeWrapper>
+      <ClerkActiveContext.Provider value={true}>
+        <AnyClerkProvider publishableKey={pk} tokenCache={tokenCache}>
+          <ClerkAuthBridge>
+            <RootLayoutNav />
+          </ClerkAuthBridge>
+        </AnyClerkProvider>
+      </ClerkActiveContext.Provider>
+    </StripeWrapper>
   );
-}
-
-function AccountButton() {
-  const clerkActive = useContext(ClerkActiveContext);
-  if (!clerkActive) return null;
-  return <AccountButtonInner />;
 }
 
 // Only enforces auth redirect when ClerkProvider is in the tree
@@ -154,7 +149,7 @@ function RootLayoutNav() {
             name="sign-up"
             options={{ title: "Sign Up", headerRight: () => null }}
           />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'About' }} />
         </Stack>
       </AuthGate>
     </ThemeProvider>

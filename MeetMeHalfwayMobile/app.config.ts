@@ -7,6 +7,8 @@ export default () => ({
     scheme: 'mmh',
     version: '1.0.0',
     orientation: 'portrait',
+    userInterfaceStyle: 'automatic',
+    newArchEnabled: true,
     icon: './assets/images/icon.png',
     splash: {
       image: './assets/images/splash-icon.png',
@@ -37,11 +39,19 @@ export default () => ({
     },
     plugins: [
       'expo-router',
+      [
+        '@stripe/stripe-react-native',
+        {
+          merchantIdentifier: 'merchant.com.meetmehalfway.mobile',
+          enableGooglePay: false,
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true,
     },
     extra: {
+      // Run `eas init` from MeetMeHalfwayMobile/ to replace CHANGE_ME_IN_EAS
       eas: {
         projectId: 'CHANGE_ME_IN_EAS',
       },
@@ -49,8 +59,7 @@ export default () => ({
       clerkPublishableKey: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+      stripePublishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY,
     },
   },
 });
-
-

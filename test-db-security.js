@@ -4,10 +4,12 @@ import { clerkClient } from '@clerk/clerk-sdk-node';
 
 dotenv.config({ path: '.env.local' });
 
-// Initialize Supabase client with service role key
+// Initialize Supabase client with secret key (server-only)
+const supabaseSecretKey =
+  process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  supabaseSecretKey
 );
 
 async function testSecurity() {

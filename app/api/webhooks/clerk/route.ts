@@ -1,17 +1,13 @@
 import { Webhook } from 'svix'
 import { headers } from 'next/headers'
 import { WebhookEvent } from '@clerk/nextjs/server'
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 
 // This secret comes from your Clerk Dashboard -> Webhooks -> Endpoint signing secret
 const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
 
-// Create Supabase client with service role key to bypass RLS
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   console.log('[Webhook Clerk] Received webhook event');
@@ -72,6 +68,8 @@ export async function POST(req: Request) {
     console.log(`[Webhook Clerk] User created event for userId: ${userId}`);
 
     try {
+      const supabaseAdmin = createSupabaseAdminClient()
+
       // Check if profile already exists using Supabase admin client
       const { data: existingProfile } = await supabaseAdmin
         .from('profiles')

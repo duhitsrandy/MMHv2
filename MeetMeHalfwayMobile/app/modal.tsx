@@ -1,17 +1,27 @@
 import { StatusBar } from 'expo-status-bar';
-import { Platform, StyleSheet } from 'react-native';
+import { Linking, Platform, StyleSheet, TouchableOpacity } from 'react-native';
+import Constants from 'expo-constants';
 
-import EditScreenInfo from '@/components/EditScreenInfo';
 import { Text, View } from '@/components/Themed';
 
-export default function ModalScreen() {
+const HELP_URL = 'https://meetmehalfway.co';
+
+export default function AboutModalScreen() {
+  const version = Constants.expoConfig?.version ?? '1.0.0';
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Modal</Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <EditScreenInfo path="app/modal.tsx" />
-
-      {/* Use a light status bar on iOS to account for the black space above the modal */}
+      <Text style={styles.title}>Meet Me Halfway</Text>
+      <Text style={styles.version}>Version {version}</Text>
+      <Text style={styles.body}>
+        Find a fair meeting point between friends, family, or colleagues.
+      </Text>
+      <TouchableOpacity
+        style={styles.linkButton}
+        onPress={() => Linking.openURL(HELP_URL)}
+      >
+        <Text style={styles.linkText}>Need help? meetmehalfway.co</Text>
+      </TouchableOpacity>
       <StatusBar style={Platform.OS === 'ios' ? 'light' : 'auto'} />
     </View>
   );
@@ -22,14 +32,34 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 24,
   },
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
+    marginBottom: 8,
   },
-  separator: {
-    marginVertical: 30,
-    height: 1,
-    width: '80%',
+  version: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 16,
+  },
+  body: {
+    fontSize: 15,
+    textAlign: 'center',
+    color: '#374151',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  linkButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: '#111827',
+    borderRadius: 8,
+  },
+  linkText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });

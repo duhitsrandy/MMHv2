@@ -21,8 +21,8 @@ The Meet Me Halfway application uses Supabase with PostgreSQL and Drizzle ORM fo
 # Database Configuration
 DATABASE_URL=postgresql://user:password@host:port/database
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key # Keep this secure, not in frontend env
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-publishable-or-anon-key
+SUPABASE_SECRET_KEY=your-secret-key # sb_secret_...; server-only, never in frontend env
 CLERK_WEBHOOK_SECRET= # From Clerk Dashboard -> Webhooks -> Endpoint signing secret
 ```
 
@@ -353,7 +353,7 @@ npm run db:migrate
   - Ensure you have network access to the database
   - Review migration SQL for errors or conflicts
 - **Permission denied errors:**
-  - Verify your service role key and RLS (Row Level Security) policies
+  - Verify your Supabase secret key and RLS (Row Level Security) policies
   - Check Supabase dashboard for table permissions
 - **Data not appearing as expected:**
   - Confirm successful migration and seeding

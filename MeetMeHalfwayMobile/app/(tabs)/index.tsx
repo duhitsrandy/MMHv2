@@ -24,6 +24,13 @@ import { usePlan } from "../../src/hooks/usePlan";
 import { usePoi } from "../contexts/PoiContext";
 import { useSafeAuth as useAuth } from "@/src/auth";
 import { buildPoiNavigationLinks } from "@shared/poi-navigation-links";
+import { requiresProForOriginCount } from "@shared/tier-limits";
+import { UpgradeModal } from "@/src/components/UpgradeModal";
+import type { UpgradeTierKey } from "@/src/services/stripe";
+import {
+  canShowUpgradeUI,
+  IOS_UPGRADE_NOTICE,
+} from "@/src/lib/billingPolicy";
 
 type OriginInput = { id: string; address: string };
 type OriginCoord = { address: string; lat: number; lng: number };
@@ -41,7 +48,9 @@ export default function TabOneScreen() {
     pendingSearch,
     setPendingSearch,
   } = usePoi();
-  const { tier, maxLocations } = usePlan();
+  const { tier, maxLocations, pollUntilTierUpdates } = usePlan();
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeRequiredTier, setUpgradeRequiredTier] = useState<UpgradeTierKey>("plus");
   const { isSignedIn, getToken } = useAuth();
   const [initialRegion, setInitialRegion] = useState<any | null>(null);
   const [userCoord, setUserCoord] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -129,18 +138,34 @@ export default function TabOneScreen() {
     setPendingSearch(null);
   }, [pendingSearch, setPendingSearch, maxLocations]);
 
+  const showUpgrade = (required: UpgradeTierKey = "plus") => {
+    if (!canShowUpgradeUI) {
+      Alert.alert("Upgrade required", IOS_UPGRADE_NOTICE);
+      return;
+    }
+    setUpgradeRequiredTier(required);
+    setUpgradeModalOpen(true);
+  };
+
+  const upgradeAlertButtons = (required: UpgradeTierKey) =>
+    canShowUpgradeUI
+      ? [
+          { text: "Cancel", style: "cancel" as const },
+          {
+            text: "View Plans",
+            onPress: () => showUpgrade(required),
+          },
+        ]
+      : [{ text: "OK", style: "default" as const }];
+
   const addOrigin = () => {
     if (origins.length >= maxLocations) {
       Alert.alert(
         "Upgrade required",
-        `Your ${tier} plan supports up to ${maxLocations} locations.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "View Plans",
-            onPress: () => Linking.openURL("https://meetmehalfway.co/pricing"),
-          },
-        ]
+        canShowUpgradeUI
+          ? `Your ${tier} plan supports up to ${maxLocations} locations.`
+          : `Your ${tier} plan supports up to ${maxLocations} locations.\n\n${IOS_UPGRADE_NOTICE}`,
+        upgradeAlertButtons(tier === "starter" ? "plus" : "pro")
       );
       return;
     }
@@ -162,7 +187,10 @@ export default function TabOneScreen() {
 
     try {
       setLoading(true);
-      const geocoded = await Promise.all(trimmed.map((address) => geocodeAddress(address)));
+      const token = isSignedIn ? await getToken() : null;
+      const geocoded = await Promise.all(
+        trimmed.map((address) => geocodeAddress(address, token))
+      );
       if (geocoded.some((item) => !item)) {
         Alert.alert("Geocoding failed", "Please check your locations and try again.");
         return;
@@ -175,37 +203,42 @@ export default function TabOneScreen() {
       }));
       setOriginCoords(resolved);
 
-      await Promise.all(
-        resolved.map((item, index) =>
-          saveLocation({
-            label: item.address.split(",")[0] || `Location ${index + 1}`,
-            address: item.address,
-            lat: item.lat,
-            lng: item.lng,
-          })
-        )
-      );
-      await saveSearch(resolved);
+      if (requiresProForOriginCount(resolved.length, tier)) {
+        Alert.alert(
+          "Upgrade required",
+          canShowUpgradeUI
+            ? "Searching with more than 2 locations requires a Pro or Business plan."
+            : `Searching with more than 2 locations requires a Pro or Business plan.\n\n${IOS_UPGRADE_NOTICE}`,
+          upgradeAlertButtons("pro")
+        );
+        return;
+      }
 
-      // Parallel cloud writes — non-blocking, local save is always the primary
-      if (isSignedIn) {
-        getToken().then((token) => {
-          if (!token) return;
-          resolved.forEach((item, index) => {
-            createCloudLocation(token, {
+      if (!isSignedIn) {
+        await Promise.all(
+          resolved.map((item, index) =>
+            saveLocation({
               label: item.address.split(",")[0] || `Location ${index + 1}`,
               address: item.address,
               lat: item.lat,
               lng: item.lng,
-            }).catch((err) => {
-              if (__DEV__) console.warn("[CloudSync] createCloudLocation failed:", err);
-            });
+            })
+          )
+        );
+        await saveSearch(resolved);
+      } else if (token) {
+        resolved.forEach((item, index) => {
+          createCloudLocation(token, {
+            label: item.address.split(",")[0] || `Location ${index + 1}`,
+            address: item.address,
+            lat: item.lat,
+            lng: item.lng,
+          }).catch((err) => {
+            if (__DEV__) console.warn("[CloudSync] createCloudLocation failed:", err);
           });
-          createCloudSearch(token, resolved).catch((err) => {
-            if (__DEV__) console.warn("[CloudSync] createCloudSearch failed:", err);
-          });
-        }).catch((err) => {
-          if (__DEV__) console.warn("[CloudSync] getToken failed:", err);
+        });
+        createCloudSearch(token, resolved).catch((err) => {
+          if (__DEV__) console.warn("[CloudSync] createCloudSearch failed:", err);
         });
       }
 
@@ -215,7 +248,7 @@ export default function TabOneScreen() {
       let altRoute: LatLng[] = [];
 
       if (resolved.length === 2) {
-        const routeData = await fetchRouteData(resolved[0], resolved[1]);
+        const routeData = await fetchRouteData(resolved[0], resolved[1], token);
         mainRoute = routeData.mainRoute;
         altRoute = routeData.alternateRoute;
         mainMid = routeData.mainMidpoint || getSimpleMidpoint(resolved[0], resolved[1]);
@@ -238,7 +271,8 @@ export default function TabOneScreen() {
       if (allPois.length > 0) {
         const matrixResult = await getTravelTimeMatrix(
           resolved.map(({ lat, lng }) => ({ lat, lng })),
-          allPois.map((poi) => ({ lat: poi.lat, lng: poi.lng }))
+          allPois.map((poi) => ({ lat: poi.lat, lng: poi.lng })),
+          token
         );
         allPois = allPois.map((poi, poiIndex) => ({
           ...poi,
@@ -288,6 +322,24 @@ export default function TabOneScreen() {
 
   return (
     <View style={styles.container}>
+      {canShowUpgradeUI && (
+        <UpgradeModal
+          isOpen={upgradeModalOpen}
+          onClose={() => setUpgradeModalOpen(false)}
+          requiredTier={upgradeRequiredTier}
+          feature="more locations per search"
+          onSuccess={async () => {
+            const previousTier = tier;
+            const next = await pollUntilTierUpdates({ previousTier });
+            if (next === previousTier) {
+              Alert.alert(
+                "Payment received",
+                "Your subscription will activate shortly. Pull to refresh or restart the app if your plan does not update."
+              );
+            }
+          }}
+        />
+      )}
       <Text className="text-xl font-semibold">Meet Me Halfway</Text>
       <Text style={styles.planText}>Plan: {tier} · Max locations: {maxLocations}</Text>
       <View style={styles.formRow}>
@@ -638,7 +690,8 @@ const styles = StyleSheet.create({
 
 async function fetchRouteData(
   a: { lat: number; lng: number },
-  b: { lat: number; lng: number }
+  b: { lat: number; lng: number },
+  token?: string | null
 ): Promise<{
   mainRoute: LatLng[];
   alternateRoute: LatLng[];
@@ -646,7 +699,7 @@ async function fetchRouteData(
   alternateMidpoint: { lat: number; lng: number } | null;
 }> {
   try {
-    const json = await fetchMobileRoute(a, b);
+    const json = await fetchMobileRoute(a, b, token);
     
     // Convert coordinate arrays to LatLng format
     const mainRoute = json?.mainRoute && Array.isArray(json.mainRoute) && json.mainRoute.length > 1

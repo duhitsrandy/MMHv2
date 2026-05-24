@@ -2,7 +2,7 @@ import React, { useContext } from 'react';
 import 'react-native-url-polyfill/auto';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Link, Tabs, useRouter } from 'expo-router';
-import { Pressable, TouchableOpacity } from 'react-native';
+import { ActionSheetIOS, Alert, Platform, Pressable, TouchableOpacity } from 'react-native';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -10,6 +10,7 @@ import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { PoiProvider } from '../contexts/PoiContext';
 import { useAuth } from '@clerk/clerk-expo';
 import { ClerkActiveContext } from '@/src/auth';
+import { useManageSubscription } from '@/src/hooks/useManageSubscription';
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {
@@ -24,10 +25,35 @@ function AccountHeaderButtonInner() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const color = Colors[colorScheme ?? 'light'].text;
+  const { openBillingPortal } = useManageSubscription();
+
+  const onAccountPress = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Manage Subscription', 'Sign Out'],
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: 2,
+          title: 'Account',
+        },
+        (index) => {
+          if (index === 1) void openBillingPortal();
+          if (index === 2) signOut();
+        }
+      );
+      return;
+    }
+
+    Alert.alert('Account', undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Manage Subscription', onPress: () => void openBillingPortal() },
+      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+    ]);
+  };
 
   if (isSignedIn) {
     return (
-      <TouchableOpacity onPress={() => signOut()} style={{ marginRight: 12 }}>
+      <TouchableOpacity onPress={onAccountPress} style={{ marginRight: 12 }}>
         <FontAwesome name="user-circle" size={22} color={color} />
       </TouchableOpacity>
     );

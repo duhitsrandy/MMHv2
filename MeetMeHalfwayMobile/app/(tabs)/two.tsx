@@ -1,5 +1,4 @@
 import { StyleSheet, FlatList, TouchableOpacity, Linking, Alert } from 'react-native';
-import { useEffect, useState } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import { buildPoiNavigationLinks } from '@shared/poi-navigation-links';
@@ -23,14 +22,8 @@ type PoiType = {
 };
 
 export default function TabTwoScreen() {
-  const { pois, midpoint, selectedPoi, setSelectedPoi } = usePoi();
-  const [filter, setFilter] = useState<string>('all');
+  const { pois, selectedPoi, setSelectedPoi } = usePoi();
   const router = useRouter();
-
-  const filteredPois = pois.filter(poi => {
-    if (filter === 'all') return true;
-    return (poi.type || '').toLowerCase().includes(filter.toLowerCase());
-  });
 
   const openNavigationLink = (poi: PoiType, linkKey: "apple" | "google" | "waze", appName: string) => {
     const links = buildPoiNavigationLinks(
@@ -155,7 +148,7 @@ export default function TabTwoScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Points of Interest</Text>
-        <Text style={styles.subtitle}>{filteredPois.length} locations found</Text>
+        <Text style={styles.subtitle}>{pois.length} locations found</Text>
       </View>
 
       {pois.length === 0 ? (
@@ -166,7 +159,7 @@ export default function TabTwoScreen() {
         </View>
       ) : (
         <FlatList
-          data={filteredPois}
+          data={pois}
           renderItem={renderPoiItem}
           keyExtractor={(item, index) => `poi-${index}`}
           style={styles.list}

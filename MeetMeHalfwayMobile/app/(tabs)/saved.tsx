@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { Text, View } from "@/components/Themed";
 import { usePoi } from "../contexts/PoiContext";
 import { useSavedData } from "../../src/hooks/useSavedData";
+import { useManageSubscription } from "../../src/hooks/useManageSubscription";
 import type { SavedSearch } from "../../src/services/storage";
 
 export default function SavedScreen() {
@@ -18,6 +19,7 @@ export default function SavedScreen() {
     removeLocation,
     removeSearch,
   } = useSavedData();
+  const { openBillingPortal, loading: billingLoading } = useManageSubscription();
 
   const applySearch = (item: SavedSearch) => {
     setPendingSearch({ locations: item.locations });
@@ -47,6 +49,20 @@ export default function SavedScreen() {
     <View style={styles.container}>
       {isSignedIn && (
         <Text style={styles.syncBadge}>Synced to cloud</Text>
+      )}
+
+      {isSignedIn && (
+        <TouchableOpacity
+          style={styles.manageButton}
+          onPress={() => void openBillingPortal()}
+          disabled={billingLoading}
+        >
+          {billingLoading ? (
+            <ActivityIndicator size="small" color="#2563eb" />
+          ) : (
+            <Text style={styles.manageButtonText}>Manage Subscription</Text>
+          )}
+        </TouchableOpacity>
       )}
 
       <Text style={styles.heading}>Saved Locations</Text>
@@ -109,6 +125,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 4,
     textAlign: "right",
+  },
+  manageButton: {
+    alignSelf: "stretch",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2563eb",
+    marginBottom: 8,
+    alignItems: "center",
+  },
+  manageButtonText: {
+    color: "#2563eb",
+    fontWeight: "600",
+    fontSize: 14,
   },
   heading: { fontSize: 18, fontWeight: "700", marginVertical: 8, color: "#111827" },
   empty: { color: "#6b7280", paddingVertical: 8 },
