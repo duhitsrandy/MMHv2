@@ -51,9 +51,8 @@ export default () => ({
       typedRoutes: true,
     },
     extra: {
-      // Run `eas init` from MeetMeHalfwayMobile/ to replace CHANGE_ME_IN_EAS
       eas: {
-        projectId: 'CHANGE_ME_IN_EAS',
+        projectId: '531b0735-de9e-4406-8089-2e8b1ad78db3',
       },
       apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL,
       clerkPublishableKey: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
