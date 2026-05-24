@@ -28,13 +28,13 @@ Execute this checklist **before** App Store submission. Do not submit with sign-
 
 | Requirement | Done |
 |-------------|------|
-| Accessible from Account / Settings (account sheet or About) | ☐ |
-| Confirmation screen before delete | ☐ |
-| Explains what will be deleted (profile, saved locations, saved searches) | ☐ |
-| Calls backend delete endpoint (Clerk user + cascade DB data per privacy policy) | ☐ |
-| Signs user out after success | ☐ |
-| Success and error states | ☐ |
-| Privacy policy text matches actual behavior (no “if available”) | ☐ |
+| Accessible from Account / Settings (account sheet or About) | ☑ |
+| Confirmation screen before delete | ☑ |
+| Explains what will be deleted (profile, saved locations, saved searches) | ☑ |
+| Calls backend delete endpoint (Clerk user + cascade DB data per privacy policy) | ☑ |
+| Signs user out after success | ☑ |
+| Success and error states | ☑ |
+| Privacy policy text matches actual behavior (no “if available”) | ☑ |
 
 **Do not submit** with sign-up enabled until this ships.
 
@@ -42,19 +42,19 @@ Execute this checklist **before** App Store submission. Do not submit with sign-
 
 ## Account / legal
 
-- [ ] In-app **Delete Account** flow exists (see ticket above)
+- [x] In-app **Delete Account** flow exists (see ticket above)
 - [ ] Delete Account verified against **production** API + Clerk
-- [ ] **Privacy Policy** link visible in app → `https://meetmehalfway.co/privacy`
-- [ ] **Terms** link visible in app → `https://meetmehalfway.co/terms`
-- [ ] **Support** contact visible in app → `support@meetmehalfway.co`
-- [ ] Privacy policy accurately describes saved locations, searches, and account deletion
+- [x] **Privacy Policy** link visible in app → `https://meetmehalfway.co/privacy`
+- [x] **Terms** link visible in app → `https://meetmehalfway.co/terms`
+- [x] **Support** contact visible in app → `support@meetmehalfway.co`
+- [x] Privacy policy accurately describes saved locations, searches, and account deletion
 
 ---
 
 ## iOS permissions
 
-- [ ] Only **When In Use** location declared (remove `NSLocationAlwaysAndWhenInUseUsageDescription` if unused)
-- [ ] Purpose string is specific, e.g. *“Meet Me Halfway uses your location to fill your starting point and calculate nearby meeting options.”*
+- [x] Only **When In Use** location declared (remove `NSLocationAlwaysAndWhenInUseUsageDescription` if unused)
+- [x] Purpose string is specific, e.g. *“Meet Me Halfway uses your location to fill your starting point and calculate nearby meeting options.”*
 - [ ] Manual address entry works when location is **denied**
 - [ ] No background location plist strings unless you ship background tracking
 
@@ -92,11 +92,11 @@ Re-check **Guideline 3.1.1** at submission time. Lowest-friction approach for MM
 
 | Rule | Done |
 |------|------|
-| No Stripe **PaymentSheet** on iOS for new subscriptions | ☐ |
-| No in-app checkout for new digital subscriptions on iOS | ☐ |
-| No tappable external pricing URL unless using a **clearly compliant** external-purchase flow (verify current Apple policy first) | ☐ |
-| No misleading **Buy** / **View Plans** CTAs on iOS | ☐ |
-| Upgrade copy is informational only — avoid steering reviewers to off-app purchase | ☐ |
+| No Stripe **PaymentSheet** on iOS for new subscriptions | ☑ |
+| No in-app checkout for new digital subscriptions on iOS | ☑ |
+| No tappable external pricing URL unless using a **clearly compliant** external-purchase flow (verify current Apple policy first) | ☑ |
+| No misleading **Buy** / **View Plans** CTAs on iOS | ☑ |
+| Upgrade copy is informational only — avoid steering reviewers to off-app purchase | ☑ |
 | **Pro demo account** so reviewer never needs to test payment | ☐ |
 | Existing subscriber **Manage Subscription** behavior documented in review notes; portal only if compliant for your setup | ☐ |
 
@@ -228,7 +228,8 @@ Detail: [mobile-ios-app-store-submission.md](mobile-ios-app-store-submission.md)
 |------|------|
 | Auth / sign-up | `MeetMeHalfwayMobile/app/sign-in.tsx`, `sign-up.tsx` |
 | Account menu | `MeetMeHalfwayMobile/app/(tabs)/_layout.tsx` |
-| About | `MeetMeHalfwayMobile/app/modal.tsx` |
+| About / legal | `MeetMeHalfwayMobile/app/modal.tsx` |
+| Delete Account | `MeetMeHalfwayMobile/app/delete-account.tsx`, `app/api/mobile/account/route.ts` |
 | Billing gate | `MeetMeHalfwayMobile/src/lib/billingPolicy.ts` |
 | Expo permissions | `MeetMeHalfwayMobile/app.config.ts` |
 

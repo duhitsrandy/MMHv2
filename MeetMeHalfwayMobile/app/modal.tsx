@@ -1,13 +1,28 @@
 import { StatusBar } from 'expo-status-bar';
 import { Linking, Platform, StyleSheet, TouchableOpacity } from 'react-native';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
 
 import { Text, View } from '@/components/Themed';
-
-const HELP_URL = 'https://meetmehalfway.co';
+import {
+  PRIVACY_POLICY_URL,
+  SUPPORT_EMAIL,
+  TERMS_URL,
+} from '@/src/constants/legal';
+import { useSafeAuth } from '@/src/auth';
 
 export default function AboutModalScreen() {
   const version = Constants.expoConfig?.version ?? '1.0.0';
+  const router = useRouter();
+  const { isSignedIn } = useSafeAuth();
+
+  const openUrl = (url: string) => {
+    void Linking.openURL(url);
+  };
+
+  const openSupportEmail = () => {
+    void Linking.openURL(`mailto:${SUPPORT_EMAIL}`);
+  };
 
   return (
     <View style={styles.container}>
@@ -16,12 +31,28 @@ export default function AboutModalScreen() {
       <Text style={styles.body}>
         Find a fair meeting point between friends, family, or colleagues.
       </Text>
-      <TouchableOpacity
-        style={styles.linkButton}
-        onPress={() => Linking.openURL(HELP_URL)}
-      >
-        <Text style={styles.linkText}>Need help? meetmehalfway.co</Text>
-      </TouchableOpacity>
+
+      <View style={styles.linksSection}>
+        <TouchableOpacity style={styles.linkRow} onPress={() => openUrl(PRIVACY_POLICY_URL)}>
+          <Text style={styles.linkText}>Privacy Policy</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.linkRow} onPress={() => openUrl(TERMS_URL)}>
+          <Text style={styles.linkText}>Terms of Service</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.linkRow} onPress={openSupportEmail}>
+          <Text style={styles.linkText}>Support: {SUPPORT_EMAIL}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {isSignedIn ? (
+        <TouchableOpacity
+          style={styles.deleteLink}
+          onPress={() => router.push('/delete-account' as any)}
+        >
+          <Text style={styles.deleteLinkText}>Delete Account</Text>
+        </TouchableOpacity>
+      ) : null}
+
       <StatusBar style={Platform.OS === 'ios' ? 'light' : 'auto'} />
     </View>
   );
@@ -51,15 +82,28 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 22,
   },
-  linkButton: {
+  linksSection: {
+    width: '100%',
+    maxWidth: 320,
+    marginBottom: 16,
+  },
+  linkRow: {
     paddingVertical: 12,
-    paddingHorizontal: 20,
-    backgroundColor: '#111827',
-    borderRadius: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
   },
   linkText: {
-    color: '#fff',
+    fontSize: 15,
+    color: '#2563eb',
     fontWeight: '600',
-    fontSize: 14,
+  },
+  deleteLink: {
+    marginTop: 8,
+    paddingVertical: 12,
+  },
+  deleteLinkText: {
+    fontSize: 15,
+    color: '#dc2626',
+    fontWeight: '600',
   },
 });

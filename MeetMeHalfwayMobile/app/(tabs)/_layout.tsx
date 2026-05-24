@@ -31,14 +31,15 @@ function AccountHeaderButtonInner() {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['Cancel', 'Manage Subscription', 'Sign Out'],
+          options: ['Cancel', 'Manage Subscription', 'Delete Account', 'Sign Out'],
           cancelButtonIndex: 0,
           destructiveButtonIndex: 2,
           title: 'Account',
         },
         (index) => {
           if (index === 1) void openBillingPortal();
-          if (index === 2) signOut();
+          if (index === 2) router.push('/delete-account' as any);
+          if (index === 3) signOut();
         }
       );
       return;
@@ -47,7 +48,8 @@ function AccountHeaderButtonInner() {
     Alert.alert('Account', undefined, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Manage Subscription', onPress: () => void openBillingPortal() },
-      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+      { text: 'Delete Account', style: 'destructive', onPress: () => router.push('/delete-account' as any) },
+      { text: 'Sign Out', onPress: () => signOut() },
     ]);
   };
 

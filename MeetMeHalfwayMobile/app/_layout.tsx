@@ -149,6 +149,10 @@ function RootLayoutNav() {
             name="sign-up"
             options={{ title: "Sign Up", headerRight: () => null }}
           />
+          <Stack.Screen
+            name="delete-account"
+            options={{ title: "Delete Account", presentation: "modal" }}
+          />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'About' }} />
         </Stack>
       </AuthGate>

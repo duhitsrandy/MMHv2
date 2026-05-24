@@ -20,9 +20,7 @@ export default () => ({
       supportsTablet: true,
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
-          'This app needs location access to find meeting points near you',
-        NSLocationAlwaysAndWhenInUseUsageDescription:
-          'This app needs location access to find meeting points near you',
+          'Meet Me Halfway uses your location to fill your starting point and calculate nearby meeting options.',
       },
     },
     android: {

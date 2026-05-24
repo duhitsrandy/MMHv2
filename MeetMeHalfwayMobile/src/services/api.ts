@@ -51,6 +51,23 @@ export async function geocodeAddress(
   return { lat: data.lat, lng: data.lng };
 }
 
+export async function deleteAccount(token: string): Promise<void> {
+  const response = await fetch(`${getApiBase()}/api/mobile/account`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    let message = `Could not delete account (${response.status})`;
+    try {
+      const data = await response.json();
+      if (typeof data?.error === "string") message = data.error;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message);
+  }
+}
+
 export async function getTravelTimeMatrix(
   origins: Array<{ lat: number; lng: number }>,
   destinations: Array<{ lat: number; lng: number }>,

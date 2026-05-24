@@ -103,7 +103,7 @@ iOS billing:
 Meet Me Halfway supports multiplatform accounts. Some users may have subscriptions purchased outside the iOS app. For review, we provided a Pro demo account so paid features can be tested without purchase. The iOS app does not process new Stripe payments for digital subscriptions.
 
 Account deletion:
-[Account menu → Delete Account — describe path once implemented]
+Account menu (user icon, Map tab) → **Delete Account**, or About (info icon) → **Delete Account**. Confirmation screen; type DELETE to confirm. Removes profile, saved locations, saved searches, and Clerk account.
 
 Technical:
 No executable code is downloaded after review to change app functionality.
