@@ -14,17 +14,49 @@ export default function SignInScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleSignIn = async () => {
-    if (!isLoaded) return;
+    if (!isLoaded) {
+      setError("Auth is still loading. Wait a moment and try again.");
+      return;
+    }
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) {
+      setError("Enter your email and password.");
+      return;
+    }
+
     setError("");
     setLoading(true);
     try {
-      const result = await signIn.create({ identifier: email.trim(), password });
-      await setActive({ session: result.createdSessionId });
-      router.replace("/(tabs)");
+      const result = await signIn.create({
+        identifier: trimmedEmail,
+        password,
+      });
+
+      if (result.status === "complete") {
+        if (!result.createdSessionId) {
+          setError("Sign-in succeeded but no session was created. Try again.");
+          return;
+        }
+        await setActive({ session: result.createdSessionId });
+        router.replace("/(tabs)");
+        return;
+      }
+
+      if (result.status === "needs_first_factor") {
+        setError(
+          "This account needs an extra verification step. Sign in at meetmehalfway.co in a browser, or use email code sign-in if enabled in Clerk."
+        );
+        return;
+      }
+
+      setError(
+        `Sign-in could not be completed (${result.status}). Try the web app or contact support.`
+      );
     } catch (err: any) {
       const msg =
         err?.errors?.[0]?.longMessage ||
         err?.errors?.[0]?.message ||
+        err?.message ||
         "Sign in failed. Please check your credentials.";
       setError(msg);
     } finally {
@@ -58,14 +90,19 @@ export default function SignInScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
+        style={[
+          styles.button,
+          (loading || !isLoaded) && styles.buttonDisabled,
+        ]}
         onPress={handleSignIn}
         disabled={loading}
       >
         {loading ? (
           <ActivityIndicator color="white" />
         ) : (
-          <Text style={styles.buttonText}>Sign In</Text>
+          <Text style={styles.buttonText}>
+            {!isLoaded ? "Loading…" : "Sign In"}
+          </Text>
         )}
       </TouchableOpacity>
 

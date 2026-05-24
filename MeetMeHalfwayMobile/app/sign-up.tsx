@@ -41,7 +41,15 @@ export default function SignUpScreen() {
     setError("");
     setLoading(true);
     try {
-      const result = await signUp.attemptEmailAddressVerification({ code: code.trim() });
+      const result = await signUp.attemptEmailAddressVerification({
+        code: code.trim(),
+      });
+      if (result.status !== "complete" || !result.createdSessionId) {
+        setError(
+          `Verification could not be completed (${result.status}). Try again or sign in on the web.`
+        );
+        return;
+      }
       await setActive({ session: result.createdSessionId });
       router.replace("/(tabs)");
     } catch (err: any) {
