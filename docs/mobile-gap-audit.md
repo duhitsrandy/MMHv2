@@ -210,6 +210,24 @@ Mapped to [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md):
 
 ---
 
+## Stripe PaymentSheet + App Store (Session 2)
+
+In-app upgrades use `@stripe/stripe-react-native` PaymentSheet backed by `POST /api/mobile/stripe/checkout-session` and the existing Stripe webhook (`customer.subscription.updated`). Billing self-service uses `POST /api/mobile/stripe/billing-portal` + `WebBrowser.openAuthSessionAsync` with return URL `mmh://billing-return`.
+
+**Apple Guideline 3.1.1:** Digital subscriptions sold inside an iOS app normally require In-App Purchase. PaymentSheet for SaaS features may be rejected on App Store review (TestFlight internal testing is typically unaffected).
+
+| Option | Notes |
+|--------|--------|
+| Submit with PaymentSheet | Fastest path; respond to rejection if Apple flags 3.1.1 |
+| Apple IAP (`react-native-iap`) | Compliant for iOS; gate PaymentSheet to Android/web only |
+| External link only on iOS | Regression vs in-app checkout; External Link Account entitlement has limits |
+
+Reader exemption (3.1.3) does not apply. EU DMA alternative payments apply only where entitled.
+
+**EAS production secrets (Stripe):** `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_STRIPE_PRICE_PLUS_MONTHLY`, `EXPO_PUBLIC_STRIPE_PRICE_PRO_MONTHLY`, `EXPO_PUBLIC_STRIPE_PRICE_BUSINESS_MONTHLY` (must match Dashboard monthly Price IDs).
+
+---
+
 ## Out of scope (per audit charter)
 
 - Geo provider consolidation

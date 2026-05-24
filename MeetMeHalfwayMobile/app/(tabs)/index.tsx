@@ -25,6 +25,8 @@ import { usePoi } from "../contexts/PoiContext";
 import { useSafeAuth as useAuth } from "@/src/auth";
 import { buildPoiNavigationLinks } from "@shared/poi-navigation-links";
 import { requiresProForOriginCount } from "@shared/tier-limits";
+import { UpgradeModal } from "@/src/components/UpgradeModal";
+import type { UpgradeTierKey } from "@/src/services/stripe";
 
 type OriginInput = { id: string; address: string };
 type OriginCoord = { address: string; lat: number; lng: number };
@@ -42,7 +44,9 @@ export default function TabOneScreen() {
     pendingSearch,
     setPendingSearch,
   } = usePoi();
-  const { tier, maxLocations } = usePlan();
+  const { tier, maxLocations, pollUntilTierUpdates } = usePlan();
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeRequiredTier, setUpgradeRequiredTier] = useState<UpgradeTierKey>("plus");
   const { isSignedIn, getToken } = useAuth();
   const [initialRegion, setInitialRegion] = useState<any | null>(null);
   const [userCoord, setUserCoord] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -130,6 +134,11 @@ export default function TabOneScreen() {
     setPendingSearch(null);
   }, [pendingSearch, setPendingSearch, maxLocations]);
 
+  const showUpgrade = (required: UpgradeTierKey = "plus") => {
+    setUpgradeRequiredTier(required);
+    setUpgradeModalOpen(true);
+  };
+
   const addOrigin = () => {
     if (origins.length >= maxLocations) {
       Alert.alert(
@@ -139,7 +148,7 @@ export default function TabOneScreen() {
           { text: "Cancel", style: "cancel" },
           {
             text: "View Plans",
-            onPress: () => Linking.openURL("https://meetmehalfway.co/pricing"),
+            onPress: () => showUpgrade(tier === "starter" ? "plus" : "pro"),
           },
         ]
       );
@@ -187,7 +196,7 @@ export default function TabOneScreen() {
             { text: "Cancel", style: "cancel" },
             {
               text: "View Plans",
-              onPress: () => Linking.openURL("https://meetmehalfway.co/pricing"),
+              onPress: () => showUpgrade("pro"),
             },
           ]
         );
@@ -302,6 +311,22 @@ export default function TabOneScreen() {
 
   return (
     <View style={styles.container}>
+      <UpgradeModal
+        isOpen={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
+        requiredTier={upgradeRequiredTier}
+        feature="more locations per search"
+        onSuccess={async () => {
+          const previousTier = tier;
+          const next = await pollUntilTierUpdates({ previousTier });
+          if (next === previousTier) {
+            Alert.alert(
+              "Payment received",
+              "Your subscription will activate shortly. Pull to refresh or restart the app if your plan does not update."
+            );
+          }
+        }}
+      />
       <Text className="text-xl font-semibold">Meet Me Halfway</Text>
       <Text style={styles.planText}>Plan: {tier} · Max locations: {maxLocations}</Text>
       <View style={styles.formRow}>

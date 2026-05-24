@@ -40,8 +40,15 @@ Set production secrets in EAS (not in git):
 
 - `EXPO_PUBLIC_API_BASE_URL`
 - `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`
-- `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` (live `pk_live_...`)
+- `EXPO_PUBLIC_STRIPE_PRICE_PLUS_MONTHLY` (Stripe Price ID, monthly)
+- `EXPO_PUBLIC_STRIPE_PRICE_PRO_MONTHLY`
+- `EXPO_PUBLIC_STRIPE_PRICE_BUSINESS_MONTHLY`
 - Supabase public keys as needed
+
+### App Store — digital subscriptions
+
+PaymentSheet checkout unlocks in-app features (tier limits). Apple Guideline **3.1.1** may require IAP for App Store release. TestFlight QA is fine; plan IAP or review response before public App Store submit. See [mobile-gap-audit.md](mobile-gap-audit.md) (Stripe PaymentSheet + App Store).
 
 ## Local Validation
 
@@ -57,6 +64,8 @@ Validate:
 - POI enrichment and list rendering.
 - Saved locations/search history in Saved tab (cloud when signed in).
 - 3-origin search blocked for Starter/Plus; works for Pro.
+- In-app upgrade: PaymentSheet with test card `4242 4242 4242 4242`; tier updates via `/api/mobile/profile`.
+- Manage Subscription: header account menu and Saved tab → Stripe Customer Portal.
 
 ## App Store Connect (manual)
 

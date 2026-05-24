@@ -10,6 +10,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import * as SecureStore from 'expo-secure-store';
 import { ClerkActiveContext, ClerkAuthBridge } from '@/src/auth';
+import { StripeProvider } from '@stripe/stripe-react-native';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -29,6 +30,31 @@ const tokenCache = {
   saveToken: (token: string) => SecureStore.setItemAsync('clerk_token', token),
 };
 const AnyClerkProvider = ClerkProvider as any;
+
+function StripeWrapper({ children }: { children: React.ReactNode }) {
+  const stripePk = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim();
+  const looksValid =
+    !!stripePk && /^pk_(test|live)_.+/.test(stripePk);
+
+  if (!looksValid) {
+    if (__DEV__) {
+      console.warn(
+        "[Stripe] EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY missing or invalid; PaymentSheet disabled."
+      );
+    }
+    return <>{children}</>;
+  }
+
+  return (
+    <StripeProvider
+      publishableKey={stripePk}
+      merchantIdentifier="merchant.com.meetmehalfway.mobile"
+      urlScheme="mmh"
+    >
+      {children}
+    </StripeProvider>
+  );
+}
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -57,20 +83,24 @@ export default function RootLayout() {
 
   if (!looksValid) {
     return (
-      <ClerkActiveContext.Provider value={false}>
-        <RootLayoutNav />
-      </ClerkActiveContext.Provider>
+      <StripeWrapper>
+        <ClerkActiveContext.Provider value={false}>
+          <RootLayoutNav />
+        </ClerkActiveContext.Provider>
+      </StripeWrapper>
     );
   }
 
   return (
-    <ClerkActiveContext.Provider value={true}>
-      <AnyClerkProvider publishableKey={pk} tokenCache={tokenCache}>
-        <ClerkAuthBridge>
-          <RootLayoutNav />
-        </ClerkAuthBridge>
-      </AnyClerkProvider>
-    </ClerkActiveContext.Provider>
+    <StripeWrapper>
+      <ClerkActiveContext.Provider value={true}>
+        <AnyClerkProvider publishableKey={pk} tokenCache={tokenCache}>
+          <ClerkAuthBridge>
+            <RootLayoutNav />
+          </ClerkAuthBridge>
+        </AnyClerkProvider>
+      </ClerkActiveContext.Provider>
+    </StripeWrapper>
   );
 }
 
