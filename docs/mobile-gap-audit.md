@@ -12,7 +12,7 @@ Canonical references: [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-qa
 |---------|--------|-------|
 | **1** — P0/P1 parity & TestFlight unblockers | **Done** | Auth mobile APIs, tier rules, EAS scaffold, `.env` untracked, docs |
 | **2** — Stripe PaymentSheet + billing portal | **Done** | `UpgradeModal`, `/api/mobile/stripe/*`, Vercel webhook build fix |
-| **3** — TestFlight + QA sign-off | **Next** | `eas init`, ASC registration, full QA checklist |
+| **3** — TestFlight + QA sign-off | **Done** | iOS multiplatform billing; QA results doc; TestFlight runbook; `eas build` deferred (manual Apple/EAS) |
 
 ---
 
@@ -26,15 +26,15 @@ Canonical references: [mobile-ios-runbook.md](mobile-ios-runbook.md), [mobile-qa
 
 4. **Tier parity (multi-origin + matrix)** — **Aligned in Sessions 1–2:** `requiresProForOriginCount` on mobile map tab; `/api/mobile/matrix` uses HERE for Pro/Business when authenticated. Web `results-map` should stay in sync with `shared/tier-limits.ts`.
 
-5. **Stripe on mobile** — **Done (Session 2):** `@stripe/stripe-react-native` PaymentSheet via `POST /api/mobile/stripe/checkout-session`; billing portal via `POST /api/mobile/stripe/billing-portal` + `mmh://billing-return`. Existing Stripe webhook unchanged. **App Store 3.1.1** still a public-launch consideration (see below).
+5. **Stripe on mobile** — **Done (Sessions 2–3):** PaymentSheet on **Android** (and web); **iOS uses multiplatform pattern** — no in-app upgrade UI (`MeetMeHalfwayMobile/src/lib/billingPolicy.ts`). Billing portal for existing subs remains on iOS. App Store 3.1.1 addressed for public iOS submit.
 
-6. **Config / release blockers (Session 3)** — EAS `projectId` still `CHANGE_ME_IN_EAS` until `eas init`; bundle ID must be registered in App Store Connect before first TestFlight submit.
+6. **Config / release blockers (TestFlight)** — EAS `projectId` still `CHANGE_ME_IN_EAS` until you run `eas init`; bundle ID must be registered in App Store Connect; see [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) § TestFlight first-time setup.
 
-7. **Docs** — QA/release/runbook updated in Session 1; this file updated after Session 2. Session 3 adds pass/fail QA results.
+7. **Docs** — [mobile-qa-results-2026-05-24.md](mobile-qa-results-2026-05-24.md); QA checklist + release checklist updated Session 3.
 
 8. **Positive patterns to keep** — `@shared/tier-limits`, `@shared/poi-navigation-links`, `/api/mobile/profile` + cloud sync, existing QA/release checklists, Vitest on shared modules.
 
-9. **Next step** — Session 3: run [mobile-qa-checklist.md](mobile-qa-checklist.md), `eas build`, internal TestFlight. See [mobile-followup-sessions.md](mobile-followup-sessions.md).
+9. **Next step** — You: complete remaining **MANUAL** Simulator rows in [mobile-qa-results-2026-05-24.md](mobile-qa-results-2026-05-24.md); then Apple Dev + `eas init` + `eas build` per release checklist.
 
 ---
 
@@ -193,8 +193,9 @@ Mapped to [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md):
 
 ### Session 3 (QA + ship)
 
-- [ ] Run [mobile-qa-checklist.md](mobile-qa-checklist.md) on Simulator + physical device + TestFlight build
-- [ ] `eas build --profile production --platform ios`
+- [x] Run [mobile-qa-checklist.md](mobile-qa-checklist.md) — results in [mobile-qa-results-2026-05-24.md](mobile-qa-results-2026-05-24.md) (automated + code-verified; some MANUAL rows for Randy)
+- [x] iOS multiplatform billing gating ([`billingPolicy.ts`](../MeetMeHalfwayMobile/src/lib/billingPolicy.ts))
+- [ ] `eas build --profile production --platform ios` (blocked: `eas init`, Apple Dev, ASC)
 - [ ] Internal TestFlight distribution
 - [ ] `eas submit --platform ios`
 
@@ -218,21 +219,21 @@ Mapped to [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md):
 
 ---
 
-## Stripe PaymentSheet + App Store (Session 2)
+## Stripe PaymentSheet + App Store (Sessions 2–3)
 
-In-app upgrades use `@stripe/stripe-react-native` PaymentSheet backed by `POST /api/mobile/stripe/checkout-session` and the existing Stripe webhook (`customer.subscription.updated`). Billing self-service uses `POST /api/mobile/stripe/billing-portal` + `WebBrowser.openAuthSessionAsync` with return URL `mmh://billing-return`.
+**Decision (Session 3): multiplatform pattern** — implemented in [`MeetMeHalfwayMobile/src/lib/billingPolicy.ts`](../MeetMeHalfwayMobile/src/lib/billingPolicy.ts).
 
-**Apple Guideline 3.1.1:** Digital subscriptions sold inside an iOS app normally require In-App Purchase. PaymentSheet for SaaS features may be rejected on App Store review (TestFlight internal testing is typically unaffected).
+| Platform | New subscription purchase | Manage existing subscription |
+|----------|---------------------------|------------------------------|
+| **iOS** | No PaymentSheet, no upgrade CTA, no pricing URL — plain-text notice to upgrade on web (`meetmehalfway.co`) | Stripe billing portal via account menu / Saved tab |
+| **Android** | PaymentSheet via `UpgradeModal` + `POST /api/mobile/stripe/checkout-session` | Same billing portal |
+| **Web** | Stripe Checkout (unchanged) | Stripe portal (unchanged) |
 
-| Option | Notes |
-|--------|--------|
-| Submit with PaymentSheet | Fastest path; respond to rejection if Apple flags 3.1.1 |
-| Apple IAP (`react-native-iap`) | Compliant for iOS; gate PaymentSheet to Android/web only |
-| External link only on iOS | Regression vs in-app checkout; External Link Account entitlement has limits |
+Backend routes (`/api/mobile/stripe/*`) remain for Android. Webhook unchanged.
 
-Reader exemption (3.1.3) does not apply. EU DMA alternative payments apply only where entitled.
+**Apple Guideline 3.1.1:** Addressed for iOS App Store by not offering in-app digital purchase UI. IAP (`react-native-iap`) is optional future work if you want in-app upgrades on iOS later.
 
-**EAS production secrets (Stripe):** `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_STRIPE_PRICE_PLUS_MONTHLY`, `EXPO_PUBLIC_STRIPE_PRICE_PRO_MONTHLY`, `EXPO_PUBLIC_STRIPE_PRICE_BUSINESS_MONTHLY` (must match Dashboard monthly Price IDs).
+**EAS production secrets (Stripe):** Still required for Android builds; iOS TestFlight builds need `EXPO_PUBLIC_API_BASE_URL`, Clerk, Supabase at minimum.
 
 ---
 
@@ -245,4 +246,4 @@ Reader exemption (3.1.3) does not apply. EU DMA alternative payments apply only 
 
 ---
 
-*Phase A inventory (2026-05-24). Sessions 1–2 implemented on `cursor/mobile-gap-audit-docs`. Phase B (simulator QA) and TestFlight: Session 3.*
+*Phase A inventory (2026-05-24). Sessions 1–3 on `cursor/mobile-gap-audit-docs`. TestFlight cloud build: manual steps in [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md).*

@@ -2,6 +2,8 @@
 
 Use this checklist after mobile changes to reduce regressions.
 
+**Latest results:** [mobile-qa-results-2026-05-24.md](mobile-qa-results-2026-05-24.md) (Session 3)
+
 ## Startup
 
 - Run backend first:
@@ -34,7 +36,8 @@ Use this checklist after mobile changes to reduce regressions.
   - Confirm centroid-based midpoint and POIs render.
 - Multi-location blocked (Starter/Plus):
   - Add 3 locations; tap Find Midpoint.
-  - Confirm upgrade alert with link to pricing.
+  - **iOS:** upgrade alert shows text-only notice (`meetmehalfway.co`); no View Plans / PaymentSheet.
+  - **Android:** upgrade alert includes View Plans → PaymentSheet.
 - Repeated taps:
   - Rapidly tap “Find Midpoint” and confirm duplicate requests are avoided.
 
@@ -53,6 +56,12 @@ Use this checklist after mobile changes to reduce regressions.
   - Confirm locations repopulate map input fields.
 - Delete flow:
   - Remove saved location/search and confirm list refreshes.
+
+## iOS billing (App Store 3.1.1 — multiplatform)
+
+- On **iOS Simulator**, trigger upgrade (add 3rd location on Starter, or 3-origin search on Plus).
+- Confirm: no PaymentSheet, no View Plans button, plain-text web upgrade notice only.
+- Confirm: **Manage Subscription** still opens Stripe billing portal (account menu or Saved tab).
 
 ## Quick Regression Sweep
 

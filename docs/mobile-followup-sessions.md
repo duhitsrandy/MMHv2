@@ -4,7 +4,7 @@
 |---------|--------|
 | 1 — P0/P1 parity & TestFlight unblockers | **Complete** (`cursor/mobile-gap-audit-docs`) |
 | 2 — Stripe PaymentSheet + billing portal | **Complete** |
-| 3 — TestFlight build + QA sign-off | **Next** |
+| 3 — TestFlight build + QA sign-off | **Done** (QA + iOS billing; `eas build` deferred) |
 
 Paste-ready prompts for three scoped agent chats after the [mobile gap audit](mobile-gap-audit.md).  
 **Repo:** `/Users/randy/mmhv2` · **Branch:** `main` · **Do not commit unless explicitly asked.**

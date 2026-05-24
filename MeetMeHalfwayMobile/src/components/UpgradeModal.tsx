@@ -21,6 +21,7 @@ import {
   STRIPE_REDIRECT_URL,
   type UpgradeTierKey,
 } from "@/src/services/stripe";
+import { canShowUpgradeUI } from "@/src/lib/billingPolicy";
 
 const tierConfigs: Record<
   UpgradeTierKey,
@@ -158,7 +159,7 @@ export function UpgradeModal({
     }
   };
 
-  if (!isOpen) return null;
+  if (!canShowUpgradeUI || !isOpen) return null;
 
   const tierKeys = (Object.keys(tierConfigs) as UpgradeTierKey[]).filter(
     (key) => upgradeTierRank(key) >= upgradeTierRank(requiredTier)

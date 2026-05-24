@@ -27,6 +27,10 @@ import { buildPoiNavigationLinks } from "@shared/poi-navigation-links";
 import { requiresProForOriginCount } from "@shared/tier-limits";
 import { UpgradeModal } from "@/src/components/UpgradeModal";
 import type { UpgradeTierKey } from "@/src/services/stripe";
+import {
+  canShowUpgradeUI,
+  IOS_UPGRADE_NOTICE,
+} from "@/src/lib/billingPolicy";
 
 type OriginInput = { id: string; address: string };
 type OriginCoord = { address: string; lat: number; lng: number };
@@ -135,22 +139,33 @@ export default function TabOneScreen() {
   }, [pendingSearch, setPendingSearch, maxLocations]);
 
   const showUpgrade = (required: UpgradeTierKey = "plus") => {
+    if (!canShowUpgradeUI) {
+      Alert.alert("Upgrade required", IOS_UPGRADE_NOTICE);
+      return;
+    }
     setUpgradeRequiredTier(required);
     setUpgradeModalOpen(true);
   };
+
+  const upgradeAlertButtons = (required: UpgradeTierKey) =>
+    canShowUpgradeUI
+      ? [
+          { text: "Cancel", style: "cancel" as const },
+          {
+            text: "View Plans",
+            onPress: () => showUpgrade(required),
+          },
+        ]
+      : [{ text: "OK", style: "default" as const }];
 
   const addOrigin = () => {
     if (origins.length >= maxLocations) {
       Alert.alert(
         "Upgrade required",
-        `Your ${tier} plan supports up to ${maxLocations} locations.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "View Plans",
-            onPress: () => showUpgrade(tier === "starter" ? "plus" : "pro"),
-          },
-        ]
+        canShowUpgradeUI
+          ? `Your ${tier} plan supports up to ${maxLocations} locations.`
+          : `Your ${tier} plan supports up to ${maxLocations} locations.\n\n${IOS_UPGRADE_NOTICE}`,
+        upgradeAlertButtons(tier === "starter" ? "plus" : "pro")
       );
       return;
     }
@@ -191,14 +206,10 @@ export default function TabOneScreen() {
       if (requiresProForOriginCount(resolved.length, tier)) {
         Alert.alert(
           "Upgrade required",
-          "Searching with more than 2 locations requires a Pro or Business plan.",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "View Plans",
-              onPress: () => showUpgrade("pro"),
-            },
-          ]
+          canShowUpgradeUI
+            ? "Searching with more than 2 locations requires a Pro or Business plan."
+            : `Searching with more than 2 locations requires a Pro or Business plan.\n\n${IOS_UPGRADE_NOTICE}`,
+          upgradeAlertButtons("pro")
         );
         return;
       }
@@ -311,22 +322,24 @@ export default function TabOneScreen() {
 
   return (
     <View style={styles.container}>
-      <UpgradeModal
-        isOpen={upgradeModalOpen}
-        onClose={() => setUpgradeModalOpen(false)}
-        requiredTier={upgradeRequiredTier}
-        feature="more locations per search"
-        onSuccess={async () => {
-          const previousTier = tier;
-          const next = await pollUntilTierUpdates({ previousTier });
-          if (next === previousTier) {
-            Alert.alert(
-              "Payment received",
-              "Your subscription will activate shortly. Pull to refresh or restart the app if your plan does not update."
-            );
-          }
-        }}
-      />
+      {canShowUpgradeUI && (
+        <UpgradeModal
+          isOpen={upgradeModalOpen}
+          onClose={() => setUpgradeModalOpen(false)}
+          requiredTier={upgradeRequiredTier}
+          feature="more locations per search"
+          onSuccess={async () => {
+            const previousTier = tier;
+            const next = await pollUntilTierUpdates({ previousTier });
+            if (next === previousTier) {
+              Alert.alert(
+                "Payment received",
+                "Your subscription will activate shortly. Pull to refresh or restart the app if your plan does not update."
+              );
+            }
+          }}
+        />
+      )}
       <Text className="text-xl font-semibold">Meet Me Halfway</Text>
       <Text style={styles.planText}>Plan: {tier} · Max locations: {maxLocations}</Text>
       <View style={styles.formRow}>
