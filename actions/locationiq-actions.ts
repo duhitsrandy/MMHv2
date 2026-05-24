@@ -16,6 +16,7 @@ import {
   ORS_API_BASE,
   ORS_API_KEY_ENV_VAR,
   OVERPASS_API_URL,
+  OVERPASS_API_MIRROR_URL,
   LOCATIONIQ_API_BASE,
   NOMINATIM_API_BASE,
   CACHE_TTL_SECONDS,
@@ -281,6 +282,256 @@ export async function geocodeLocationAction(
   }
 }
 
+function getLocationIqApiKey(): string | null {
+  return (
+    process.env.LOCATIONIQ_API_KEY ||
+    process.env.LOCATIONIQ_KEY ||
+    process.env.NEXT_PUBLIC_LOCATIONIQ_KEY ||
+    process.env.EXPO_PUBLIC_LOCATIONIQ_KEY ||
+    null
+  );
+}
+
+function parseOverpassElements(elements: unknown[], lat: string, lon: string): PoiResponse[] {
+  if (!Array.isArray(elements)) return [];
+
+  const uniquePois = new Set<string>();
+  const pois = elements
+    .filter((poi: any) => {
+      const poiLat = poi.lat || poi.center?.lat;
+      const poiLon = poi.lon || poi.center?.lon;
+      const hasValidCoords = poiLat && poiLon;
+      const poiKey = `${poiLat},${poiLon}`;
+      const isUnique = !uniquePois.has(poiKey);
+      if (isUnique) uniquePois.add(poiKey);
+      return hasValidCoords && isUnique;
+    })
+    .map((poi: any) => {
+      const poiLat = poi.lat || poi.center?.lat || 0;
+      const poiLon = poi.lon || poi.center?.lon || 0;
+      const poiType =
+        poi.tags?.amenity ||
+        poi.tags?.leisure ||
+        poi.tags?.tourism ||
+        poi.tags?.shop ||
+        "place";
+
+      return {
+        id: poi.id.toString(),
+        osm_id: poi.id.toString(),
+        name: poi.tags?.name || poi.tags?.["addr:housename"] || "Unnamed Location",
+        type: poiType,
+        lat: poiLat.toString(),
+        lon: poiLon.toString(),
+        address: {
+          street: poi.tags?.["addr:street"] || "",
+          city: poi.tags?.["addr:city"] || "",
+          state: poi.tags?.["addr:state"] || "",
+          country: poi.tags?.["addr:country"] || "",
+          postal_code: poi.tags?.["addr:postcode"] || "",
+        },
+        tags: poi.tags,
+      };
+    });
+
+  return pois
+    .sort((a: PoiResponse, b: PoiResponse) => {
+      if (a.name !== "Unnamed Location" && b.name === "Unnamed Location") return -1;
+      if (a.name === "Unnamed Location" && b.name !== "Unnamed Location") return 1;
+      const distanceA = calculateDistance(
+        parseFloat(lat),
+        parseFloat(lon),
+        parseFloat(a.lat),
+        parseFloat(a.lon)
+      );
+      const distanceB = calculateDistance(
+        parseFloat(lat),
+        parseFloat(lon),
+        parseFloat(b.lat),
+        parseFloat(b.lon)
+      );
+      return distanceA - distanceB;
+    })
+    .slice(0, 20);
+}
+
+async function postToOverpass(
+  apiUrl: string,
+  query: string,
+  cacheKey: string
+): Promise<Response> {
+  const overpassTimeoutMs = 45000;
+  const baseHeaders = {
+    Accept: "application/json",
+    "Accept-Language": "en-US",
+  };
+
+  let response = await rateLimitedFetch(
+    apiUrl,
+    {
+      method: "POST",
+      headers: {
+        ...baseHeaders,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: `data=${encodeURIComponent(query)}`,
+    },
+    3,
+    cacheKey,
+    overpassTimeoutMs
+  );
+
+  // Some Overpass instances return 406 unless the query is sent as text/plain.
+  if (response.status === 406) {
+    response = await rateLimitedFetch(
+      apiUrl,
+      {
+        method: "POST",
+        headers: {
+          ...baseHeaders,
+          "Content-Type": "text/plain; charset=utf-8",
+        },
+        body: query.trim(),
+      },
+      2,
+      `${cacheKey}_plain`,
+      overpassTimeoutMs
+    );
+  }
+
+  return response;
+}
+
+async function fetchPoisViaOverpass(
+  lat: string,
+  lon: string,
+  radius: number,
+  query: string,
+  apiUrl: string
+): Promise<PoiResponse[]> {
+  const poiCacheKey = `poi_${lat}_${lon}_${radius}_${apiUrl.includes("kumi") ? "mirror" : "primary"}`;
+
+  const response = await postToOverpass(apiUrl, query, poiCacheKey);
+
+  if (!response.ok) {
+    const errorDetail = await response.text();
+    throw new Error(
+      `Overpass API error: ${response.status} ${response.statusText} — ${errorDetail.slice(0, 200)}`
+    );
+  }
+
+  const data = await response.json();
+  return parseOverpassElements(data.elements, lat, lon);
+}
+
+async function fetchPoisViaLocationIq(
+  lat: string,
+  lon: string,
+  radius: number
+): Promise<PoiResponse[]> {
+  const key = getLocationIqApiKey();
+  if (!key) {
+    throw new Error("LocationIQ API key is not configured");
+  }
+
+  const tags =
+    "restaurant,cafe,bar,library,cinema,theatre,park,museum,hotel,fast_food,pub,marketplace,garden";
+  const url = `${LOCATIONIQ_API_BASE}/nearby.php?key=${encodeURIComponent(key)}&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&radius=${encodeURIComponent(String(radius))}&tag=${encodeURIComponent(tags)}&format=json`;
+
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": DEFAULT_USER_AGENT,
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`LocationIQ nearby error: ${response.status} — ${text.slice(0, 200)}`);
+  }
+
+  const data = await response.json();
+  if (!Array.isArray(data)) return [];
+
+  const uniquePois = new Set<string>();
+  const pois: PoiResponse[] = [];
+
+  for (const item of data) {
+    const poiLat = parseFloat(item?.lat);
+    const poiLon = parseFloat(item?.lon);
+    if (!Number.isFinite(poiLat) || !Number.isFinite(poiLon)) continue;
+
+    const poiKey = `${poiLat},${poiLon}`;
+    if (uniquePois.has(poiKey)) continue;
+    uniquePois.add(poiKey);
+
+    const displayName = typeof item.display_name === "string" ? item.display_name : "";
+    const name =
+      (typeof item.name === "string" && item.name) ||
+      displayName.split(",")[0]?.trim() ||
+      "Unnamed Location";
+
+    pois.push({
+      id: String(item.place_id ?? `${poiLat}-${poiLon}`),
+      osm_id: String(item.osm_id ?? item.place_id ?? `${poiLat}-${poiLon}`),
+      name,
+      type: item.type || item.class || "place",
+      lat: String(poiLat),
+      lon: String(poiLon),
+      address: displayName ? { city: displayName } : undefined,
+      tags: item.tag ? { tag: String(item.tag) } : undefined,
+    });
+  }
+
+  return pois
+    .sort((a, b) => {
+      const distanceA = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(a.lat), parseFloat(a.lon));
+      const distanceB = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(b.lat), parseFloat(b.lon));
+      return distanceA - distanceB;
+    })
+    .slice(0, 20);
+}
+
+async function searchPoisWithFallback(
+  lat: string,
+  lon: string,
+  radius: number,
+  query: string
+): Promise<PoiResponse[]> {
+  const providers: Array<{ name: string; run: () => Promise<PoiResponse[]> }> = [
+    {
+      name: "overpass-primary",
+      run: () => fetchPoisViaOverpass(lat, lon, radius, query, OVERPASS_API_URL),
+    },
+    {
+      name: "overpass-mirror",
+      run: () => fetchPoisViaOverpass(lat, lon, radius, query, OVERPASS_API_MIRROR_URL),
+    },
+    {
+      name: "locationiq",
+      run: () => fetchPoisViaLocationIq(lat, lon, radius),
+    },
+  ];
+
+  const errors: string[] = [];
+  for (const provider of providers) {
+    try {
+      const pois = await provider.run();
+      if (pois.length > 0) {
+        console.log(`[POI Search] Success via ${provider.name}: ${pois.length} POIs`);
+        return pois;
+      }
+      errors.push(`${provider.name}: returned 0 results`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[POI Search] ${provider.name} failed:`, msg);
+      errors.push(`${provider.name}: ${msg}`);
+    }
+  }
+
+  throw new Error(errors.join("; "));
+}
+
 // Add this new function to search POIs using Overpass API
 export async function searchPoisAction(
   // Combine parameters into an object for easier validation
@@ -318,7 +569,6 @@ export async function searchPoisAction(
     // --- Validation End ---
 
     console.log(`[POI Search] Starting search at ${lat},${lon} with radius ${radius}m`);
-    const overpassApiUrl = OVERPASS_API_URL;
 
     // --- Build Overpass Query ---
     const amenityTypes = ["restaurant", "cafe", "bar", "library", "cinema", "theatre", "marketplace", "fast_food", "pub", "community_centre", "police", "post_office", "townhall", "ice_cream"];
@@ -353,134 +603,15 @@ export async function searchPoisAction(
     try {
       console.log(`[POI Search] Overpass Query Body: ${query.substring(0, 100)}...`);
 
-      const poiCacheKey = `poi_${lat}_${lon}_${radius}`;
-      const overpassTimeoutMs = 45000;
+      const sortedPois = await searchPoisWithFallback(lat, lon, radius, query);
 
-      const response = await rateLimitedFetch(
-        overpassApiUrl,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `data=${encodeURIComponent(query)}`,
-        },
-        3, poiCacheKey, overpassTimeoutMs
-      );
+      console.log(`[POI Search] Returning ${sortedPois.length} sorted POIs near ${lat},${lon}`);
 
-      if (!response.ok) {
-        let errorDetail = await response.text();
-        try {
-          // Try parsing as JSON in case Overpass returns structured errors
-          const errorJson = JSON.parse(errorDetail);
-          errorDetail = JSON.stringify(errorJson, null, 2); 
-        } catch { 
-          // Ignore if not JSON, keep original text
-        }
-
-        let userMessage = `Overpass API error: ${response.statusText}`;
-        let logMessage = `[POI Search] Overpass API Error ${response.status} (${response.statusText}): ${errorDetail}`;
-
-        switch (response.status) {
-          case 400:
-            userMessage = "Overpass API Error: Invalid query constructed.";
-            logMessage = `[POI Search] Overpass API Error 400 (Bad Request): Potentially invalid query syntax. Detail: ${errorDetail}`;
-            break;
-          case 429:
-            userMessage = "Overpass API Error: Too many requests. Please try again later.";
-            logMessage = `[POI Search] Overpass API Error 429 (Too Many Requests). Detail: ${errorDetail}`;
-            // Note: Our internal rate limiter should ideally catch this first.
-            break;
-          case 504:
-            userMessage = "Overpass API Error: The server timed out. Please try again later.";
-            logMessage = `[POI Search] Overpass API Error 504 (Gateway Timeout). Detail: ${errorDetail}`;
-            break;
-        }
-        
-        console.error(logMessage);
-        // Use the more specific userMessage if available
-        throw new Error(userMessage); 
-      }
-
-      const data = await response.json();
-      
-      // Create a Set to track unique POIs by their coordinates
-      const uniquePois = new Set<string>();
-      
-      // Process POIs with relaxed filtering and deduplication
-      const pois = data.elements
-        .filter((poi: any) => {
-          const lat = poi.lat || poi.center?.lat;
-          const lon = poi.lon || poi.center?.lon;
-          const hasValidCoords = lat && lon;
-          
-          // Create a unique key for this POI
-          const poiKey = `${lat},${lon}`;
-          const isUnique = !uniquePois.has(poiKey);
-          
-          if (isUnique) {
-            uniquePois.add(poiKey);
-          }
-          
-          return hasValidCoords && isUnique;
-        })
-        .map((poi: any) => {
-          const poiLat = poi.lat || poi.center?.lat || 0;
-          const poiLon = poi.lon || poi.center?.lon || 0;
-          
-          // Determine the type from tags
-          const poiType = 
-            poi.tags?.amenity || 
-            poi.tags?.leisure || 
-            poi.tags?.tourism || 
-            poi.tags?.shop || 
-            'place';
-          
-          return {
-            id: poi.id.toString(),
-            osm_id: poi.id.toString(),
-            name: poi.tags?.name || poi.tags?.['addr:housename'] || 'Unnamed Location',
-            type: poiType,
-            lat: poiLat.toString(),
-            lon: poiLon.toString(),
-            address: {
-              street: poi.tags?.['addr:street'] || '',
-              city: poi.tags?.['addr:city'] || '',
-              state: poi.tags?.['addr:state'] || '',
-              country: poi.tags?.['addr:country'] || '',
-              postal_code: poi.tags?.['addr:postcode'] || ''
-            },
-            tags: poi.tags
-          };
-        });
-      
-      console.log(`[POI Search] Found ${pois.length} unique POIs near ${lat},${lon}`);
-      
-      // Calculate distances and sort by closest to the specified point
-      const sortedPois = pois
-        .sort((a: PoiResponse, b: PoiResponse) => {
-          // Prioritize named locations
-          if (a.name !== 'Unnamed Location' && b.name === 'Unnamed Location') return -1;
-          if (a.name === 'Unnamed Location' && b.name !== 'Unnamed Location') return 1;
-          
-          // Then sort by distance
-          const distanceA = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(a.lat), parseFloat(a.lon));
-          const distanceB = calculateDistance(parseFloat(lat), parseFloat(lon), parseFloat(b.lat), parseFloat(b.lon));
-          return distanceA - distanceB;
-        })
-        .slice(0, 20); // Increase limit to 20 POIs
-      
-      console.log(`[POI Search] Returning ${sortedPois.length} sorted POIs:`, {
-        types: sortedPois.reduce((acc: any, poi: PoiResponse) => {
-          acc[poi.type] = (acc[poi.type] || 0) + 1;
-          return acc;
-        }, {})
-      });
-      
-      // ---> Capture success data here
       capturedPoiCount = sortedPois.length;
       result = {
         isSuccess: true,
         message: "Successfully found points of interest",
-        data: sortedPois
+        data: sortedPois,
       };
       return result;
 

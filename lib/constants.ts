@@ -3,6 +3,7 @@
 // API Base URLs
 export const ORS_API_BASE = "https://api.openrouteservice.org";
 export const OVERPASS_API_URL = "https://overpass-api.de/api/interpreter";
+export const OVERPASS_API_MIRROR_URL = "https://overpass.kumi.systems/api/interpreter";
 export const LOCATIONIQ_API_BASE = "https://us1.locationiq.com/v1";
 export const NOMINATIM_API_BASE = "https://nominatim.openstreetmap.org";
 

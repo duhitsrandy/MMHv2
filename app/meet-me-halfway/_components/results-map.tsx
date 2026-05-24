@@ -218,6 +218,7 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
             setIsPoiTravelTimeLoading(true)
 
             let aggregatedPois: PoiResponse[] = []
+            const poiSearchErrors: string[] = []
 
             for (const coord of poiSearchCoords) {
               const poiRes = await searchPoisAction({
@@ -228,8 +229,16 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
               if (poiRes.isSuccess && poiRes.data) {
                 aggregatedPois = aggregatedPois.concat(poiRes.data)
               } else {
-                console.warn(`[MapData] POI search failed at (${coord.lat},${coord.lng}): ${poiRes.message}`)
+                const msg = poiRes.message || "POI search failed"
+                poiSearchErrors.push(msg)
+                console.warn(`[MapData] POI search failed at (${coord.lat},${coord.lng}): ${msg}`)
               }
+            }
+
+            if (aggregatedPois.length === 0 && poiSearchErrors.length > 0) {
+              setPoiError(
+                "Could not load places nearby. The map service may be busy — try again in a moment."
+              )
             }
 
             // Deduplicate POIs (prefer osm_id, fallback to lat/lon combo)
