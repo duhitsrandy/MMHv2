@@ -36,11 +36,26 @@ Expo mobile (`MeetMeHalfwayMobile/`) is not wired to Sentry yet.
 
 ### Setup Checklist
 - [x] Integrate Sentry with the Next.js web app (client, server, edge)
-- [ ] Set `NEXT_PUBLIC_SENTRY_DSN` in Vercel production (and preview if desired)
-- [ ] Install [Sentry Vercel integration](https://vercel.com/integrations/sentry) or set `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` for source maps
-- [ ] Enable issue alerts in the Sentry project (email/Slack on new issues)
+- [x] Set `NEXT_PUBLIC_SENTRY_DSN` in Vercel production (project `v0-meet-me-halfway2` → [meetmehalfway.co](https://meetmehalfway.co))
+- [x] Install [Sentry Vercel integration](https://vercel.com/integrations/sentry) on `v0-meet-me-halfway2` (`SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`, DSN; prod build **2026-05-24** logs `Successfully uploaded source maps to Sentry`)
+- [ ] Enable issue alerts in the Sentry project (email/Slack on new issues) — [wizard](https://meetmehalfway.sentry.io/alerts/wizard/)
 - [ ] (Future) Integrate `@sentry/react-native` for mobile
 - [ ] Regularly review error dashboards and resolve issues
+
+### Sentry verification (Phase 1)
+
+Org `meetmehalfway`, project `javascript-nextjs`, Vercel project `v0-meet-me-halfway2`:
+
+| Check | Status | Evidence |
+|-------|--------|----------|
+| Prod events ingested | Done | [JAVASCRIPT-NEXTJS-1](https://meetmehalfway.sentry.io/issues/JAVASCRIPT-NEXTJS-1) from meetmehalfway.co |
+| `environment:production` | Done | Tag on test issue |
+| Release / commit tag | Done | `release:03b1cb7924aeedab08ef80ce4ad2d4105940e916`; Vercel deploy linked in Sentry |
+| Source maps at build | Done | Prod build logs: `Successfully uploaded source maps to Sentry` (Node, Edge, Client) |
+| Clerk `user.id` on event | Optional | Sign in on prod and trigger an app error to confirm (test issue was anonymous) |
+| New-issue alert | Pending | [Alerts wizard](https://meetmehalfway.sentry.io/alerts/wizard/) |
+
+- **Runbook:** [SENTRY_VERCEL.md](SENTRY_VERCEL.md)
 
 ---
 
@@ -136,4 +151,4 @@ Expo mobile (`MeetMeHalfwayMobile/`) is not wired to Sentry yet.
 
 ---
 
-*Last updated: 2024-06-11* 
+*Last updated: 2026-05-24* 
