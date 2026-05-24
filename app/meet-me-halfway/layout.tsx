@@ -1,6 +1,9 @@
 import { ReactNode } from "react"
 import { Metadata } from "next"
 
+// Routes + POI server actions can exceed the default 10s on cold starts.
+export const maxDuration = 30
+
 export const metadata: Metadata = {
   title: "Find Meeting Points Between Locations",
   description: "Discover perfect meeting spots halfway between two or more addresses. Find restaurants, cafés, parks, and hotels with travel times and distances.",

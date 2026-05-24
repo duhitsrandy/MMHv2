@@ -360,7 +360,8 @@ async function postToOverpass(
   query: string,
   cacheKey: string
 ): Promise<Response> {
-  const overpassTimeoutMs = 45000;
+  // Keep under Vercel/server-action limits (~10s); overpass is only a fallback.
+  const overpassTimeoutMs = 4000;
   const baseHeaders = {
     Accept: "application/json",
     "Accept-Language": "en-US",
@@ -376,7 +377,7 @@ async function postToOverpass(
       },
       body: `data=${encodeURIComponent(query)}`,
     },
-    3,
+    1,
     cacheKey,
     overpassTimeoutMs
   );
@@ -393,7 +394,7 @@ async function postToOverpass(
         },
         body: query.trim(),
       },
-      2,
+      1,
       `${cacheKey}_plain`,
       overpassTimeoutMs
     );
@@ -498,7 +499,17 @@ async function searchPoisWithFallback(
   radius: number,
   query: string
 ): Promise<PoiResponse[]> {
-  const providers: Array<{ name: string; run: () => Promise<PoiResponse[]> }> = [
+  const providers: Array<{ name: string; run: () => Promise<PoiResponse[]> }> = [];
+
+  // LocationIQ is fast and reliable; use it first when configured.
+  if (getLocationIqApiKey()) {
+    providers.push({
+      name: "locationiq",
+      run: () => fetchPoisViaLocationIq(lat, lon, radius),
+    });
+  }
+
+  providers.push(
     {
       name: "overpass-primary",
       run: () => fetchPoisViaOverpass(lat, lon, radius, query, OVERPASS_API_URL),
@@ -506,12 +517,8 @@ async function searchPoisWithFallback(
     {
       name: "overpass-mirror",
       run: () => fetchPoisViaOverpass(lat, lon, radius, query, OVERPASS_API_MIRROR_URL),
-    },
-    {
-      name: "locationiq",
-      run: () => fetchPoisViaLocationIq(lat, lon, radius),
-    },
-  ];
+    }
+  );
 
   const errors: string[] = [];
   for (const provider of providers) {

@@ -67,10 +67,13 @@ export function usePlan() {
     // Re-fetch when user loads or userId changes
   }, [userId, isUserLoaded])
 
-  // Return combined loading state (user loading OR plan loading)
-  const combinedIsLoading = !isUserLoaded || isLoading;
+  // Return combined loading state (user loading OR plan loading OR awaiting first fetch)
+  const combinedIsLoading =
+    !isUserLoaded || isLoading || (!!userId && planInfo === null);
 
-  const tier = planInfo?.tier || (combinedIsLoading ? undefined : "starter");
+  const tier =
+    planInfo?.tier ??
+    (userId ? undefined : combinedIsLoading ? undefined : "starter");
 
   return {
     tier,

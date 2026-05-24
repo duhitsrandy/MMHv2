@@ -55,6 +55,16 @@ interface ResultsMapProps {
   geocodedOrigins: GeocodedOrigin[]
 }
 
+function asActionState<T>(
+  result: ActionState<T> | undefined,
+  fallbackMessage = "Request failed or timed out. Please try again."
+): ActionState<T> {
+  if (result && typeof result.isSuccess === "boolean") {
+    return result;
+  }
+  return { isSuccess: false, message: fallbackMessage };
+}
+
 interface UseMapDataReturn {
   mainRoute: OsrmRoute | null;
   alternateRoute: OsrmRoute | null;
@@ -190,10 +200,15 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
           const endLat = geocodedOrigins[1].lat
           const endLng = geocodedOrigins[1].lng
 
-          const [mainRouteRes, alternateRouteRes] = await Promise.all([
+          const [mainRouteRaw, alternateRouteRaw] = await Promise.all([
             getRouteAction({ startLat, startLon: startLng, endLat, endLon: endLng }),
             getAlternateRouteAction({ startLat, startLon: startLng, endLat, endLon: endLng })
           ])
+          const mainRouteRes = asActionState(mainRouteRaw, "Route request timed out. Please try again.")
+          const alternateRouteRes = asActionState(
+            alternateRouteRaw,
+            "Alternate route request failed."
+          )
 
           if (!mainRouteRes.isSuccess || !mainRouteRes.data) {
             throw new Error(`Failed to fetch main route: ${mainRouteRes.message}`)
@@ -220,11 +235,21 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
             let aggregatedPois: PoiResponse[] = []
             const poiSearchErrors: string[] = []
 
-            for (const coord of poiSearchCoords) {
-              const poiRes = await searchPoisAction({
-                lat: String(coord.lat),
-                lon: String(coord.lng)
-              })
+            const poiResults = await Promise.all(
+              poiSearchCoords.map((coord) =>
+                searchPoisAction({
+                  lat: String(coord.lat),
+                  lon: String(coord.lng),
+                })
+              )
+            )
+
+            poiResults.forEach((raw, index) => {
+              const coord = poiSearchCoords[index]
+              const poiRes = asActionState(
+                raw,
+                "POI search timed out. The server may be busy — try again."
+              )
 
               if (poiRes.isSuccess && poiRes.data) {
                 aggregatedPois = aggregatedPois.concat(poiRes.data)
@@ -233,7 +258,7 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
                 poiSearchErrors.push(msg)
                 console.warn(`[MapData] POI search failed at (${coord.lat},${coord.lng}): ${msg}`)
               }
-            }
+            })
 
             if (aggregatedPois.length === 0 && poiSearchErrors.length > 0) {
               setPoiError(
@@ -381,10 +406,13 @@ function useMapData({ geocodedOrigins }: ResultsMapProps): UseMapDataReturn {
             console.log('[MapData >2] Fetching POIs around central midpoint:', calculatedCentralMidpoint);
             setIsPoiTravelTimeLoading(true);
 
-            const poiRes = await searchPoisAction({
-              lat: String(calculatedCentralMidpoint.lat),
-              lon: String(calculatedCentralMidpoint.lng)
-            });
+            const poiRes = asActionState(
+              await searchPoisAction({
+                lat: String(calculatedCentralMidpoint.lat),
+                lon: String(calculatedCentralMidpoint.lng),
+              }),
+              "POI search timed out. The server may be busy — try again."
+            );
 
             let uniqueInitialPois: PoiResponse[] = [];
             if (poiRes.isSuccess && poiRes.data) {
