@@ -412,7 +412,7 @@ Mobile is **in progress** via Expo (`MeetMeHalfwayMobile/`); operational setup i
 ## Tech Stack Summary
 
 - **Mobile**: Expo (iOS), React Native — `MeetMeHalfwayMobile/`
-- **Frontend**: Next.js 14, React 18, TypeScript, Tailwind CSS, shadcn/ui
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS, shadcn/ui
 - **Backend**: Next.js Server Actions, Supabase PostgreSQL, Drizzle ORM
 - **Authentication**: Clerk with webhook integration
 - **Payments**: Stripe with live billing and webhooks

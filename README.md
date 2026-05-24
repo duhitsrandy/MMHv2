@@ -32,7 +32,7 @@ A modern application that helps users find the perfect meeting point between loc
 ## Tech Stack
 
 ### Web
-- **Framework**: Next.js 14 (App Router)
+- **Framework**: Next.js 15 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS, shadcn/ui
 - **Maps**: react-leaflet
