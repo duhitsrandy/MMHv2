@@ -8,9 +8,9 @@ Use after **[P0 blockers](mobile-ios-p0-blockers.md)** are in progress or comple
 
 ## Prerequisites
 
-- [ ] Apple Developer Program enrolled ($99/yr)
-- [ ] P0 items that affect the build: production env vars, location plist, Clerk Native API
-- [ ] [mobile-ios-runbook.md](mobile-ios-runbook.md) preflight: `npm run mobile:check-env`
+- [x] Apple Developer Program enrolled ($99/yr)
+- [x] P0 items that affect the build: production env vars, location plist, Clerk Native API
+- [x] [mobile-ios-runbook.md](mobile-ios-runbook.md) preflight: `npm run mobile:check-env`
 
 ---
 
@@ -55,16 +55,19 @@ eas env:create --environment production --name EXPO_PUBLIC_API_BASE_URL --value 
 | `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Optional for iOS-only TestFlight (Stripe plugin may still bundle) |
 | `EXPO_PUBLIC_STRIPE_PRICE_*` | Android checkout only |
 
-- [ ] All required production secrets set
-- [ ] Verified no staging/localhost URL in production environment
+- [x] All required production secrets set (`npm run mobile:eas-env` to refresh from `.env.local`)
+- [x] Verified no staging/localhost URL in production environment (`EXPO_PUBLIC_API_BASE_URL=https://meetmehalfway.co`)
 
 ---
 
 ## Signing
 
+**Must run in your Mac Terminal** (interactive Apple login — Cursor’s agent terminal is non-TTY):
+
 ```bash
 cd MeetMeHalfwayMobile
-eas credentials
+npx eas-cli credentials --platform ios
+# or: npm run mobile:eas-build   (first run prompts for Distribution cert + profile)
 ```
 
 - [ ] Distribution certificate + provisioning profile for `com.meetmehalfway.mobile`
@@ -102,21 +105,37 @@ eas build --profile preview --platform ios
 
 ### Production build (TestFlight)
 
+**Apple requires iOS 26 SDK (Xcode 26+)** as of April 2026. This repo pins EAS image `macos-sequoia-15.6-xcode-26.2` in `eas.json`. If upload fails with error **90725**, rebuild after confirming that image is set.
+
+```bash
+# From repo root (interactive — required once for Apple credentials):
+npm run mobile:eas-build
+```
+
+Or:
+
 ```bash
 cd MeetMeHalfwayMobile
-eas build --profile production --platform ios
+npx eas-cli build --profile production --platform ios
 ```
 
 - [ ] Production build succeeded (~15–25 min on EAS)
 - [ ] Build logs reviewed for errors/warnings
+- [ ] If Apple rejects with **90683** (missing `NSCameraUsageDescription`), rebuild after `app.config.ts` privacy strings (Clerk/Stripe may reference camera APIs)
 
 ---
 
 ## Upload to App Store Connect
 
 ```bash
+npm run mobile:eas-submit
+```
+
+Or:
+
+```bash
 cd MeetMeHalfwayMobile
-eas submit --platform ios
+npx eas-cli submit --platform ios --latest
 ```
 
 Or upload `.ipa` via [Transporter](https://apps.apple.com/app/transporter/id1450874784).

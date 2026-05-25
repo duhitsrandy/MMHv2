@@ -17,10 +17,16 @@ export default () => ({
     },
     ios: {
       bundleIdentifier: 'com.meetmehalfway.mobile',
+      appleTeamId: '4DL28SV65N',
       supportsTablet: true,
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
           'Meet Me Halfway uses your location to fill your starting point and calculate nearby meeting options.',
+        NSCameraUsageDescription:
+          'Meet Me Halfway uses the camera only if you choose to take a profile photo for your account.',
+        NSPhotoLibraryUsageDescription:
+          'Meet Me Halfway accesses your photo library only if you choose to select a profile photo for your account.',
+        ITSAppUsesNonExemptEncryption: false,
       },
     },
     android: {

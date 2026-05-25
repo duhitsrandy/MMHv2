@@ -25,6 +25,9 @@
     "mobile:ios": "npm run --prefix ./MeetMeHalfwayMobile ios",
     "mobile:ios:reset": "npm run --prefix ./MeetMeHalfwayMobile ios:reset-sim",
     "mobile:dev": "npm run mobile:check-env && npm run mobile:ios",
+    "mobile:eas-env": "node ./scripts/generate-eas-production-env.cjs && cd MeetMeHalfwayMobile && npx eas-cli env:push production --path .env.eas-production --force",
+    "mobile:eas-build": "cd MeetMeHalfwayMobile && npx eas-cli build --profile production --platform ios",
+    "mobile:eas-submit": "cd MeetMeHalfwayMobile && npx eas-cli submit --platform ios --latest",
     "xcode:check": "xcode-select -p && xcrun simctl help >/dev/null 2>&1 && echo 'Xcode CLI OK' || echo 'Xcode CLI issue — run: sudo xcode-select --reset'",
     "test": "vitest run",
     "test:watch": "vitest"
