@@ -99,11 +99,31 @@ Run [mobile-qa-checklist.md](mobile-qa-checklist.md); record in [mobile-qa-resul
 | **8** | Instant quit (~0.5s), `EXC_BAD_ACCESS` on `com.meta.react.turbomodulemanager.queue` | New Architecture + native module init on iOS 26 |
 | **9** | Instant quit, `SIGABRT` on `com.facebook.react.ExceptionsManagerQueue` | Uncaught native `NSException` during bridge invoke; build 9 did **not** include crash fixes (still `newArchEnabled: true`, Stripe native linked) |
 
-**Build 10 mitigations** (must be committed before `eas build`):
+**Build 10 mitigations** (commit `e1cf5d0`):
 
 - `newArchEnabled: false` in `MeetMeHalfwayMobile/app.config.ts`
 - Stripe **excluded on iOS**: no Stripe Expo plugin when `EAS_BUILD_PLATFORM=ios`, `react-native.config.js` autolinking `ios: null`, platform-specific `StripeWrapper` / `UpgradeModal`
 - Android keeps PaymentSheet via `UpgradeModal.android.tsx` and Stripe plugin on Android EAS builds
+
+**Build 10 result:** Still crashes at launch (~0.47s) with the same `SIGABRT` / `ExceptionsManagerQueue` / `NSInvocation` signature as build 9 — Stripe/New Arch were not the remaining root cause.
+
+### Build 11–12 bisect (launch isolation)
+
+Set on EAS **production** before `eas build` (Plain text). Only one flag at a time:
+
+| Build | `EXPO_PUBLIC_IOS_DEFER_MAP` | `EXPO_PUBLIC_IOS_DEFER_CLERK` | Interpretation if launch succeeds |
+|-------|----------------------------|------------------------------|-----------------------------------|
+| **11** | `1` | unset / `0` | Maps/location module load is the culprit |
+| **12** | `0` / unset | `1` | Clerk native init is the culprit |
+| **12b** | `1` | `1` | Both needed at startup; combine permanent defers |
+
+Code: lazy `MapTabScreen` chunk when `DEFER_MAP=1`; dynamic `ClerkAppShell` import when `DEFER_CLERK=1` (no `@clerk/clerk-expo` in root `_layout` or tabs `_layout` on defer path).
+
+```bash
+cd MeetMeHalfwayMobile
+npx eas-cli env:create --environment production --name EXPO_PUBLIC_IOS_DEFER_MAP --value "1" --visibility plaintext --force
+# Build 12: delete or set DEFER_MAP to 0, then set EXPO_PUBLIC_IOS_DEFER_CLERK=1
+```
 
 **`eas build` ≠ TestFlight.** A successful cloud build only creates the IPA on Expo. You must run **`eas submit`** (or Transporter) for the build to appear in App Store Connect → TestFlight.
 
