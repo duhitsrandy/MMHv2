@@ -92,6 +92,30 @@ Run [mobile-qa-checklist.md](mobile-qa-checklist.md); record in [mobile-qa-resul
 
 ---
 
+## Launch crashes (TestFlight builds 8–9)
+
+| Build | Symptom | Likely cause |
+|-------|---------|----------------|
+| **8** | Instant quit (~0.5s), `EXC_BAD_ACCESS` on `com.meta.react.turbomodulemanager.queue` | New Architecture + native module init on iOS 26 |
+| **9** | Instant quit, `SIGABRT` on `com.facebook.react.ExceptionsManagerQueue` | Uncaught native `NSException` during bridge invoke; build 9 did **not** include crash fixes (still `newArchEnabled: true`, Stripe native linked) |
+
+**Build 10 mitigations** (must be committed before `eas build`):
+
+- `newArchEnabled: false` in `MeetMeHalfwayMobile/app.config.ts`
+- Stripe **excluded on iOS**: no Stripe Expo plugin when `EAS_BUILD_PLATFORM=ios`, `react-native.config.js` autolinking `ios: null`, platform-specific `StripeWrapper` / `UpgradeModal`
+- Android keeps PaymentSheet via `UpgradeModal.android.tsx` and Stripe plugin on Android EAS builds
+
+**`eas build` ≠ TestFlight.** A successful cloud build only creates the IPA on Expo. You must run **`eas submit`** (or Transporter) for the build to appear in App Store Connect → TestFlight.
+
+```bash
+cd MeetMeHalfwayMobile
+npx eas-cli submit --platform ios --id <BUILD_ID> --non-interactive
+```
+
+Prefer `--id` over `--latest` when multiple builds exist.
+
+---
+
 ## Cloud build
 
 ### Optional: internal preview build

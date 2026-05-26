@@ -1,5 +1,15 @@
 import 'dotenv/config';
 
+const isIosEasBuild = process.env.EAS_BUILD_PLATFORM === 'ios';
+
+const stripePlugin: [string, { merchantIdentifier: string; enableGooglePay: boolean }] = [
+  '@stripe/stripe-react-native',
+  {
+    merchantIdentifier: 'merchant.com.meetmehalfway.mobile',
+    enableGooglePay: false,
+  },
+];
+
 export default () => ({
   expo: {
     name: 'Meet Me Halfway',
@@ -8,7 +18,8 @@ export default () => ({
     version: '1.0.0',
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',
-    newArchEnabled: true,
+    // Disabled: TestFlight build 8 crashed in Hermes during TurboModule init (iOS 26).
+    newArchEnabled: false,
     icon: './assets/images/icon.png',
     splash: {
       image: './assets/images/splash-icon.png',
@@ -43,13 +54,7 @@ export default () => ({
     },
     plugins: [
       'expo-router',
-      [
-        '@stripe/stripe-react-native',
-        {
-          merchantIdentifier: 'merchant.com.meetmehalfway.mobile',
-          enableGooglePay: false,
-        },
-      ],
+      ...(isIosEasBuild ? [] : [stripePlugin]),
     ],
     experiments: {
       typedRoutes: true,
