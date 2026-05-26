@@ -143,7 +143,7 @@ cd MeetMeHalfwayMobile
 npx eas-cli build --profile production --platform ios
 ```
 
-- [ ] Production build succeeded (~15–25 min on EAS)
+- [x] Production build **10** succeeded (EAS `6f8942bc-9188-45a9-a225-af6f58713d32`, commit `e1cf5d0`)
 - [ ] Build logs reviewed for errors/warnings
 - [ ] If Apple rejects with **90683** (missing `NSCameraUsageDescription`), rebuild after `app.config.ts` privacy strings (Clerk/Stripe may reference camera APIs)
 
@@ -164,7 +164,7 @@ npx eas-cli submit --platform ios --latest
 
 Or upload `.ipa` via [Transporter](https://apps.apple.com/app/transporter/id1450874784).
 
-- [ ] Build uploaded
+- [x] Build **10** uploaded (submission `a15896dd-117e-44ba-a6bf-b134a5a39ab5`)
 - [ ] TestFlight processing completed (no “Invalid Binary”)
 
 ---
