@@ -8,8 +8,7 @@ import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { PoiProvider } from '../contexts/PoiContext';
-import { useAuth } from '@clerk/clerk-expo';
-import { ClerkActiveContext } from '@/src/auth';
+import { ClerkActiveContext, useSafeAuth } from '@/src/auth';
 import { useManageSubscription } from '@/src/hooks/useManageSubscription';
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
@@ -21,7 +20,7 @@ function TabBarIcon(props: {
 }
 
 function AccountHeaderButtonInner() {
-  const { isSignedIn, signOut } = useAuth();
+  const { isSignedIn, signOut } = useSafeAuth();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const color = Colors[colorScheme ?? 'light'].text;
