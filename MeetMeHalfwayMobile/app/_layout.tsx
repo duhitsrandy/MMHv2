@@ -5,11 +5,13 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useState } from 'react';
 import { InteractionManager } from 'react-native';
-import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { ClerkActiveContext } from '@/src/auth';
-import { iosDeferClerk } from '@/src/lib/iosLaunchDiagnostics';
+import {
+  shouldDeferClerkOnIos,
+  shouldGateIosAppShell,
+} from '@/src/lib/iosLaunchDiagnostics';
 import { StripeWrapper } from './StripeWrapper';
 
 export {
@@ -33,6 +35,7 @@ export default function RootLayout() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
   });
+  const [appShellReady, setAppShellReady] = useState(!shouldGateIosAppShell);
   const [deferredClerkShell, setDeferredClerkShell] = useState<ClerkShellComponent | null>(
     null
   );
@@ -42,22 +45,29 @@ export default function RootLayout() {
   }, [error]);
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
+    if (!loaded || !shouldGateIosAppShell) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      setAppShellReady(true);
+    });
+    return () => task.cancel();
   }, [loaded]);
 
   useEffect(() => {
-    if (!iosDeferClerk) return;
+    if (!loaded || !appShellReady) return;
+    SplashScreen.hideAsync();
+  }, [loaded, appShellReady]);
+
+  useEffect(() => {
+    if (!appShellReady || !shouldDeferClerkOnIos) return;
     const task = InteractionManager.runAfterInteractions(() => {
       import('./ClerkAppShell').then((mod) => {
         setDeferredClerkShell(() => mod.ClerkAppShell);
       });
     });
     return () => task.cancel();
-  }, []);
+  }, [appShellReady]);
 
-  if (!loaded) {
+  if (!loaded || !appShellReady) {
     return null;
   }
 
@@ -75,7 +85,7 @@ export default function RootLayout() {
     );
   }
 
-  if (!iosDeferClerk) {
+  if (!shouldDeferClerkOnIos) {
     const { ClerkAppShell } = require('./ClerkAppShell') as typeof import('./ClerkAppShell');
     return (
       <StripeWrapper>

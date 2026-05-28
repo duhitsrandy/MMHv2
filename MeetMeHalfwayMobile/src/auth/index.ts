@@ -1,6 +1,6 @@
 export {
   ClerkActiveContext,
-  ClerkAuthBridge,
+  SafeAuthContext,
   useSafeAuth,
   type SafeAuthValue,
-} from "./safe-auth";
+} from "./auth-context";

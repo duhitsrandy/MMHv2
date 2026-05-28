@@ -2,7 +2,8 @@ import React, { useEffect } from 'react';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import * as SecureStore from 'expo-secure-store';
 import { useRouter, useSegments } from 'expo-router';
-import { ClerkActiveContext, ClerkAuthBridge } from '@/src/auth';
+import { ClerkActiveContext } from '@/src/auth';
+import { ClerkAuthBridge } from '@/src/auth/clerk-auth-bridge';
 
 const tokenCache = {
   getToken: () => SecureStore.getItemAsync('clerk_token'),

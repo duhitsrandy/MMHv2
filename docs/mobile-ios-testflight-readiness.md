@@ -77,14 +77,16 @@ npx eas-cli credentials --platform ios
 ## Local Simulator QA (before cloud build)
 
 ```bash
-npm run mobile:check-env
+npm run mobile:preflight   # check-env + expo-doctor + tsc (MeetMeHalfwayMobile)
 npm run dev
 npm run --prefix ./MeetMeHalfwayMobile ios
 ```
 
+For **release binaries**, also test a **development build** or TestFlight on a **physical iPhone** — Simulator and Expo Go do not catch all native launch crashes.
+
 Run [mobile-qa-checklist.md](mobile-qa-checklist.md); record in [mobile-qa-results-2026-05-24.md](mobile-qa-results-2026-05-24.md).
 
-- [ ] `npm run mobile:check-env` passes
+- [ ] `npm run mobile:preflight` passes
 - [ ] API smoke: `/api/mobile/profile`, `/api/mobile/route`, `/api/pois/search`
 - [ ] App opens without red screen (Simulator)
 - [ ] Core flows from P0 checklist pass on Simulator
@@ -107,17 +109,24 @@ Run [mobile-qa-checklist.md](mobile-qa-checklist.md); record in [mobile-qa-resul
 
 **Build 10 result:** Still crashes at launch (~0.47s) with the same `SIGABRT` / `ExceptionsManagerQueue` / `NSInvocation` signature as build 9 — Stripe/New Arch were not the remaining root cause.
 
-### Build 11–12 bisect (launch isolation)
+### Build 11–13 bisect (launch isolation)
 
-Set on EAS **production** before `eas build` (Plain text). Only one flag at a time:
+**Bisect leak (builds 11–12):** `useSafeAuth` lived in [`safe-auth.tsx`](../MeetMeHalfwayMobile/src/auth/safe-auth.tsx) with a top-level `@clerk/clerk-expo` import, pulled in via `@/src/auth` from root and tabs layouts — so `DEFER_CLERK=1` did not actually defer Clerk. Fixed in build **13** by splitting [`auth-context.tsx`](../MeetMeHalfwayMobile/src/auth/auth-context.tsx) (no Clerk) and [`clerk-auth-bridge.tsx`](../MeetMeHalfwayMobile/src/auth/clerk-auth-bridge.tsx) (Clerk only inside `ClerkAppShell`).
 
-| Build | `EXPO_PUBLIC_IOS_DEFER_MAP` | `EXPO_PUBLIC_IOS_DEFER_CLERK` | Interpretation if launch succeeds |
-|-------|----------------------------|------------------------------|-----------------------------------|
-| **11** | `1` | unset / `0` | Maps/location module load is the culprit |
-| **12** | `0` / unset | `1` | Clerk native init is the culprit |
-| **12b** | `1` | `1` | Both needed at startup; combine permanent defers |
+| Build | `DEFER_MAP` | `DEFER_CLERK` | Result |
+|-------|-------------|---------------|--------|
+| **11** | `1` | `0` | Still crashes (~0.41s) — inconclusive (Clerk still loaded) |
+| **12** | `0` | `1` | Still crashes (~0.47s) — inconclusive (maps still sync-loaded) |
+| **13** | `1` | `1` | Still crashes (~0.41s), same native offsets as 9–12 |
+| **15** | off | off | Launch gate + `isIosLaunchSafeEnabled()` default on iOS (code) |
 
-Code: lazy `MapTabScreen` chunk when `DEFER_MAP=1`; dynamic `ClerkAppShell` import when `DEFER_CLERK=1` (no `@clerk/clerk-expo` in root `_layout` or tabs `_layout` on defer path).
+**Build 13 result:** Still crashes at cold launch; same `SIGABRT` / `ExceptionsManagerQueue` stack and offsets `1546476` / `2010620` / `2013240`. EAS `a13a19cc-136b-48db-9e6f-292aa93bc50d`.
+
+**Build 15:** Full iOS app-shell gate, Reanimated root import removed, committed fixes. EAS build ID: _fill after build_.
+
+Symbolication: [symbolication-build12.md](symbolication-build12.md).
+
+Code: [`iosLaunchDiagnostics.ts`](../MeetMeHalfwayMobile/src/lib/iosLaunchDiagnostics.ts) — `shouldGateIosAppShell`, defer flags; About modal shows native build number.
 
 ```bash
 cd MeetMeHalfwayMobile

@@ -13,6 +13,10 @@ import { useSafeAuth } from '@/src/auth';
 
 export default function AboutModalScreen() {
   const version = Constants.expoConfig?.version ?? '1.0.0';
+  const buildNumber =
+    Constants.expoConfig?.ios?.buildNumber ??
+    Constants.nativeBuildVersion ??
+    '—';
   const router = useRouter();
   const { isSignedIn } = useSafeAuth();
 
@@ -27,7 +31,9 @@ export default function AboutModalScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Meet Me Halfway</Text>
-      <Text style={styles.version}>Version {version}</Text>
+      <Text style={styles.version}>
+        Version {version} (build {buildNumber})
+      </Text>
       <Text style={styles.body}>
         Find a fair meeting point between friends, family, or colleagues.
       </Text>

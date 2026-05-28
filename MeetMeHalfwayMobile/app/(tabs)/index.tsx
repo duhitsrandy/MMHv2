@@ -1,8 +1,6 @@
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, InteractionManager, StyleSheet, View } from 'react-native';
-import { iosDeferMap } from '@/src/lib/iosLaunchDiagnostics';
-
-const MapTabScreenLazy = React.lazy(() => import('./MapTabScreen'));
+import { shouldDeferMapOnIos } from '@/src/lib/iosLaunchDiagnostics';
 
 function MapLaunchPlaceholder() {
   return (
@@ -13,30 +11,29 @@ function MapLaunchPlaceholder() {
 }
 
 export default function MapTabRoute() {
-  const [mapModuleReady, setMapModuleReady] = useState(!iosDeferMap);
+  const [MapTabScreen, setMapTabScreen] = useState<React.ComponentType | null>(null);
 
   useEffect(() => {
-    if (!iosDeferMap) return;
+    if (!shouldDeferMapOnIos) return;
     const task = InteractionManager.runAfterInteractions(() => {
-      setMapModuleReady(true);
+      import('./MapTabScreen').then((mod) => {
+        setMapTabScreen(() => mod.default);
+      });
     });
     return () => task.cancel();
   }, []);
 
-  if (!iosDeferMap) {
-    const MapTabScreen = require('./MapTabScreen').default as React.ComponentType;
-    return <MapTabScreen />;
+  if (!shouldDeferMapOnIos) {
+    const Screen = require('./MapTabScreen').default as React.ComponentType;
+    return <Screen />;
   }
 
-  if (!mapModuleReady) {
+  if (!MapTabScreen) {
     return <MapLaunchPlaceholder />;
   }
 
-  return (
-    <Suspense fallback={<MapLaunchPlaceholder />}>
-      <MapTabScreenLazy />
-    </Suspense>
-  );
+  const Screen = MapTabScreen;
+  return <Screen />;
 }
 
 const styles = StyleSheet.create({
