@@ -122,7 +122,7 @@ Run [mobile-qa-checklist.md](mobile-qa-checklist.md); record in [mobile-qa-resul
 
 **Build 13 result:** Still crashes at cold launch; same `SIGABRT` / `ExceptionsManagerQueue` stack and offsets `1546476` / `2010620` / `2013240`. EAS `a13a19cc-136b-48db-9e6f-292aa93bc50d`.
 
-**Build 15:** Full iOS app-shell gate, Reanimated root import removed, committed fixes. EAS build ID: _fill after build_.
+**Build 15:** Launch gate + Reanimated import removed, commit `cbaa71c`. EAS build `04c77ec2-08ee-48c7-95ea-0573887d1065`, submit `c53bdd34-b925-484b-913a-2cd5a6027516` (wait for “Submitted to App Store Connect” before checking TestFlight).
 
 Symbolication: [symbolication-build12.md](symbolication-build12.md).
 
