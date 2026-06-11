@@ -1,5 +1,4 @@
 import React, { useContext } from 'react';
-import 'react-native-url-polyfill/auto';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Link, Tabs, useRouter } from 'expo-router';
 import { ActionSheetIOS, Alert, Platform, Pressable, TouchableOpacity } from 'react-native';

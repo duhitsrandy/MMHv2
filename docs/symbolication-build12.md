@@ -1,47 +1,75 @@
 # iOS launch crash symbolication notes
 
-Crashes on TestFlight builds **9–13** share the same main-binary offsets (build **13** IPS: `MeetMeHalfway-2026-05-28-112246.ips`).
+Crashes on TestFlight builds **9–18** share the same failure mode: fatal JS exception → `ExceptionsManagerQueue` → `SIGABRT`.
 
-## Build 12 reference
+**Corrected diagnosis (build 18, 2026-06-11):** offsets point at React Native's **crash reporter** (`RCTFatal` / ExceptionsManager), not the buggy native module. The JS error message is in **Console.app** at crash time, not in the `.ips` file. See [console-capture-instructions.md](console-capture-instructions.md) and [crash-logs/MeetMeHalfway-2026-06-11-101016-build18-summary.md](../crash-logs/MeetMeHalfway-2026-06-11-101016-build18-summary.md).
 
-Crash: `MeetMeHalfway-2026-05-25-214834.ips` (TestFlight build **12**).
+## Build 15 reference (TestFlight)
 
-## Frames to resolve (imageIndex 0, main binary)
+| Field | Value |
+|-------|--------|
+| IPS | `MeetMeHalfway-2026-05-28-144915.ips` |
+| `build_version` | 15 |
+| `slice_uuid` | `e5d51b12-ccd0-30e9-bf00-fe91e66fcb34` |
+| Load address | `4342218752` |
 
-| Offset | Load address (from .ips) |
-|--------|--------------------------|
-| 1546476 | 4377182208 |
-| 2010620 | 4377182208 |
-| 2013240 | 4377182208 |
+### Frames to resolve (imageIndex 0, main binary)
 
-## EAS artifact download
+| Offset | Role (inferred) |
+|--------|------------------|
+| 1546476 | Native throw site |
+| 2010620 | `NSInvocation` / bridge |
+| 2013240 | `NSInvocation` / bridge |
+
+## Local build prerequisites
+
+`eas build --local` needs on your Mac:
+
+- [fastlane](https://fastlane.tools) (`brew install fastlane`)
+- CocoaPods (`brew install cocoapods` — `pod --version` must succeed)
+
+Without both, local builds fail before producing a dSYM.
+
+## Symbolicate locally
+
+After `eas build --platform ios --profile production --local`:
+
+```bash
+chmod +x scripts/symbolicate-ios-crash.sh
+
+./scripts/symbolicate-ios-crash.sh \
+  path/to/MeetMeHalfway.app.dSYM/Contents/Resources/DWARF/MeetMeHalfway \
+  4342218752 1546476 2010620 2013240
+```
+
+Verify dSYM UUID:
+
+```bash
+dwarfdump --uuid path/to/MeetMeHalfway.app.dSYM
+```
+
+## EAS cloud artifact download
 
 ```bash
 cd MeetMeHalfwayMobile
-npx eas-cli build:download --build-id 093634ac-2dfa-4892-b739-4a5c1d10e125 --all-artifacts --non-interactive
+npx eas-cli build:download --build-id <BUILD_ID> --all-artifacts --non-interactive
 ```
 
-EAS CLI downloaded the **IPA/app archive** and Xcode logs only; **`MeetMeHalfway.app.dSYM` is not exposed** in the default artifact bundle (see xcode log: `GenerateDSYMFile` → `MeetMeHalfway.app.dSYM` on the build worker).
+Default artifact bundle is **IPA + logs**; dSYM is produced on the worker (`GenerateDSYMFile`) but is not always exposed in the download bundle. Prefer **local** `eas build --local` for dSYM on your Mac.
 
-## atos attempt (stripped archive, no dSYM)
+## Resolved symbols
 
-```bash
-BIN="<eas-cache>/MeetMeHalfway.app/MeetMeHalfway"
-atos -arch arm64 -o "$BIN" -l 4377182208 1546476 2010620 2013240
-```
+| Offset | Symbol | Status |
+|--------|--------|--------|
+| 1546476 | *(pending local dSYM)* | Run script after local build |
+| 2010620 | *(pending)* | |
+| 2013240 | *(pending)* | |
 
-Result: offsets only (no symbols) — binary in store/TestFlight IPA is stripped.
+Update this table after `./scripts/symbolicate-ios-crash.sh` succeeds.
 
-## Next steps for symbols
+## History
 
-1. In [EAS build 12](https://expo.dev/accounts/duhitsrandy/projects/meet-me-halfway/builds/093634ac-2dfa-4892-b739-4a5c1d10e125), check **Artifacts** for a dSYM / build artifacts archive (if Expo adds one).
-2. Or symbolicate in **Xcode → Organizer → Crashes** after uploading dSYMs from a local `eas build --local` archive.
-3. Re-run `atos` with:
-
-```bash
-atos -arch arm64 -o MeetMeHalfway.app.dSYM/Contents/Resources/DWARF/MeetMeHalfway -l 4377182208 1546476 2010620 2013240
-```
-
-Build **13** confirmed same offsets after dual defer + auth split. Build **15** adds full app-shell gate and removes Reanimated root side-effect import.
-
-**Status:** Symbols unresolved — stripped IPA from EAS download; need `MeetMeHalfway.app.dSYM` from local `eas build --local` or Xcode Organizer after uploading dSYMs.
+- Builds **9–13**: load `4377182208`, same offsets — defer bisect did not change crash site.
+- Build **15**: load `4342218752`, new UUID, **same offsets** — launch gate + auth split did not move crash site.
+- Build **18**: lazy Clerk + defer nav — **still crashes** (~0.42s). Same reporter pattern.
+- **Build 19+ fix**: `index.js` entry with global URL polyfill before Clerk; `ErrorUtils` fatal capture + on-screen error UI; Clerk `tokenCache` with `clearToken`; `expo-web-browser` auth session completion at startup.

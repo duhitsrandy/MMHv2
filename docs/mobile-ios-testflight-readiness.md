@@ -122,9 +122,28 @@ Run [mobile-qa-checklist.md](mobile-qa-checklist.md); record in [mobile-qa-resul
 
 **Build 13 result:** Still crashes at cold launch; same `SIGABRT` / `ExceptionsManagerQueue` stack and offsets `1546476` / `2010620` / `2013240`. EAS `a13a19cc-136b-48db-9e6f-292aa93bc50d`.
 
-**Build 15:** Launch gate + Reanimated import removed, commit `cbaa71c`. EAS build `04c77ec2-08ee-48c7-95ea-0573887d1065`, submit `c53bdd34-b925-484b-913a-2cd5a6027516` (wait for “Submitted to App Store Connect” before checking TestFlight).
+**Build 15:** Launch gate + Reanimated import removed, commit `cbaa71c`. EAS build `04c77ec2-08ee-48c7-95ea-0573887d1065`, submit `c53bdd34-b925-484b-913a-2cd5a6027516`. Still crashes at cold launch (~0.40s), same offsets as 9–13.
 
-Symbolication: [symbolication-build12.md](symbolication-build12.md).
+**Build 18 (lazy Clerk — still crashes):**
+
+- EAS build: `b5b29ff8-c53e-4544-9ac3-cec1ac261fc6`
+- Device QA: **still instant crash** (~0.42s). IPS `MeetMeHalfway-2026-06-11-101016.ips` — fatal JS via `ExceptionsManagerQueue` (not native module init).
+- Summary: [crash-logs/MeetMeHalfway-2026-06-11-101016-build18-summary.md](../crash-logs/MeetMeHalfway-2026-06-11-101016-build18-summary.md)
+
+**Build 20 (JS exception capture + startup polyfill — TestFlight):**
+
+- EAS build: `49764877-d07a-4f1c-99b8-9217751a9f64`
+- IPA: https://expo.dev/artifacts/eas/Vump-2ln5vfiHfI7UoOmHekDsedmRZEaXhvhTUzHuYc.ipa
+- Submit: `d481159d-d873-482e-a81f-eb83bb65e9de`
+- Custom entry [`index.js`](../MeetMeHalfwayMobile/index.js): `react-native-url-polyfill` + `WebBrowser.maybeCompleteAuthSession()` before `expo-router/entry`; chains `ErrorUtils` for fatal capture.
+- [`FatalStartupErrorScreen`](../MeetMeHalfwayMobile/src/components/FatalStartupErrorScreen.tsx) in root layout — shows message/stack on screen instead of silent abort when possible.
+- Clerk `tokenCache` uses correct `getToken`/`saveToken`/`clearToken` key API.
+- [`MeetMeHalfwayMobile/.npmrc`](../MeetMeHalfwayMobile/.npmrc): `legacy-peer-deps=true` (required for `npm ci` on EAS after expo-router 5.1.11 upgrade).
+- Console capture how-to: [console-capture-instructions.md](console-capture-instructions.md)
+
+**Note:** First build 19 attempt (`3e1811e7-…`) failed `npm ci` on EAS (expo-router vs jest-expo peer conflict) before `.npmrc` was added. Retry succeeded as build **20**.
+
+Symbolication: [symbolication-build12.md](symbolication-build12.md) — offsets are RN reporter frames; prefer Console.app for JS message.
 
 Code: [`iosLaunchDiagnostics.ts`](../MeetMeHalfwayMobile/src/lib/iosLaunchDiagnostics.ts) — `shouldGateIosAppShell`, defer flags; About modal shows native build number.
 

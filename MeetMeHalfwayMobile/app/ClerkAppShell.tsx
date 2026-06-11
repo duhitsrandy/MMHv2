@@ -6,8 +6,9 @@ import { ClerkActiveContext } from '@/src/auth';
 import { ClerkAuthBridge } from '@/src/auth/clerk-auth-bridge';
 
 const tokenCache = {
-  getToken: () => SecureStore.getItemAsync('clerk_token'),
-  saveToken: (token: string) => SecureStore.setItemAsync('clerk_token', token),
+  getToken: (key: string) => SecureStore.getItemAsync(key),
+  saveToken: (key: string, token: string) => SecureStore.setItemAsync(key, token),
+  clearToken: (key: string) => SecureStore.deleteItemAsync(key),
 };
 
 function ClerkAuthGate({ children }: { children: React.ReactNode }) {

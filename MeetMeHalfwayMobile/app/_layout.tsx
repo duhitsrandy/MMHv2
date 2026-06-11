@@ -1,14 +1,23 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import Constants from 'expo-constants';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useState } from 'react';
-import { InteractionManager } from 'react-native';
+import { InteractionManager, SafeAreaView, StyleSheet, Text } from 'react-native';
 
+import { FatalStartupErrorScreen } from '@/src/components/FatalStartupErrorScreen';
 import { useColorScheme } from '@/components/useColorScheme';
 import { ClerkActiveContext } from '@/src/auth';
 import {
+  captureFatalStartupError,
+  getFatalStartupError,
+  subscribeFatalStartupError,
+  type FatalStartupError,
+} from '@/src/lib/fatalStartupError';
+import {
+  isIosMinimalBootEnabled,
   shouldDeferClerkOnIos,
   shouldGateIosAppShell,
 } from '@/src/lib/iosLaunchDiagnostics';
@@ -30,27 +39,59 @@ type ClerkShellComponent = React.ComponentType<{
   children: React.ReactNode;
 }>;
 
+function IosMinimalBootScreen() {
+  const build =
+    Constants.expoConfig?.ios?.buildNumber ??
+    Constants.nativeBuildVersion ??
+    '?';
+  const version = Constants.expoConfig?.version ?? Constants.nativeApplicationVersion ?? '?';
+
+  return (
+    <SafeAreaView style={minimalStyles.container}>
+      <Text style={minimalStyles.title}>Minimal boot OK</Text>
+      <Text style={minimalStyles.subtitle}>
+        v{version} ({build})
+      </Text>
+    </SafeAreaView>
+  );
+}
+
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-    ...FontAwesome.font,
-  });
-  const [appShellReady, setAppShellReady] = useState(!shouldGateIosAppShell);
+  const minimalBoot = isIosMinimalBootEnabled();
+  const [fatalError, setFatalError] = useState<FatalStartupError | null>(() =>
+    getFatalStartupError()
+  );
+  const [loaded, error] = useFonts(
+    minimalBoot
+      ? {}
+      : {
+          SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+          ...FontAwesome.font,
+        }
+  );
+  const [appShellReady, setAppShellReady] = useState(
+    minimalBoot || !shouldGateIosAppShell
+  );
   const [deferredClerkShell, setDeferredClerkShell] = useState<ClerkShellComponent | null>(
     null
   );
 
+  useEffect(() => subscribeFatalStartupError(() => setFatalError(getFatalStartupError())), []);
+
   useEffect(() => {
-    if (error) throw error;
+    if (error) {
+      captureFatalStartupError(error);
+      setFatalError(getFatalStartupError());
+    }
   }, [error]);
 
   useEffect(() => {
-    if (!loaded || !shouldGateIosAppShell) return;
+    if (!loaded || !shouldGateIosAppShell || minimalBoot) return;
     const task = InteractionManager.runAfterInteractions(() => {
       setAppShellReady(true);
     });
     return () => task.cancel();
-  }, [loaded]);
+  }, [loaded, minimalBoot]);
 
   useEffect(() => {
     if (!loaded || !appShellReady) return;
@@ -58,17 +99,30 @@ export default function RootLayout() {
   }, [loaded, appShellReady]);
 
   useEffect(() => {
-    if (!appShellReady || !shouldDeferClerkOnIos) return;
+    if (!appShellReady || !shouldDeferClerkOnIos || minimalBoot) return;
     const task = InteractionManager.runAfterInteractions(() => {
-      import('./ClerkAppShell').then((mod) => {
-        setDeferredClerkShell(() => mod.ClerkAppShell);
-      });
+      import('./ClerkAppShell')
+        .then((mod) => {
+          setDeferredClerkShell(() => mod.ClerkAppShell);
+        })
+        .catch((clerkLoadError: unknown) => {
+          captureFatalStartupError(clerkLoadError);
+          setFatalError(getFatalStartupError());
+        });
     });
     return () => task.cancel();
-  }, [appShellReady]);
+  }, [appShellReady, minimalBoot]);
+
+  if (fatalError) {
+    return <FatalStartupErrorScreen error={fatalError} />;
+  }
 
   if (!loaded || !appShellReady) {
     return null;
+  }
+
+  if (minimalBoot) {
+    return <IosMinimalBootScreen />;
   }
 
   const pkRaw = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined;
@@ -95,11 +149,7 @@ export default function RootLayout() {
   }
 
   if (!deferredClerkShell) {
-    return (
-      <StripeWrapper>
-        <ClerkActiveContext.Provider value={false}>{nav}</ClerkActiveContext.Provider>
-      </StripeWrapper>
-    );
+    return null;
   }
 
   const DeferredClerk = deferredClerkShell;
@@ -128,3 +178,15 @@ function RootLayoutNav() {
     </ThemeProvider>
   );
 }
+
+const minimalStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    gap: 8,
+  },
+  title: { fontSize: 22, fontWeight: '700' },
+  subtitle: { fontSize: 15, color: '#6b7280' },
+});
