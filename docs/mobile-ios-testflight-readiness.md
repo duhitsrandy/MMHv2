@@ -143,6 +143,27 @@ Run [mobile-qa-checklist.md](mobile-qa-checklist.md); record in [mobile-qa-resul
 
 **Note:** First build 19 attempt (`3e1811e7-…`) failed `npm ci` on EAS (expo-router vs jest-expo peer conflict) before `.npmrc` was added. Retry succeeded as build **20**.
 
+**Build 20 device QA:** Still **instant crash** — error screen did not appear. Build 20 chained the previous `ErrorUtils` handler, which still calls native `RCTFatal` / `abort()` before React can paint.
+
+**Build 21 (swallow fatal + early capture — TestFlight):**
+
+- Patch `ExceptionsManager.handleException` **before** `expo-router/entry` (route `require.context` can throw during import).
+- Replace `ErrorUtils` handler after entry and **do not** forward production fatals to RN (capture only).
+- Disable `experiments.typedRoutes` (release-only route issues on some expo-router builds).
+- True minimal boot: `eas build --profile production-minimal` sets `EXPO_PUBLIC_IOS_MINIMAL_BOOT=1` — skips expo-router entirely (`minimal-entry.js`).
+
+**Build 22** (EAS auto-increment; ships the build 21 fixes):
+
+- EAS build: `ccc272dd-661a-41ac-87c0-cc33cad8278c`
+- IPA: https://expo.dev/artifacts/eas/MnA2dnI1twBaKEYssKx-qzJJ_i7hZwS5uHerJ5x5IEI.ipa
+- Submit: `c8d09894-49d0-4445-8652-871bbbbed56b`
+- TestFlight: https://appstoreconnect.apple.com/apps/6772851211/testflight/ios
+- **QA:** Cold launch — hung on splash (no crash). Console showed only UIKit `default` lifecycle lines, no `ReactNativeJS` — consistent with `InteractionManager` + `return null` deadlock in launch-safe mode.
+
+**Build 23** (launch-safe off by default, no InteractionManager stall):
+
+- Removes iOS launch-safe default-on; replaces `InteractionManager` waits with immediate defer; shows loading spinner; splash hide fallback at 2.5s.
+
 Symbolication: [symbolication-build12.md](symbolication-build12.md) — offsets are RN reporter frames; prefer Console.app for JS message.
 
 Code: [`iosLaunchDiagnostics.ts`](../MeetMeHalfwayMobile/src/lib/iosLaunchDiagnostics.ts) — `shouldGateIosAppShell`, defer flags; About modal shows native build number.

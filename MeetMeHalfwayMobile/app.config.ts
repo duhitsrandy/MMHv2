@@ -56,9 +56,8 @@ export default () => ({
       'expo-router',
       ...(isIosEasBuild ? [] : [stripePlugin]),
     ],
-    experiments: {
-      typedRoutes: true,
-    },
+    // typedRoutes caused release-only route issues on some expo-router builds; keep off until stable.
+    experiments: {},
     extra: {
       eas: {
         projectId: '531b0735-de9e-4406-8089-2e8b1ad78db3',

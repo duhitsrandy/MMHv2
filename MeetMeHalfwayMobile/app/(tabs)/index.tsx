@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, InteractionManager, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { shouldDeferMapOnIos } from '@/src/lib/iosLaunchDiagnostics';
 
 function MapLaunchPlaceholder() {
@@ -15,12 +15,13 @@ export default function MapTabRoute() {
 
   useEffect(() => {
     if (!shouldDeferMapOnIos) return;
-    const task = InteractionManager.runAfterInteractions(() => {
-      import('./MapTabScreen').then((mod) => {
-        setMapTabScreen(() => mod.default);
-      });
+    let cancelled = false;
+    import('./MapTabScreen').then((mod) => {
+      if (!cancelled) setMapTabScreen(() => mod.default);
     });
-    return () => task.cancel();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!shouldDeferMapOnIos) {

@@ -5,7 +5,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useState } from 'react';
-import { InteractionManager, SafeAreaView, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
 import { FatalStartupErrorScreen } from '@/src/components/FatalStartupErrorScreen';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -38,6 +38,15 @@ type ClerkShellComponent = React.ComponentType<{
   publishableKey: string;
   children: React.ReactNode;
 }>;
+
+function LaunchPlaceholder({ label = 'Loading…' }: { label?: string }) {
+  return (
+    <View style={launchStyles.container}>
+      <ActivityIndicator size="large" />
+      <Text style={launchStyles.label}>{label}</Text>
+    </View>
+  );
+}
 
 function IosMinimalBootScreen() {
   const build =
@@ -86,31 +95,45 @@ export default function RootLayout() {
   }, [error]);
 
   useEffect(() => {
-    if (!loaded || !shouldGateIosAppShell || minimalBoot) return;
-    const task = InteractionManager.runAfterInteractions(() => {
+    if (!loaded || minimalBoot) return;
+    if (!shouldGateIosAppShell) {
       setAppShellReady(true);
-    });
-    return () => task.cancel();
+      return;
+    }
+    // Do not use InteractionManager here — with `return null` there are no
+    // interactions to drain, so runAfterInteractions can stall forever on splash.
+    const id = setTimeout(() => setAppShellReady(true), 0);
+    return () => clearTimeout(id);
   }, [loaded, minimalBoot]);
 
   useEffect(() => {
-    if (!loaded || !appShellReady) return;
-    SplashScreen.hideAsync();
+    if (!loaded) return;
+    if (appShellReady) {
+      void SplashScreen.hideAsync();
+      return;
+    }
+    const fallback = setTimeout(() => {
+      void SplashScreen.hideAsync();
+    }, 2500);
+    return () => clearTimeout(fallback);
   }, [loaded, appShellReady]);
 
   useEffect(() => {
     if (!appShellReady || !shouldDeferClerkOnIos || minimalBoot) return;
-    const task = InteractionManager.runAfterInteractions(() => {
-      import('./ClerkAppShell')
-        .then((mod) => {
-          setDeferredClerkShell(() => mod.ClerkAppShell);
-        })
-        .catch((clerkLoadError: unknown) => {
+    let cancelled = false;
+    import('./ClerkAppShell')
+      .then((mod) => {
+        if (!cancelled) setDeferredClerkShell(() => mod.ClerkAppShell);
+      })
+      .catch((clerkLoadError: unknown) => {
+        if (!cancelled) {
           captureFatalStartupError(clerkLoadError);
           setFatalError(getFatalStartupError());
-        });
-    });
-    return () => task.cancel();
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [appShellReady, minimalBoot]);
 
   if (fatalError) {
@@ -118,7 +141,7 @@ export default function RootLayout() {
   }
 
   if (!loaded || !appShellReady) {
-    return null;
+    return <LaunchPlaceholder />;
   }
 
   if (minimalBoot) {
@@ -149,7 +172,7 @@ export default function RootLayout() {
   }
 
   if (!deferredClerkShell) {
-    return null;
+    return <LaunchPlaceholder label="Loading account…" />;
   }
 
   const DeferredClerk = deferredClerkShell;
@@ -178,6 +201,17 @@ function RootLayoutNav() {
     </ThemeProvider>
   );
 }
+
+const launchStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: '#fff',
+  },
+  label: { fontSize: 15, color: '#6b7280' },
+});
 
 const minimalStyles = StyleSheet.create({
   container: {

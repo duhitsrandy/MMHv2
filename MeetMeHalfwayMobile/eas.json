@@ -24,6 +24,12 @@
       "ios": {
         "image": "macos-sequoia-15.6-xcode-26.2"
       }
+    },
+    "production-minimal": {
+      "extends": "production",
+      "env": {
+        "EXPO_PUBLIC_IOS_MINIMAL_BOOT": "1"
+      }
     }
   },
   "submit": {
