@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { debugBootLog } from '@/src/lib/debugBootLog';
 import { shouldDeferMapOnIos } from '@/src/lib/iosLaunchDiagnostics';
 
 function MapLaunchPlaceholder() {
@@ -16,9 +17,20 @@ export default function MapTabRoute() {
   useEffect(() => {
     if (!shouldDeferMapOnIos) return;
     let cancelled = false;
-    import('./MapTabScreen').then((mod) => {
-      if (!cancelled) setMapTabScreen(() => mod.default);
-    });
+    import('./MapTabScreen')
+      .then((mod) => {
+        // #region agent log
+        debugBootLog('E', '(tabs)/index.tsx:map-import', 'MapTabScreen import resolved');
+        // #endregion
+        if (!cancelled) setMapTabScreen(() => mod.default);
+      })
+      .catch((err: unknown) => {
+        // #region agent log
+        debugBootLog('E', '(tabs)/index.tsx:map-import', 'MapTabScreen import failed', {
+          message: err instanceof Error ? err.message : String(err),
+        });
+        // #endregion
+      });
     return () => {
       cancelled = true;
     };

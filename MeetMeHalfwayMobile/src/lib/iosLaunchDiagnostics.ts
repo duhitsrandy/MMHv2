@@ -13,9 +13,9 @@ export function isIosLaunchSafeEnabled(): boolean {
   return false;
 }
 
-/** Effective defer flags (bisect env OR permanent iOS launch-safe). */
-export const shouldDeferMapOnIos = iosDeferMap || isIosLaunchSafeEnabled();
-export const shouldDeferClerkOnIos = iosDeferClerk || isIosLaunchSafeEnabled();
+/** Defer only during launch-safe bisect builds — orphan EAS DEFER_* vars are ignored. */
+export const shouldDeferMapOnIos = isIosLaunchSafeEnabled() && iosDeferMap;
+export const shouldDeferClerkOnIos = isIosLaunchSafeEnabled() && iosDeferClerk;
 
 /** Block entire navigation tree until after first interactions (iOS launch-safe). */
 export const shouldGateIosAppShell = isIosLaunchSafeEnabled();

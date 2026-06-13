@@ -1,3 +1,8 @@
+import { Alert, Platform } from 'react-native';
+
+import { hideIosSplash } from '@/src/lib/iosSplash';
+import { setIosBootPhase } from '@/src/lib/iosBootPhase';
+
 export type FatalStartupError = {
   message: string;
   stack?: string;
@@ -22,6 +27,18 @@ function normalizeError(error: unknown): FatalStartupError {
 
 export function captureFatalStartupError(error: unknown): void {
   fatalError = normalizeError(error);
+  setIosBootPhase('fatal-captured');
+  void hideIosSplash('fatal-captured');
+
+  // RootLayout may never mount if the error happened during route module load.
+  if (!__DEV__ && Platform.OS === 'ios') {
+    const summary = [fatalError.name, fatalError.message].filter(Boolean).join(': ');
+    Alert.alert(
+      'MeetMeHalfway startup error',
+      summary.slice(0, 500) || 'Unknown startup error'
+    );
+  }
+
   for (const listener of listeners) {
     listener();
   }

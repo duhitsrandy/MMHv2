@@ -4,7 +4,7 @@ Use this checklist after mobile changes to reduce regressions.
 
 **App Store prep:** [mobile-ios-release-checklist.md](mobile-ios-release-checklist.md) (hub) → [P0](mobile-ios-p0-blockers.md) · [TestFlight](mobile-ios-testflight-readiness.md) · [Submission](mobile-ios-app-store-submission.md)
 
-**Latest results:** [mobile-qa-results-2026-05-24.md](mobile-qa-results-2026-05-24.md) (Session 3)
+**Latest results:** [mobile-qa-results-2026-06-13.md](mobile-qa-results-2026-06-13.md) (Build 28, on-device) · prior: [mobile-qa-results-2026-05-24.md](mobile-qa-results-2026-05-24.md) (Session 3, Simulator)
 
 ## Startup
 
