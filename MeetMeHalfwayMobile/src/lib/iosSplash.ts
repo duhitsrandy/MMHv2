@@ -1,7 +1,5 @@
 import * as SplashScreen from 'expo-splash-screen';
 
-import { debugBootLog } from '@/src/lib/debugBootLog';
-
 const SPLASH_FALLBACK_MS = 4000;
 
 let hideResolved = false;
@@ -18,7 +16,7 @@ export function startIosSplashFallbackHide(): void {
   }, SPLASH_FALLBACK_MS);
 }
 
-export async function hideIosSplash(reason: string): Promise<void> {
+export async function hideIosSplash(_reason: string): Promise<void> {
   if (hideResolved) {
     return;
   }
@@ -26,11 +24,7 @@ export async function hideIosSplash(reason: string): Promise<void> {
   try {
     await SplashScreen.hideAsync();
     hideResolved = true;
-    debugBootLog('F', 'iosSplash.ts:hide', 'hideAsync ok', { reason });
-  } catch (error) {
-    debugBootLog('F', 'iosSplash.ts:hide', 'hideAsync failed', {
-      reason,
-      message: error instanceof Error ? error.message : String(error),
-    });
+  } catch {
+    // Splash may already be hidden or unavailable.
   }
 }

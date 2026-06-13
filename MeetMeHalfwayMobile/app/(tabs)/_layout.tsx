@@ -125,6 +125,7 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => <TabBarIcon name="bookmark" color={color} />,
           }}
         />
+        <Tabs.Screen name="MapTabScreen" options={{ href: null }} />
       </Tabs>
     </PoiProvider>
   );

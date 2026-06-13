@@ -1,13 +1,32 @@
-# Mobile QA Results — 2026-06-13 (Build 28, On-Device TestFlight)
+# Mobile QA Results — 2026-06-13 (Build 28 → 29, On-Device TestFlight)
 
-**App:** MeetMeHalfway `com.meetmehalfway.mobile` · **Version:** 1.0.0 (28)
-**Device:** physical iPhone (iOS 26), **dark mode** · **Distribution:** TestFlight
+**App:** MeetMeHalfway `com.meetmehalfway.mobile` · **Version:** 1.0.0
+**Device:** physical iPhone (iOS 26) · **Distribution:** TestFlight
 **Checklist:** [mobile-qa-checklist.md](mobile-qa-checklist.md)
 **Prior results:** [mobile-qa-results-2026-05-24.md](mobile-qa-results-2026-05-24.md) (Session 3, Simulator)
 
 ---
 
-## Milestone: first working on-device release
+## Build 29 — polish + cleanup (pending on-device QA)
+
+**Build:** 1.0.0 (29) · [EAS build](https://expo.dev/accounts/duhitsrandy/projects/meet-me-halfway/builds/114c9f0f-f59a-4f52-a377-187baf7106eb) · [TestFlight](https://appstoreconnect.apple.com/apps/6772851211/testflight/ios)
+
+**Changes shipped:**
+- Locked app to **light mode** (`userInterfaceStyle: 'light'` + forced `useColorScheme`) — fixes ISSUE-1 dark-on-dark contrast.
+- Hid stray **MapTabScreen** 4th tab (`href: null` in tabs layout).
+- Removed debug scaffolding: boot HUD, `debugBootLog`, `iosBootPhase`, startup Alert.
+
+**On-device QA (TODO — run on build 29):**
+- [ ] POIs/Saved cards readable; tab bar shows exactly **3 tabs** (Map, POIs, Saved).
+- [ ] Apple/Google/Waze nav links open.
+- [ ] Session persists after reload; sign-out returns to guest.
+- [ ] Run Again repopulates inputs; Delete refreshes lists.
+- [ ] 2-location route polyline draws; recheck 3-location POIs (ISSUE-2 watch).
+- [ ] iOS upgrade path shows text-only notice (no PaymentSheet); Manage Subscription opens portal.
+
+---
+
+## Build 28 — first working on-device release
 
 Builds 8–24 failed at launch (instant crash, then splash hang). Build 28 is the
 **first build to reach the app UI on a physical device** and complete a real
@@ -157,17 +176,17 @@ until on-device QA is fully signed off).
 
 ## Next steps
 
-1. **Polish:** fix ISSUE-1 (dark-mode contrast) — biggest visible roughness.
-2. **Finish on-device QA:** complete the **TODO** rows above on build 28.
-3. **Watch ISSUE-2:** reproduce 3-location empty-POI case if it recurs.
-4. **Cleanup (pre-App Store):** remove debug HUD / logging / startup alert (ISSUE-3).
-5. **Re-test** after polish + cleanup on a fresh build.
+1. ~~**Polish:** fix ISSUE-1 (dark-mode contrast)~~ — **build 29:** `userInterfaceStyle: 'light'` + forced `useColorScheme`.
+2. ~~**Tab bar:** stray "MapTabScreen" tab~~ — **build 29:** hidden via `href: null` in tabs layout.
+3. ~~**Cleanup:** remove debug HUD / logging / startup alert (ISSUE-3)~~ — **build 29:** removed `debugBootLog`, `iosBootPhase`, boot HUD.
+4. **Finish on-device QA:** complete the **TODO** rows above on **build 29** (TestFlight).
+5. **Watch ISSUE-2:** reproduce 3-location empty-POI case if it recurs.
 
 ## Ship readiness verdict
 
 | Gate | Status |
 |------|--------|
-| Launches on device | **Yes** (build 28) |
+| Launches on device | **Yes** (build 28+) |
 | Core search flow works | **Yes** (2-location verified end-to-end) |
-| UI polish | **No** — dark-mode contrast (ISSUE-1) |
-| App Store submission | **No** — finish QA TODOs + remove debug scaffolding (ISSUE-3) |
+| UI polish | **Pending build 29 QA** — light mode lock + 3-tab bar |
+| App Store submission | **After build 29 QA** — debug scaffolding removed in code |

@@ -17,7 +17,7 @@ export default () => ({
     scheme: 'mmh',
     version: '1.0.0',
     orientation: 'portrait',
-    userInterfaceStyle: 'automatic',
+    userInterfaceStyle: 'light',
     // Disabled: TestFlight build 8 crashed in Hermes during TurboModule init (iOS 26).
     newArchEnabled: false,
     icon: './assets/images/icon.png',
